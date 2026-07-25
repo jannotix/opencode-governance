@@ -31,14 +31,9 @@ backup_if_exists() {
 }
 
 for file in architect.md executor.md reviewer.md; do backup_if_exists "$CONFIG_DIR/agents/$file"; done
-for file in ai-plan.md ai-execute.md ai-review.md ai-workflow.md ai-status.md; do backup_if_exists "$CONFIG_DIR/commands/$file"; done
+for file in ai-init.md ai-plan.md ai-execute.md ai-review.md ai-workflow.md ai-status.md ai-release.md; do backup_if_exists "$CONFIG_DIR/commands/$file"; done
 backup_if_exists "$CONFIG_DIR/opencode.jsonc"
 backup_if_exists "$CONFIG_DIR/opencode.json"
-
-variant_line() {
-  local value="$1"
-  if [[ -n "$value" ]]; then printf 'variant: %s' "$value"; else printf ''; fi
-}
 
 render() {
   local src="$1" dst="$2" model="$3" variant="$4" model_token="$5" variant_token="$6"
@@ -66,7 +61,6 @@ jsonf = root / "opencode.json"
 target = jsonc if jsonc.exists() or not jsonf.exists() else jsonf
 if target.exists():
     raw = target.read_text(encoding="utf-8")
-    # Conservative handling: support plain JSON/JSONC with comments and trailing commas.
     stripped = re.sub(r'/\*.*?\*/', '', raw, flags=re.S)
     stripped = re.sub(r'(^|\s)//.*', r'\1', stripped)
     stripped = re.sub(r',\s*([}\]])', r'\1', stripped)
