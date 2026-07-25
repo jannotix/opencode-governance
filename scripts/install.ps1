@@ -22,7 +22,7 @@ function Backup-IfExists([string]$Path) {
 }
 
 @('architect.md','executor.md','reviewer.md') | ForEach-Object { Backup-IfExists (Join-Path $ConfigDir "agents\$_") }
-@('ai-plan.md','ai-execute.md','ai-review.md','ai-workflow.md','ai-status.md') | ForEach-Object { Backup-IfExists (Join-Path $ConfigDir "commands\$_") }
+@('ai-init.md','ai-plan.md','ai-execute.md','ai-review.md','ai-workflow.md','ai-status.md','ai-release.md') | ForEach-Object { Backup-IfExists (Join-Path $ConfigDir "commands\$_") }
 Backup-IfExists (Join-Path $ConfigDir 'opencode.jsonc')
 Backup-IfExists (Join-Path $ConfigDir 'opencode.json')
 
