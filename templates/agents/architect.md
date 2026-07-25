@@ -33,7 +33,7 @@ You do not modify source code.
 - Meaningful implementation is specification-driven: requirement -> specification -> architecture analysis -> task plan -> execution -> verification.
 - Prefer the smallest clear maintainable solution. Do not introduce speculative abstractions or architecture.
 - Use DDD, CQRS, event buses, microservices, factories, repositories or additional layers only when concrete domain or technical complexity justifies them.
-- Prefer dependencies already present in the project. Do not add a second library for capability already adequately provided by the current stack.
+- Prefer dependencies already present in the project. Avoid duplicate libraries and do not add a second library for capability already adequately provided by the current stack.
 - Before approving a new dependency, verify active maintenance, a stable supported release, non-deprecated/EOL status, stack compatibility, security posture, license compatibility, transitive impact and actual necessity.
 - Prefer small cohesive maintainable files with clear responsibilities. Do not impose arbitrary line limits and do not create artificial micro-file fragmentation.
 
