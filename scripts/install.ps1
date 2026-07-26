@@ -16,26 +16,21 @@ $FinalReviewerModel = Read-Host 'Final Reviewer/Judge model ID (provider/model)'
 $FinalReviewerVariant = Read-Host 'Final Reviewer/Judge variant/reasoning (optional)'
 
 $RequiredModels = @($ArchitectModel, $ExecutorModel, $ReviewerImplementationModel, $ReviewerArchitectureModel, $FinalReviewerModel)
-if ($RequiredModels | Where-Object { [string]::IsNullOrWhiteSpace($_) }) {
-    throw 'Model IDs cannot be empty. The same model ID may be reused across roles if desired.'
-}
-if ($RequiredModels | Where-Object { $_ -notmatch '^[^/\s]+/\S+$' }) {
-    throw 'Every model ID must use the full OpenCode provider/model format returned by `opencode models`.'
-}
+if ($RequiredModels | Where-Object { [string]::IsNullOrWhiteSpace($_) }) { throw 'Model IDs cannot be empty. The same model ID may be reused across roles if desired.' }
+if ($RequiredModels | Where-Object { $_ -notmatch '^[^/\s]+/\S+$' }) { throw 'Every model ID must use the full OpenCode provider/model format returned by `opencode models`.' }
 
 New-Item -ItemType Directory -Force -Path (Join-Path $ConfigDir 'agents'), (Join-Path $ConfigDir 'commands'), $BackupDir | Out-Null
 
 function Backup-IfExists([string]$Path) {
     if (Test-Path $Path -PathType Leaf) { Copy-Item $Path (Join-Path $BackupDir (Split-Path $Path -Leaf)) -Force }
 }
-
 function Write-Utf8NoBom([string]$Path, [string]$Text) {
     $Encoding = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($Path, $Text, $Encoding)
 }
 
 @('architect.md','build.md','plan.md','executor.md','reviewer.md','reviewer-architecture.md','final-reviewer.md') | ForEach-Object { Backup-IfExists (Join-Path $ConfigDir "agents\$_") }
-@('ai-init.md','ai-audit.md','ai-docs.md','ai-plan.md','ai-execute.md','ai-review.md','ai-workflow.md','ai-status.md','ai-release.md') | ForEach-Object { Backup-IfExists (Join-Path $ConfigDir "commands\$_") }
+@('ai-init.md','ai-audit.md','ai-docs.md','ai-plan.md','ai-execute.md','ai-review.md','ai-workflow.md','ai-status.md','ai-resume.md','ai-release.md') | ForEach-Object { Backup-IfExists (Join-Path $ConfigDir "commands\$_") }
 Backup-IfExists (Join-Path $ConfigDir 'opencode.jsonc')
 Backup-IfExists (Join-Path $ConfigDir 'opencode.json')
 
@@ -59,30 +54,21 @@ Copy-Item (Join-Path $RootDir 'templates\commands\*.md') (Join-Path $ConfigDir '
 $JsoncPath = Join-Path $ConfigDir 'opencode.jsonc'
 $JsonPath = Join-Path $ConfigDir 'opencode.json'
 $Target = if ((Test-Path $JsoncPath) -or -not (Test-Path $JsonPath)) { $JsoncPath } else { $JsonPath }
-
 if (Test-Path $Target) {
     $Raw = Get-Content $Target -Raw
     $Stripped = [regex]::Replace($Raw, '/\*.*?\*/', '', 'Singleline')
     $Stripped = [regex]::Replace($Stripped, '(?m)^\s*//.*$', '')
     $Stripped = [regex]::Replace($Stripped, ',\s*([}\]])', '$1')
-    if ([string]::IsNullOrWhiteSpace($Stripped)) {
-        $Obj = [pscustomobject][ordered]@{ '$schema' = 'https://opencode.ai/config.json' }
-    } else {
-        try { $Obj = $Stripped | ConvertFrom-Json } catch { throw "Cannot safely merge $Target. Restore the backup and set default_agent manually to architect." }
-    }
-} else {
-    $Obj = [pscustomobject][ordered]@{ '$schema' = 'https://opencode.ai/config.json' }
-}
-
+    if ([string]::IsNullOrWhiteSpace($Stripped)) { $Obj = [pscustomobject][ordered]@{ '$schema' = 'https://opencode.ai/config.json' } }
+    else { try { $Obj = $Stripped | ConvertFrom-Json } catch { throw "Cannot safely merge $Target. Restore the backup and set default_agent manually to architect." } }
+} else { $Obj = [pscustomobject][ordered]@{ '$schema' = 'https://opencode.ai/config.json' } }
 $Obj | Add-Member -MemberType NoteProperty -Name 'default_agent' -Value 'architect' -Force
-$Json = $Obj | ConvertTo-Json -Depth 20
-Write-Utf8NoBom $Target ($Json + [Environment]::NewLine)
+Write-Utf8NoBom $Target (($Obj | ConvertTo-Json -Depth 20) + [Environment]::NewLine)
 
 & (Join-Path $PSScriptRoot 'verify.ps1') -ConfigDir $ConfigDir
-Write-Host 'Installed. Architect is default; built-in Build is governed full workflow and Plan is governed planning-only.'
-Write-Host 'Initial or materially stale codebase baselines require independent dual audit plus final adjudication before implementation.'
-Write-Host 'Project documentation is governed through DOCUMENTATION_SCOPE and /ai-docs, outside the production runtime boundary by default.'
-Write-Host 'Architect/Build/Plan must clarify material ambiguities with the user instead of inventing decisions.'
+Write-Host 'Installed. Architect is default; Build is governed full workflow and Plan is governed planning-only.'
+Write-Host 'v1.6 context routing, fresh evidence packets, checkpoint/resume, steering provenance and minimum-change gates are active.'
+Write-Host 'Use /ai-resume <TASK-ID> after an interrupted governed task.'
 Write-Host 'Use full provider/model IDs to select the exact subscription/provider path for each role.'
 Write-Host 'Restart OpenCode Desktop/TUI before use.'
 Write-Host "Backup: $BackupDir"
