@@ -48,7 +48,7 @@ Independently checks architecture, security, dependencies, data/schema safety, d
 
 ### Final Reviewer
 
-Validates both review reports against the repository and implementation evidence. It rejects false positives, preserves valid findings and returns the controlling verdict. Source-code edits are denied.
+Validates both review reports against the reusable repository baseline, current implementation evidence and targeted primary-source checks. It rejects false positives, preserves valid findings and returns the controlling verdict. Source-code edits are denied.
 
 ## Installation
 
@@ -115,6 +115,21 @@ Run a complete task:
 /ai-workflow Fix the authorization bug in the customer API
 ```
 
+## Repository analysis model
+
+The initial `/ai-init` performs the complete repository intake and stores reusable context in `.ai/CODEBASE_BASELINE.md`, including:
+
+- repository reference commit;
+- architecture map;
+- dependency/call-path map;
+- data flows and trust boundaries;
+- tests and validation capabilities;
+- deployment and security context.
+
+Later tasks reuse that baseline. Architect inspects the repository delta since the baseline or last validated task and performs targeted analysis of affected modules, callers, callees, dependencies and data flows. A repository-wide rescan is not performed by default.
+
+The two reviewers and Final Reviewer follow the same targeted approach: baseline/maps + approved plan + current diff + tests + relevant call paths. They expand into additional modules only when evidence indicates wider impact or the baseline is materially stale.
+
 ## Workflow
 
 ```text
@@ -167,7 +182,7 @@ After `PASS`, Executor creates one scoped local commit. `git push` always requir
 └── tasks/
 ```
 
-- `CODEBASE_BASELINE.md`: repository architecture and technical baseline.
+- `CODEBASE_BASELINE.md`: reusable repository reference, architecture map, dependency/call-path map and technical baseline.
 - `DEPLOYMENT_SCOPE.md`: production runtime boundary.
 - `PROJECT_HISTORY.md`: append-only engineering history without secret values.
 - `tasks/`: task plans, execution evidence and review artifacts.
