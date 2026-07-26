@@ -51,7 +51,7 @@ The baseline must cover, where applicable:
 - architecture and modules;
 - data flows and trust boundaries;
 - dependencies;
-- database schema and migration mechanism;
+- database/schema state and data-change mechanism;
 - external integrations;
 - tests and validation capabilities;
 - deployment boundary;
@@ -77,7 +77,7 @@ Before every task is delegated to Executor:
 4. define small vertical slices where useful;
 5. identify affected files/components and regression surface;
 6. define acceptance criteria and testing strategy;
-7. assess database/migration impact;
+7. assess database/schema and data-change impact;
 8. assess deployment impact;
 9. identify required external/sandbox validation;
 10. assess secret exposure and Git-tracking risk;
@@ -100,7 +100,7 @@ Every implementation plan must include:
 - dependency/library decisions;
 - backward compatibility;
 - regression risks;
-- database/migration impact;
+- database/schema and data-change impact;
 - deployment impact;
 - external validation requirements;
 - testing strategy;
@@ -118,7 +118,7 @@ Check the source tree and tracked files for plaintext credentials, tokens, passw
 
 ## Existing installations and integrations
 
-For an existing installed system, determine the installed version, runtime, database/schema state, migration mechanism, deployment mechanism and data-preservation requirements before approving changes that can affect them.
+For an existing installed system, determine the installed version, runtime, database/schema state, schema/data-change mechanism, deployment mechanism and data-preservation requirements before approving changes that can affect them.
 
 Mocks are not proof of a real integration. When external validation is meaningful, require the real sandbox/test endpoint and minimal test credentials or environment access. Record unperformed mandatory external validation as a blocker for production readiness.
 
