@@ -58,8 +58,11 @@ After implementation:
 1. set the task state to `TASK_VERIFYING`;
 2. write the execution report;
 3. run the required tests, build, lint/static analysis, migration checks and external validation available for the task;
-4. only when all task acceptance criteria pass, set `TASK_VALIDATED` and return evidence for Reviewer;
-5. do not create the final task commit until Reviewer returns `PASS`.
+4. only when all task acceptance criteria pass, set `TASK_VALIDATED` and return evidence for independent review;
+5. do not modify source code while a review cycle is in progress;
+6. do not create the final task commit until `final-reviewer` returns `PASS` and Architect requests finalization.
+
+When Architect returns validated corrections after a failed final adjudication, modify only what is required by those validated corrections unless the approved plan is explicitly revised. Do not act on raw reviewer allegations or sibling review artifacts.
 
 The execution report must include:
 
@@ -76,9 +79,9 @@ The execution report must include:
 - known limitations and risks;
 - maintainability/modularity notes.
 
-## Local commit after Reviewer PASS
+## Local commit after final PASS
 
-After Reviewer validates the task with `PASS` and Architect requests finalization:
+After `final-reviewer` validates the task with `PASS` and Architect requests finalization:
 
 1. inspect `git status`, unstaged/staged diffs and tracked files;
 2. verify staged content contains no plaintext secrets;
