@@ -181,7 +181,7 @@ After `PASS`, Executor creates one scoped local commit. `git push` always requir
 - Avoid speculative abstractions and unnecessary architecture.
 - Prefer small cohesive modules over monolithic files or artificial fragmentation.
 - Preserve backward compatibility unless the approved plan explicitly changes it.
-- Use the project's existing schema/data migration mechanism when database changes are required.
+- Use the project's existing schema/data change mechanism when database changes are required.
 - Validate external integrations against real sandbox/test endpoints when required.
 - Never store plaintext secrets in source, `.ai/` history or release artifacts.
 
