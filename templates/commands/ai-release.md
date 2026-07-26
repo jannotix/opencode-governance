@@ -22,9 +22,11 @@ Requirements:
 8. extract/copy that final artifact into a clean directory/environment and perform a clean installation/startup/smoke test from the artifact itself;
 9. run the strongest relevant test/build/static-analysis checks;
 10. execute mandatory real sandbox/test validation for external integrations where applicable; mocks alone are insufficient;
-11. delegate a fresh final adversarial review to `reviewer`.
+11. invoke `reviewer` and `reviewer-architecture` as fresh independent release reviews of the same production candidate, without sharing either reviewer's output with the other;
+12. request both release reviews before consuming either result and run them concurrently when supported;
+13. invoke `final-reviewer` after both reviews complete and require it to independently adjudicate the production evidence and reviewer findings.
 
-The final Reviewer must return exactly one verdict:
+Only `final-reviewer` returns the production verdict:
 
 - `READY_FOR_PRODUCTION`
 - `NOT_READY_FOR_PRODUCTION`
