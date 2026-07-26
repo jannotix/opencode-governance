@@ -8,11 +8,16 @@ $ArchitectModel = Read-Host 'Architect model ID'
 $ArchitectVariant = Read-Host 'Architect variant/reasoning (optional)'
 $ExecutorModel = Read-Host 'Executor model ID'
 $ExecutorVariant = Read-Host 'Executor variant/reasoning (optional)'
-$ReviewerModel = Read-Host 'Reviewer model ID'
-$ReviewerVariant = Read-Host 'Reviewer variant/reasoning (optional)'
+$ReviewerImplementationModel = Read-Host 'Implementation Reviewer model ID'
+$ReviewerImplementationVariant = Read-Host 'Implementation Reviewer variant/reasoning (optional)'
+$ReviewerArchitectureModel = Read-Host 'Architecture/Security Reviewer model ID'
+$ReviewerArchitectureVariant = Read-Host 'Architecture/Security Reviewer variant/reasoning (optional)'
+$FinalReviewerModel = Read-Host 'Final Reviewer/Judge model ID'
+$FinalReviewerVariant = Read-Host 'Final Reviewer/Judge variant/reasoning (optional)'
 
-if ([string]::IsNullOrWhiteSpace($ArchitectModel) -or [string]::IsNullOrWhiteSpace($ExecutorModel) -or [string]::IsNullOrWhiteSpace($ReviewerModel)) {
-    throw 'Model IDs cannot be empty.'
+$RequiredModels = @($ArchitectModel, $ExecutorModel, $ReviewerImplementationModel, $ReviewerArchitectureModel, $FinalReviewerModel)
+if ($RequiredModels | Where-Object { [string]::IsNullOrWhiteSpace($_) }) {
+    throw 'Model IDs cannot be empty. The same model ID may be reused across roles if desired.'
 }
 
 New-Item -ItemType Directory -Force -Path (Join-Path $ConfigDir 'agents'), (Join-Path $ConfigDir 'commands'), $BackupDir | Out-Null
@@ -21,7 +26,7 @@ function Backup-IfExists([string]$Path) {
     if (Test-Path $Path -PathType Leaf) { Copy-Item $Path (Join-Path $BackupDir (Split-Path $Path -Leaf)) -Force }
 }
 
-@('architect.md','executor.md','reviewer.md') | ForEach-Object { Backup-IfExists (Join-Path $ConfigDir "agents\$_") }
+@('architect.md','executor.md','reviewer.md','reviewer-architecture.md','final-reviewer.md') | ForEach-Object { Backup-IfExists (Join-Path $ConfigDir "agents\$_") }
 @('ai-init.md','ai-plan.md','ai-execute.md','ai-review.md','ai-workflow.md','ai-status.md','ai-release.md') | ForEach-Object { Backup-IfExists (Join-Path $ConfigDir "commands\$_") }
 Backup-IfExists (Join-Path $ConfigDir 'opencode.jsonc')
 Backup-IfExists (Join-Path $ConfigDir 'opencode.json')
@@ -36,7 +41,9 @@ function Render-Agent($Source, $Destination, $ModelToken, $Model, $VariantToken,
 
 Render-Agent (Join-Path $RootDir 'templates\agents\architect.md') (Join-Path $ConfigDir 'agents\architect.md') '__ARCHITECT_MODEL__' $ArchitectModel '__ARCHITECT_VARIANT_LINE__' $ArchitectVariant
 Render-Agent (Join-Path $RootDir 'templates\agents\executor.md') (Join-Path $ConfigDir 'agents\executor.md') '__EXECUTOR_MODEL__' $ExecutorModel '__EXECUTOR_VARIANT_LINE__' $ExecutorVariant
-Render-Agent (Join-Path $RootDir 'templates\agents\reviewer.md') (Join-Path $ConfigDir 'agents\reviewer.md') '__REVIEWER_MODEL__' $ReviewerModel '__REVIEWER_VARIANT_LINE__' $ReviewerVariant
+Render-Agent (Join-Path $RootDir 'templates\agents\reviewer.md') (Join-Path $ConfigDir 'agents\reviewer.md') '__REVIEWER_IMPLEMENTATION_MODEL__' $ReviewerImplementationModel '__REVIEWER_IMPLEMENTATION_VARIANT_LINE__' $ReviewerImplementationVariant
+Render-Agent (Join-Path $RootDir 'templates\agents\reviewer-architecture.md') (Join-Path $ConfigDir 'agents\reviewer-architecture.md') '__REVIEWER_ARCHITECTURE_MODEL__' $ReviewerArchitectureModel '__REVIEWER_ARCHITECTURE_VARIANT_LINE__' $ReviewerArchitectureVariant
+Render-Agent (Join-Path $RootDir 'templates\agents\final-reviewer.md') (Join-Path $ConfigDir 'agents\final-reviewer.md') '__FINAL_REVIEWER_MODEL__' $FinalReviewerModel '__FINAL_REVIEWER_VARIANT_LINE__' $FinalReviewerVariant
 Copy-Item (Join-Path $RootDir 'templates\commands\*.md') (Join-Path $ConfigDir 'commands') -Force
 
 $JsoncPath = Join-Path $ConfigDir 'opencode.jsonc'
@@ -56,5 +63,5 @@ $Obj['default_agent'] = 'architect'
 $Obj | ConvertTo-Json -Depth 20 | Set-Content $Target -Encoding UTF8
 
 & (Join-Path $PSScriptRoot 'verify.ps1') -ConfigDir $ConfigDir
-Write-Host 'Installed. Restart OpenCode before use.'
+Write-Host 'Installed. Restart OpenCode Desktop/TUI before use.'
 Write-Host "Backup: $BackupDir"
