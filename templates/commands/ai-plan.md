@@ -10,7 +10,7 @@ $ARGUMENTS
 
 Ensure project-local governance has been initialized. If `.ai/CODEBASE_BASELINE.md` is missing or materially stale, create or refresh it before planning.
 
-Before every task handoff, reconcile the baseline with the current repository state and changes since the previous task. Perform an adversarial impact analysis covering scope, affected components, dependencies, regression surface, tests, database/migration impact, deployment impact, external validation, security/secrets and maintainability.
+Before every task handoff, reconcile the baseline with the current repository state and changes since the previous task. Perform an adversarial impact analysis covering scope, affected components, dependencies, regression surface, tests, database/schema and data-change impact, deployment impact, external validation, security/secrets and maintainability.
 
 Create or update the task records under `.ai/tasks/<TASK-ID>/` with the specification, architecture analysis, exact implementation plan, acceptance criteria and evidence.
 
