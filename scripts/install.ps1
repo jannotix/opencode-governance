@@ -35,7 +35,7 @@ function Write-Utf8NoBom([string]$Path, [string]$Text) {
 }
 
 @('architect.md','build.md','plan.md','executor.md','reviewer.md','reviewer-architecture.md','final-reviewer.md') | ForEach-Object { Backup-IfExists (Join-Path $ConfigDir "agents\$_") }
-@('ai-init.md','ai-plan.md','ai-execute.md','ai-review.md','ai-workflow.md','ai-status.md','ai-release.md') | ForEach-Object { Backup-IfExists (Join-Path $ConfigDir "commands\$_") }
+@('ai-init.md','ai-audit.md','ai-plan.md','ai-execute.md','ai-review.md','ai-workflow.md','ai-status.md','ai-release.md') | ForEach-Object { Backup-IfExists (Join-Path $ConfigDir "commands\$_") }
 Backup-IfExists (Join-Path $ConfigDir 'opencode.jsonc')
 Backup-IfExists (Join-Path $ConfigDir 'opencode.json')
 
@@ -80,6 +80,7 @@ Write-Utf8NoBom $Target ($Json + [Environment]::NewLine)
 
 & (Join-Path $PSScriptRoot 'verify.ps1') -ConfigDir $ConfigDir
 Write-Host 'Installed. Architect is default; built-in Build is governed full workflow and Plan is governed planning-only.'
+Write-Host 'Initial or materially stale codebase baselines require independent dual audit plus final adjudication before implementation.'
 Write-Host 'Use full provider/model IDs to select the exact subscription/provider path for each role.'
 Write-Host 'Restart OpenCode Desktop/TUI before use.'
 Write-Host "Backup: $BackupDir"
