@@ -12,9 +12,12 @@ Locate exactly one matching task under `.ai/tasks/`.
 
 Do not implement unless:
 
+- the repository baseline state is `BASELINE_VALIDATED`;
 - the task has an Architect-approved plan;
 - the current task state is `READY_FOR_EXECUTION`;
 - required prerequisites are available.
+
+If the baseline is missing, draft, materially stale, revalidation-required or blocked, return `BASELINE_AUDIT_REQUIRED` or `BLOCKED` instead of implementing.
 
 If any condition is missing or ambiguous, return `BLOCKED` instead of guessing.
 
