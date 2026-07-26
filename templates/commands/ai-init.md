@@ -1,12 +1,12 @@
 ---
-description: Initialize or upgrade project-local governance state
+description: Initialize project-local governance state
 agent: architect
 subtask: false
 ---
 
-Initialize or upgrade governance for the current repository without modifying source code.
+Initialize governance for the current repository without modifying source code.
 
-Create missing project-local governance artifacts while preserving existing decisions and history:
+Create the project-local governance artifacts if missing:
 
 - `.ai/CODEBASE_BASELINE.md`
 - `.ai/DEPLOYMENT_SCOPE.md`
@@ -14,9 +14,9 @@ Create missing project-local governance artifacts while preserving existing deci
 - `.ai/STATUS.md`
 - `.ai/tasks/`
 
-Do not overwrite valid existing governance state.
+Do not overwrite valid existing project state.
 
-Before first implementation, perform a complete adversarial reverse-engineering analysis of the repository and populate `CODEBASE_BASELINE.md` with repository state, stack, entry points, architecture/modules, data flows/trust boundaries, dependencies, database/migrations, external integrations, tests, deployment boundary, security-sensitive areas, known defects, regression risks, technical constraints, existing installation state and blocking unknowns.
+Before first implementation, perform a complete adversarial reverse-engineering analysis of the repository and populate `CODEBASE_BASELINE.md` with repository state, stack, entry points, architecture/modules, data flows/trust boundaries, dependencies, database/schema state and change mechanism, external integrations, tests, deployment boundary, security-sensitive areas, known defects, regression risks, technical constraints and blocking unknowns.
 
 Populate `DEPLOYMENT_SCOPE.md` with the production runtime boundary and explicitly identify tests, development documentation, `.ai/`, review evidence, local tooling, IDE/temp files and secrets as development-only unless the project demonstrably requires a specific file at runtime.
 
