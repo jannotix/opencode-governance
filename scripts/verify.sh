@@ -34,7 +34,13 @@ grep -q 'BASELINE_VALIDATED' "$CONFIG_DIR/agents/architect.md" || { echo "Archit
 grep -q 'DOCUMENTATION_SCOPE' "$CONFIG_DIR/agents/architect.md" || { echo "Architect is missing project documentation governance" >&2; exit 1; }
 grep -q 'DOCUMENTATION_IMPACT' "$CONFIG_DIR/agents/architect.md" || { echo "Architect is missing documentation impact planning" >&2; exit 1; }
 grep -q 'LICENSE_DECISION_REQUIRED' "$CONFIG_DIR/agents/architect.md" || { echo "Architect is missing explicit license-decision gating" >&2; exit 1; }
-grep -q 'DOCUMENTATION_IMPACT' "$CONFIG_DIR/agents/executor.md" || { echo "Executor is missing documentation synchronization rules" >&2; exit 1; }
+for marker in ORIGINAL_USER_REQUEST.md CLARIFICATION_TRANSCRIPT.md APPROVED_REQUIREMENTS.md; do
+  grep -q "$marker" "$CONFIG_DIR/agents/architect.md" || { echo "Architect is missing canonical requirement artifact $marker" >&2; exit 1; }
+  grep -q "$marker" "$CONFIG_DIR/agents/final-reviewer.md" || { echo "Final Reviewer is missing canonical requirement artifact $marker" >&2; exit 1; }
+  grep -q "$marker" "$CONFIG_DIR/commands/ai-workflow.md" || { echo "/ai-workflow is missing canonical requirement artifact $marker" >&2; exit 1; }
+  grep -q "$marker" "$CONFIG_DIR/commands/ai-review.md" || { echo "/ai-review is missing canonical requirement artifact $marker" >&2; exit 1; }
+done
+grep -q 'materially wrong Architect plan' "$CONFIG_DIR/agents/final-reviewer.md" || { echo "Final Reviewer is missing explicit Architect-plan challenge policy" >&2; exit 1; }
 
 for name in reviewer reviewer-architecture; do
   for mode in TASK_REVIEW BASELINE_AUDIT RELEASE_REVIEW; do
