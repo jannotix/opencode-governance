@@ -26,6 +26,11 @@ function Backup-IfExists([string]$Path) {
     if (Test-Path $Path -PathType Leaf) { Copy-Item $Path (Join-Path $BackupDir (Split-Path $Path -Leaf)) -Force }
 }
 
+function Write-Utf8NoBom([string]$Path, [string]$Text) {
+    $Encoding = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Path, $Text, $Encoding)
+}
+
 @('architect.md','executor.md','reviewer.md','reviewer-architecture.md','final-reviewer.md') | ForEach-Object { Backup-IfExists (Join-Path $ConfigDir "agents\$_") }
 @('ai-init.md','ai-plan.md','ai-execute.md','ai-review.md','ai-workflow.md','ai-status.md','ai-release.md') | ForEach-Object { Backup-IfExists (Join-Path $ConfigDir "commands\$_") }
 Backup-IfExists (Join-Path $ConfigDir 'opencode.jsonc')
@@ -36,7 +41,7 @@ function Render-Agent($Source, $Destination, $ModelToken, $Model, $VariantToken,
     $Text = $Text.Replace($ModelToken, $Model)
     $VariantLine = if ([string]::IsNullOrWhiteSpace($Variant)) { '' } else { "variant: $Variant" }
     $Text = $Text.Replace($VariantToken, $VariantLine)
-    Set-Content -Path $Destination -Value $Text -Encoding UTF8
+    Write-Utf8NoBom $Destination $Text
 }
 
 Render-Agent (Join-Path $RootDir 'templates\agents\architect.md') (Join-Path $ConfigDir 'agents\architect.md') '__ARCHITECT_MODEL__' $ArchitectModel '__ARCHITECT_VARIANT_LINE__' $ArchitectVariant
@@ -55,12 +60,18 @@ if (Test-Path $Target) {
     $Stripped = [regex]::Replace($Raw, '/\*.*?\*/', '', 'Singleline')
     $Stripped = [regex]::Replace($Stripped, '(?m)^\s*//.*$', '')
     $Stripped = [regex]::Replace($Stripped, ',\s*([}\]])', '$1')
-    try { $Obj = $Stripped | ConvertFrom-Json -AsHashtable } catch { throw "Cannot safely merge $Target. Restore the backup and set default_agent manually to architect." }
+    if ([string]::IsNullOrWhiteSpace($Stripped)) {
+        $Obj = [pscustomobject][ordered]@{ '$schema' = 'https://opencode.ai/config.json' }
+    } else {
+        try { $Obj = $Stripped | ConvertFrom-Json } catch { throw "Cannot safely merge $Target. Restore the backup and set default_agent manually to architect." }
+    }
 } else {
-    $Obj = @{ '$schema' = 'https://opencode.ai/config.json' }
+    $Obj = [pscustomobject][ordered]@{ '$schema' = 'https://opencode.ai/config.json' }
 }
-$Obj['default_agent'] = 'architect'
-$Obj | ConvertTo-Json -Depth 20 | Set-Content $Target -Encoding UTF8
+
+$Obj | Add-Member -MemberType NoteProperty -Name 'default_agent' -Value 'architect' -Force
+$Json = $Obj | ConvertTo-Json -Depth 20
+Write-Utf8NoBom $Target ($Json + [Environment]::NewLine)
 
 & (Join-Path $PSScriptRoot 'verify.ps1') -ConfigDir $ConfigDir
 Write-Host 'Installed. Restart OpenCode Desktop/TUI before use.'
