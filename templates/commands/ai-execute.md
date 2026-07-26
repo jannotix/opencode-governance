@@ -20,8 +20,8 @@ If any condition is missing or ambiguous, return `BLOCKED` instead of guessing.
 
 Implement only the approved scope. Preserve architecture unless the plan explicitly changes it. Use existing project libraries where adequate and do not introduce duplicate dependencies.
 
-Set state `IMPLEMENTING`, then `TASK_VERIFYING` during validation. Run required tests and record evidence. When all acceptance criteria pass, set `TASK_VALIDATED` and return the execution report for independent review.
+Set state `IMPLEMENTING`, then `TASK_VERIFYING` during validation. Run required tests and record evidence. When all acceptance criteria pass, set `TASK_VALIDATED` and return the execution report for the independent dual-review pipeline.
 
-Do not create the final task commit until Reviewer returns `PASS` and Architect requests finalization.
+Do not create the final task commit until `final-reviewer` returns `PASS` and Architect requests finalization.
 
 Never push by default. A push requires explicit user authorization for that specific push.
