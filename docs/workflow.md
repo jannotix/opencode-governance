@@ -18,6 +18,17 @@ Before first implementation, Architect performs a complete repository baseline c
 
 The baseline is reusable. Later tasks do not repeat a repository-wide scan by default. Architect inspects the repository delta since the baseline or last validated task, then performs targeted analysis of the affected modules, callers, callees, dependencies and data flows. The analysis expands only when evidence indicates wider impact. Baseline sections are refreshed only when materially stale.
 
+## Primary entry points
+
+`architect` remains the default primary agent.
+
+The installer also overrides OpenCode's built-in primary agents:
+
+- `Build`: governed full lifecycle using the Architect model. It cannot edit application source directly; implementation is delegated only to `executor`, then passes through independent dual review and final adjudication.
+- `Plan`: governed planning-only mode using the Architect model. It cannot edit application source or delegate subagents.
+
+This prevents manually switching to OpenCode Build or Plan from bypassing governance.
+
 ## Complete workflow
 
 ```text
@@ -73,6 +84,8 @@ After Final Reviewer `PASS`, Executor creates one scoped local task commit. Push
 ```
 
 Architect reuses the baseline and repository maps, inspects the delta since the recorded reference point, and performs targeted impact analysis, acceptance/test planning, data/schema analysis, dependency governance and external-validation planning. No implementation is performed.
+
+The built-in `Plan` primary agent applies the same planning-only constraints.
 
 ## Execute an existing plan
 
