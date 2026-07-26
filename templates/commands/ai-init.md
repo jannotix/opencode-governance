@@ -1,5 +1,5 @@
 ---
-description: Initialize project-local governance state
+description: Initialize and adversarially validate project-local governance state
 agent: architect
 subtask: false
 ---
@@ -13,10 +13,13 @@ Create the project-local governance artifacts if missing:
 - `.ai/PROJECT_HISTORY.md`
 - `.ai/STATUS.md`
 - `.ai/tasks/`
+- `.ai/baseline-audits/`
 
 Do not overwrite valid existing project state.
 
-Before first implementation, perform a complete adversarial reverse-engineering analysis of the repository and populate `CODEBASE_BASELINE.md` with:
+## Initial draft baseline
+
+Before first implementation, perform a comprehensive adversarial reverse-engineering intake of the repository and populate a DRAFT `CODEBASE_BASELINE.md` with:
 
 - baseline repository commit/reference;
 - stack and supported runtimes;
@@ -31,12 +34,44 @@ Before first implementation, perform a complete adversarial reverse-engineering 
 - security-sensitive areas;
 - known defects and regression risks;
 - technical constraints;
-- blocking unknowns.
+- blocking unknowns;
+- material exclusions such as generated, vendored, cached or binary-only content when applicable.
 
-Treat this baseline and its maps as reusable repository context. Do not rebuild them from scratch for every task. Refresh only the portions made materially stale by repository changes or when evidence shows the existing baseline is insufficient.
+For very large repositories, establish broad structural and risk-based coverage. Do not waste context blindly reading generated/vendor/cache artifacts; record material exclusions and unresolved unknowns.
+
+Set baseline state to `BASELINE_DRAFT`.
+
+## Mandatory independent baseline audit
+
+The Architect draft is not authoritative.
+
+Create `.ai/baseline-audits/<AUDIT-ID>/` and request two independent `BASELINE_AUDIT` reviews against the same repository reference and draft baseline:
+
+- `reviewer`: implementation/runtime/regression audit;
+- `reviewer-architecture`: architecture/security/data/dependency/deployment audit.
+
+Neither reviewer may receive or read the sibling reviewer's current audit output. Request both audits before consuming either result and run them concurrently when the runtime supports concurrent Task calls.
+
+After both audits complete, invoke `final-reviewer` in `BASELINE_AUDIT` mode with the draft baseline, repository reference, both audit artifacts and relevant primary evidence.
+
+Only `final-reviewer` controls the baseline verdict:
+
+- `BASELINE_PASS`
+- `BASELINE_DEFECT`
+- `BLOCKED`
+
+If `BASELINE_DEFECT`, apply only validated baseline corrections to `.ai/`, then run a fresh independent dual baseline audit and final adjudication.
+
+Maximum baseline adjudication cycles: 3.
+
+After the third failed cycle, set `BASELINE_BLOCKED` and stop. Do not begin source implementation.
+
+If `BASELINE_PASS`, set `BASELINE_VALIDATED`, record the validated repository reference and append the validation evidence to `.ai/PROJECT_HISTORY.md`.
+
+`BASELINE_PASS` means the baseline is trustworthy and records material known defects/risks; it does not mean the source code is bug-free.
 
 Populate `DEPLOYMENT_SCOPE.md` with the production runtime boundary and explicitly identify tests, development documentation, `.ai/`, review evidence, local tooling, IDE/temp files and secrets as development-only unless the project demonstrably requires a specific file at runtime.
 
 Initialize `PROJECT_HISTORY.md` as an append-only chronological ledger. Each event should record timestamp, role, configured model when known, task/milestone/slice, action, result, evidence, state transition, Git action/commit message and push status. Never store secret values.
 
-Set `.ai/STATUS.md` to the current governance state. If the baseline is complete and no task is planned, use `PLANNING`.
+Do not rebuild or re-audit a valid `BASELINE_VALIDATED` baseline merely because `/ai-init` is run again. Use `/ai-audit` when explicit or material baseline revalidation is required.
