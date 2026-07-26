@@ -1,73 +1,47 @@
 # OpenCode Governance
 
-Governance workflow for OpenCode projects:
+Provider- and model-agnostic governance workflow for OpenCode projects:
 
 **Architect → Executor → Independent Reviewers → Final Reviewer**
 
-Provider and model agnostic. Model IDs are selected during installation and are never hardcoded in the repository.
+The repository does not hardcode model IDs. Exact `provider/model-id` routes and optional variants are selected during installation.
 
-## Components
+## Governance roles
 
-Governance roles:
+- `architect` — requirements, baseline/context analysis, planning and orchestration; no application-source writes.
+- `executor` — implements only approved `READY_FOR_EXECUTION` plans, synchronizes required project documentation and validates the task.
+- `reviewer` — independent implementation/runtime/regression/documentation review.
+- `reviewer-architecture` — independent architecture/security/data/dependency/deployment/maintainability review.
+- `final-reviewer` — independent controlling adjudicator for baseline, task and release reviews.
 
-- `architect`
-- `executor`
-- `reviewer`
-- `reviewer-architecture`
-- `final-reviewer`
+OpenCode primary overrides:
 
-Governed OpenCode primary entry points:
+- `Build` — complete governed lifecycle using the configured Architect model.
+- `Plan` — governed planning-only mode using the Architect model; source editing and subagent delegation are denied.
 
-- `build`: complete governed lifecycle using the Architect model; it cannot edit application source directly.
-- `plan`: governed planning-only mode using the Architect model; source editing and subagent delegation are denied.
+`architect` is installed as `default_agent`.
 
-Commands:
+## Commands
 
-- `/ai-init`
-- `/ai-audit`
-- `/ai-docs`
-- `/ai-plan`
-- `/ai-execute`
-- `/ai-review`
-- `/ai-workflow`
-- `/ai-status`
-- `/ai-release`
-
-Project governance state is stored under `.ai/`.
-
-## Roles
-
-### Architect
-
-Analyzes the repository, creates the draft baseline, coordinates independent baseline validation, clarifies ambiguous project decisions with the developer/project owner, defines task scope, plans implementation/documentation work and coordinates the workflow. Source/project-documentation edits are denied.
-
-### Executor
-
-Implements only Architect-approved tasks in `READY_FOR_EXECUTION` from a currently validated baseline, synchronizes required project documentation, runs validation and reports evidence. It cannot delegate.
-
-### Implementation Reviewer
-
-Independently checks implementation correctness, runtime behaviour, regressions, tests, compatibility and user-facing documentation accuracy. It also performs an independent implementation/runtime audit during baseline validation. Source/documentation edits are denied.
-
-### Architecture/Security Reviewer
-
-Independently checks architecture, security, dependencies, data/schema safety, deployment scope, maintainability, documentation structure and license consistency. It also performs an independent architecture/security audit during baseline validation. Source/documentation edits are denied.
-
-### Final Reviewer
-
-Independently adjudicates baseline audits, task reviews and release reviews against primary repository evidence. It rejects false positives, preserves valid findings and returns the controlling verdict. Source/documentation edits are denied.
+```text
+/ai-init
+/ai-audit
+/ai-docs
+/ai-plan
+/ai-execute
+/ai-review
+/ai-workflow
+/ai-status
+/ai-resume
+/ai-release
+```
 
 ## Installation
 
-Connect the required providers in OpenCode:
+Connect the required providers in OpenCode and list exact model IDs:
 
 ```text
 /connect
-```
-
-List exact model IDs:
-
-```text
 /models
 ```
 
@@ -77,7 +51,7 @@ or:
 opencode models
 ```
 
-Always use the full `provider/model-id`. If the same model is exposed by more than one connected provider, the provider prefix determines which subscription/API route is used.
+Always select the full `provider/model-id`; the provider prefix determines the subscription/API route.
 
 Windows PowerShell:
 
@@ -85,247 +59,29 @@ Windows PowerShell:
 ./scripts/install.ps1
 ```
 
-macOS / Linux:
+macOS/Linux:
 
 ```bash
 chmod +x scripts/install.sh
 ./scripts/install.sh
 ```
 
-The installer asks for the model ID and optional variant for each of the five governance roles. `Build` and `Plan` automatically use the configured Architect model and variant.
+The installer asks for the model and optional variant/reasoning level for the five governance roles. Build and Plan inherit the Architect model/variant. It preserves unrelated OpenCode configuration, creates timestamped backups and verifies the rendered configuration.
 
-The installation writes global OpenCode agents and commands, sets `architect` as `default_agent`, preserves unrelated OpenCode configuration and creates timestamped backups of files it may replace.
+Restart OpenCode Desktop/TUI after installation.
 
-Restart OpenCode after installation.
-
-## Usage
-
-Initialize and adversarially validate a repository once:
+## First repository use
 
 ```text
 /ai-init
 ```
 
-Explicitly revalidate the reusable baseline after a material repository change or on demand:
-
-```text
-/ai-audit
-```
-
-Generate or synchronize governed project documentation:
-
-```text
-/ai-docs
-```
-
-Run a complete governed task:
-
-```text
-/ai-workflow <task>
-```
-
-You may also use OpenCode's primary selectors safely:
-
-- `Build` runs the governed complete lifecycle.
-- `Plan` performs governed planning only from a currently validated baseline.
-
-Neither bypasses the configured governance roles.
-
-## Clarification before implementation
-
-Architect, governed Build and governed Plan explicitly allow OpenCode's `question` tool.
-
-When approved requirements and repository evidence do not resolve a material product/project decision, governance asks the developer/project owner instead of inventing an answer.
-
-This applies to decisions that can affect:
-
-- behaviour or UX;
-- compatibility;
-- data handling;
-- integrations;
-- deployment/packaging;
-- documentation;
-- software licensing.
-
-`READY_FOR_EXECUTION` is prohibited while an unresolved material ambiguity could change implementation, acceptance criteria, safety or documentation.
-
-Questions already answered by the user or primary evidence must not be repeated.
-
-## Adversarial baseline validation
-
-The Architect is not allowed to certify its own initial repository analysis.
-
-For the first governed use of a repository:
-
-```text
-Architect
-  ↓
-DRAFT CODEBASE BASELINE + DOCUMENTATION INVENTORY
-  ↓
-┌───────────────────────────────┐
-│ Implementation Reviewer       │
-│ Architecture/Security Reviewer│
-└──────────────┬────────────────┘
-               ↓
-         Final Reviewer
-               ↓
-       BASELINE_VALIDATED
-```
-
-The two baseline reviewers inspect the same repository reference independently and do not receive each other's current audit output. Final Reviewer validates their allegations against primary repository evidence rather than counting votes.
-
-A baseline can contain documented pre-existing defects or documentation gaps. `BASELINE_VALIDATED` means the baseline/documentation inventory materially records the architecture, important call paths, known defects/risks, security-sensitive areas, unknowns and audit exclusions found during review. It does not mean the source code is bug-free or release-ready.
-
-No source implementation may begin until the baseline is validated.
-
-Baseline adjudication is bounded to three cycles. After the third failed cycle the state becomes `BASELINE_BLOCKED`.
-
-## Project documentation governance
-
-Every governed project maintains:
-
-```text
-.ai/DOCUMENTATION_SCOPE.md
-```
-
-This records canonical documentation paths, applicability, audience, source-of-truth references, synchronization state, license state and production-package exceptions.
-
-When a project has no coherent documentation convention, the default layout is:
-
-```text
-project/
-├── <production/runtime code>
-├── docs/
-│   ├── README.md
-│   ├── INSTALLATION.md
-│   ├── USER_MANUAL.md
-│   ├── CHANGELOG.md
-│   ├── LICENSE.md
-│   ├── wiki/
-│   │   └── README.md
-│   └── <other applicable docs>
-└── .ai/
-```
-
-For distributable applications, the default minimum applicable set is:
-
-- project overview/readme;
-- complete step-by-step installation guide;
-- user manual;
-- wiki/index with task-oriented pages;
-- changelog;
-- licensing documentation backed by an explicit license decision.
-
-Additional admin, upgrade, architecture, configuration, API, security, troubleshooting and release documentation is maintained when applicable.
-
-Do not create filler documentation. Preserve coherent existing project conventions.
-
-`docs/**` is inside the project repository but outside the production/runtime package by default. `.ai/**` is governance-only. Explicit legal/notice/runtime exceptions must be recorded in `.ai/DEPLOYMENT_SCOPE.md`.
-
-Every task records exactly one documentation impact:
-
-- `DOCUMENTATION_IMPACT: NONE`
-- `DOCUMENTATION_IMPACT: UPDATE_REQUIRED`
-- `DOCUMENTATION_IMPACT: CREATE_REQUIRED`
-
-Required documentation is synchronized by Executor before `TASK_VALIDATED` and reviewed with the code. Missing, stale or contradictory required documentation prevents Final Reviewer `PASS`.
-
-### License decisions
-
-Governance never chooses or invents a software license.
-
-If an explicit project-owner decision or authoritative existing legal file does not establish the license, governance records:
-
-```text
-LICENSE_DECISION_REQUIRED
-```
-
-The Architect asks the developer/project owner when the decision is required. Release readiness remains blocked until it is resolved.
-
-See [Project documentation governance](docs/project-documentation.md).
-
-## Large repositories
-
-The initial intake creates a DRAFT `.ai/CODEBASE_BASELINE.md` with reusable repository context including:
-
-- repository reference commit;
-- architecture map;
-- dependency/call-path map;
-- data flows and trust boundaries;
-- tests and validation capabilities;
-- deployment and security context;
-- known defects and regression risks;
-- documentation state;
-- material exclusions and unresolved unknowns.
-
-That draft is independently audited by both reviewers and adjudicated by Final Reviewer before it becomes reusable.
-
-For very large repositories, comprehensive analysis means broad structural and risk-based coverage. Generated, vendored, cache or binary-only content should not consume context blindly; material exclusions must be recorded.
-
-Later routine tasks reuse the validated baseline and inspect Git deltas, affected modules, callers, callees, dependencies, data flows and impacted canonical documentation. A repository-wide audit is not performed by default.
-
-A full adversarial baseline revalidation is required after material architectural change, broad milestone, large merge/rebase, major dependency upgrade, substantial imported code, or when evidence shows the baseline is materially stale/incomplete. `/ai-audit` can also be invoked explicitly.
-
-## Workflow
-
-Initial repository gate:
-
-```text
-BASELINE_DRAFT
-  ↓
-BASELINE_DUAL_AUDIT
-  ↓
-BASELINE_ADJUDICATION
-  ↓
-BASELINE_VALIDATED
-```
-
-Task lifecycle:
-
-```text
-BASELINE_VALIDATED
-  ↓
-CLARIFICATION
-  ↓
-PLANNING
-  ↓
-TASK_PLANNED
-  ↓
-READY_FOR_EXECUTION
-  ↓
-IMPLEMENTING
-  ↓
-DOCUMENTATION_SYNC
-  ↓
-TASK_VERIFYING
-  ↓
-TASK_VALIDATED
-  ↓
-DUAL_REVIEW
-  ├── reviewer
-  └── reviewer-architecture
-  ↓
-FINAL_ADJUDICATION
-  ↓
-LOCAL_COMMITTED
-```
-
-The two task reviewers inspect the same validated implementation/documentation state independently. Neither may use the other reviewer's current-cycle findings.
-
-Only `final-reviewer` controls the final task verdict:
-
-- `PASS`
-- `IMPLEMENTATION_DEFECT`
-- `PLAN_DEFECT`
-- `BLOCKED`
-
-Only validated corrections may return to Executor. Automatic task correction is limited to three final-review cycles. After `PASS`, Executor creates one scoped local commit. `git push` requires explicit user authorization.
-
-## Project state
+Initial governance creates/reuses:
 
 ```text
 .ai/
 ├── CODEBASE_BASELINE.md
+├── CONTEXT_INDEX.md
 ├── DEPLOYMENT_SCOPE.md
 ├── DOCUMENTATION_SCOPE.md
 ├── PROJECT_HISTORY.md
@@ -334,22 +90,179 @@ Only validated corrections may return to Executor. Automatic task correction is 
 └── tasks/
 ```
 
-Existing project `.ai/` state and project documentation are preserved across governance/model updates. Existing baselines are not globally rescanned during an update; a repository is revalidated lazily when it is next used and lacks a valid baseline state or when material staleness is detected.
+The initial baseline and context index are drafts until independently audited:
 
-## Engineering rules
+```text
+Architect draft baseline + context index
+            ↓
+┌────────────────────────────────┐
+│ Implementation Reviewer        │
+│ Architecture/Security Reviewer │
+└───────────────┬────────────────┘
+                ↓
+          Final Reviewer
+                ↓
+       BASELINE_VALIDATED
+```
 
-- Clarify material ambiguity instead of inventing decisions.
-- Validate the reusable baseline before first implementation.
-- Plan before implementation.
-- Keep changes scoped to the approved task.
-- Synchronize required project documentation before task validation.
-- Prefer existing dependencies when adequate.
-- Avoid speculative abstractions and duplicate libraries.
-- Prefer small cohesive modules over monolithic files or artificial fragmentation.
-- Preserve backward compatibility unless the approved plan explicitly changes it.
-- Validate required external integrations against real sandbox/test endpoints.
-- Never store plaintext secrets in source, documentation, `.ai/` history or release artifacts.
-- Never choose a software license without an explicit project decision.
+The reviewers inspect primary repository evidence independently and do not receive each other's current audit output. Final Reviewer validates allegations rather than counting votes.
+
+No source implementation may begin without `BASELINE_VALIDATED`. Baseline adjudication is bounded to three failed cycles, then `BASELINE_BLOCKED`.
+
+## Canonical requirement provenance
+
+Every governed task keeps the user's request separate from Architect interpretation:
+
+```text
+.ai/tasks/<TASK-ID>/
+├── ORIGINAL_USER_REQUEST.md
+├── CLARIFICATION_TRANSCRIPT.md
+├── APPROVED_REQUIREMENTS.md
+├── CONTEXT_MANIFEST.md
+├── RUN_STATE.json
+├── STEERING.md                  # when used
+└── evidence/
+```
+
+`ORIGINAL_USER_REQUEST.md` preserves the actual request. `CLARIFICATION_TRANSCRIPT.md` is chronological and records explicit superseding decisions. `APPROVED_REQUIREMENTS.md` contains normalized executable requirements with provenance.
+
+The implementation plan is downstream evidence. A plan that materially omits, weakens, contradicts, fabricates or unauthorizedly broadens/narrows a controlling requirement is defective even when implemented perfectly.
+
+Architect, Build and Plan explicitly allow OpenCode's `question` tool for unresolved material decisions. Questions already answered by the user or primary evidence must not be repeated.
+
+See [Requirement provenance](docs/requirement-provenance.md).
+
+## Context-efficient governance
+
+Validated repositories maintain `.ai/CONTEXT_INDEX.md`, a compact routing map of material modules, call/dependency edges, data/trust boundaries, security-sensitive surfaces, canonical docs, tests and known risks.
+
+Each task creates `CONTEXT_MANIFEST.md` from the validated index plus current Git delta. Agents start from the selected task surface and expand only when primary evidence indicates wider dependency, regression, security, documentation or architectural impact.
+
+Role handoffs use fresh referential packets:
+
+```text
+.ai/tasks/<TASK-ID>/evidence/
+├── EXECUTION_PACKET.md
+├── REVIEW_IMPLEMENTATION_PACKET.md
+├── REVIEW_ARCHITECTURE_PACKET.md
+└── FINAL_PACKET.md
+```
+
+Packets reference canonical artifacts instead of copying unrelated conversation history. The two reviewer packets never contain the sibling current-cycle review. Final packet is built only after both independent reviews complete.
+
+See [Context efficiency and resumable governance](docs/context-efficiency-resume.md).
+
+## Minimum necessary change
+
+Every implementation-ready plan contains `MINIMUM_CHANGE_ASSESSMENT`:
+
+- root cause or evidence-backed hypothesis;
+- existing code/pattern reuse;
+- standard-library/native-platform option;
+- already-installed dependency option;
+- justification for new dependencies or abstractions;
+- why the proposed diff is the smallest correct, secure and maintainable change.
+
+Minimalism never removes required security, trust-boundary validation, data-loss protection, error handling, accessibility or approved behavior. Bug fixes should address the shared root cause when relevant callers demonstrate it, rather than only patching the reported symptom.
+
+## Checkpoint and resume
+
+Each active task maintains machine-readable `.ai/tasks/<TASK-ID>/RUN_STATE.json` at phase boundaries.
+
+After an interrupted session, restart, crash or provider quota exhaustion:
+
+```text
+/ai-resume <TASK-ID>
+```
+
+Resume validates the checkpoint against Git state, baseline freshness, requirement provenance, steering and the frozen review target. It resumes only from a safe persisted phase. Missing history is never invented, and review evidence is invalidated when the reviewed target has changed.
+
+Task-oriented commands expose a parseable block:
+
+```text
+GOVERNANCE_RESULT
+TASK_ID: <id or NONE>
+STATE: <state>
+NEXT_ACTION: <action or NONE>
+CYCLE: <n/3 or N/A>
+HUMAN_INPUT_REQUIRED: YES|NO
+RESUMABLE: YES|NO
+CHECKPOINT: <RUN_STATE path or NONE>
+```
+
+## Governed steering
+
+Mid-task authoritative direction may be recorded in `STEERING.md`. Material steering cannot silently mutate the task after planning: it must enter `CLARIFICATION_TRANSCRIPT.md`, update approved requirements only when authorized, and force replanning when the current plan is no longer valid.
+
+## Optional task queue
+
+Large milestones may use `.ai/TASK_QUEUE.json` with task priority, dependencies and state. Governance may select the highest-priority eligible task, but every task still passes the normal baseline, provenance, planning, execution and review gates. No unbounded autonomous loop is introduced.
+
+## Project documentation governance
+
+`.ai/DOCUMENTATION_SCOPE.md` records canonical project documentation paths, applicability, audience, synchronization state and license state.
+
+Without an existing coherent convention, top-level `docs/` is the default documentation root outside the production/runtime package. For distributable applications, the normal minimum applicable set is overview/readme, step-by-step installation, user manual, wiki/index, changelog and licensing documentation, plus other admin/upgrade/architecture/configuration/API/security/troubleshooting/release documentation when applicable.
+
+Every task records `DOCUMENTATION_IMPACT: NONE | UPDATE_REQUIRED | CREATE_REQUIRED`. Required documentation is synchronized by Executor before `TASK_VALIDATED` and reviewed with the implementation.
+
+Governance never chooses a software license. Missing explicit owner/legal evidence becomes `LICENSE_DECISION_REQUIRED` and blocks release readiness until resolved.
+
+## Complete task lifecycle
+
+```text
+BASELINE_VALIDATED
+        ↓
+REQUIREMENT_CAPTURE
+        ↓
+CLARIFICATION / APPROVED_REQUIREMENTS
+        ↓
+CONTEXT_ROUTING
+        ↓
+PLANNING / MINIMUM_CHANGE_GATE
+        ↓
+READY_FOR_EXECUTION
+        ↓
+EXECUTOR
+        ↓
+DOCUMENTATION_SYNC / TASK_VERIFYING
+        ↓
+TASK_VALIDATED
+        ↓
+┌────────────────────────────────┐
+│ Implementation Reviewer        │
+│ Architecture/Security Reviewer │
+└───────────────┬────────────────┘
+                ↓
+          Final Reviewer
+                ↓
+PASS / IMPLEMENTATION_DEFECT / PLAN_DEFECT / BLOCKED
+                ↓
+          LOCAL_COMMITTED
+```
+
+The source/documentation target is frozen during each review cycle. Only Final Reviewer validated corrections may drive automatic repair. Task final-adjudication failures are bounded to three cycles, then `BLOCKED`.
+
+After `PASS`, Executor creates one scoped local task commit. `git push` always requires explicit user authorization.
+
+## Large repositories
+
+A validated baseline/context index is reusable. Routine tasks use Git delta plus task-specific routing rather than rescanning the complete repository. Full adversarial revalidation is reserved for material architecture changes, broad milestones, large merge/rebase events, major dependency upgrades, substantial imported code, materially stale evidence or explicit `/ai-audit`.
+
+## Release gate
+
+```text
+/ai-release
+```
+
+Release review requires a current validated baseline, synchronized required documentation, explicit license decision, production package correctness, clean installation/startup evidence when applicable, required tests/build/static checks, secret safety, schema/data preservation and mandatory real integration validation.
+
+Final release verdict:
+
+```text
+READY_FOR_PRODUCTION
+NOT_READY_FOR_PRODUCTION
+```
 
 ## Verification
 
@@ -359,13 +272,13 @@ Windows:
 ./scripts/verify.ps1
 ```
 
-macOS / Linux:
+macOS/Linux:
 
 ```bash
 ./scripts/verify.sh
 ```
 
-Verification checks the five governance roles, governed `Build`/`Plan` overrides, provider-qualified model IDs, all commands including `/ai-audit` and `/ai-docs`, baseline-audit capabilities, explicit clarification support, documentation governance, default Architect and resolved OpenCode configuration.
+Verification checks all seven agents, all ten commands, provider-qualified model IDs, governed Build/Plan behavior, requirement provenance, context routing, minimum-change gate, fresh evidence packets, resume/checkpoint markers, reviewer modes, documentation/license gates and `default_agent`.
 
 ## Uninstall
 
@@ -384,8 +297,10 @@ Provider authentication, project `.ai/` state, project documentation and backups
 ## Documentation
 
 - [Installation](docs/installation.md)
-- [Model configuration](docs/model-configuration.md)
 - [Workflow](docs/workflow.md)
+- [Requirement provenance](docs/requirement-provenance.md)
+- [Context efficiency and resumable governance](docs/context-efficiency-resume.md)
+- [Model configuration](docs/model-configuration.md)
 - [Project documentation governance](docs/project-documentation.md)
 - [Permissions](docs/permissions.md)
 - [Troubleshooting](docs/troubleshooting.md)

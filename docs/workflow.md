@@ -1,26 +1,12 @@
 # Workflow
 
-## Initialize and validate a repository
+## Initial repository validation
 
 ```text
 /ai-init
 ```
 
-Creates the project-local governance state without modifying application source or project documentation:
-
-- `.ai/CODEBASE_BASELINE.md`
-- `.ai/DEPLOYMENT_SCOPE.md`
-- `.ai/DOCUMENTATION_SCOPE.md`
-- `.ai/PROJECT_HISTORY.md`
-- `.ai/STATUS.md`
-- `.ai/baseline-audits/`
-- `.ai/tasks/`
-
-Before first implementation, Architect performs comprehensive repository reverse engineering and creates a DRAFT baseline plus documentation inventory.
-
-The Architect draft is not authoritative.
-
-It must pass an independent baseline validation pipeline:
+Creates/reuses baseline, context index, documentation/deployment scope, history/status, audit and task directories. Architect performs broad structural/risk-based intake, then two independent baseline audits and Final Reviewer adjudication:
 
 ```text
 BASELINE_DRAFT
@@ -31,119 +17,63 @@ BASELINE_DRAFT
 → BASELINE_VALIDATED
 ```
 
-The two reviewers receive the same repository reference and draft baseline but not each other's current audit findings. They are requested before either result is consumed and run concurrently when supported.
+The reviewers do not receive sibling current-cycle findings. `BASELINE_PASS` means the baseline, `.ai/CONTEXT_INDEX.md`, documentation inventory, material risks/unknowns and exclusions are trustworthy reusable context; it does not mean the codebase is defect-free.
 
-Final Reviewer independently validates allegations against primary repository evidence and returns exactly one baseline verdict:
+Maximum failed baseline adjudications: three, then `BASELINE_BLOCKED`.
 
-- `BASELINE_PASS`
-- `BASELINE_DEFECT`
-- `BLOCKED`
+## Requirement and clarification gate
 
-On `BASELINE_DEFECT`, Architect may update only governance evidence under `.ai/` using validated corrections, then must run a fresh independent baseline-audit cycle. After three failed baseline adjudications the state becomes `BASELINE_BLOCKED`.
-
-A validated baseline may document pre-existing bugs, documentation gaps or unresolved license state. `BASELINE_PASS` means those material facts are represented accurately enough for reuse; it does not mean the source or docs are defect-free.
-
-No source implementation may begin without `BASELINE_VALIDATED`.
-
-## Clarification gate
-
-Architect, governed Build and governed Plan explicitly use OpenCode's `question` tool when approved requirements and primary evidence do not resolve a material project decision.
-
-They must ask the developer/project owner rather than inventing or silently assuming decisions that can affect:
-
-- product behaviour or UX;
-- compatibility;
-- data handling;
-- integrations;
-- deployment or packaging;
-- documentation;
-- software licensing.
-
-They must not repeat questions already answered by the user or authoritative project evidence.
-
-`READY_FOR_EXECUTION` is prohibited while an unresolved material ambiguity could change implementation, acceptance criteria, safety, compatibility or required documentation.
-
-## Project documentation governance
-
-`.ai/DOCUMENTATION_SCOPE.md` records the canonical documentation layout, applicability, current/stale/missing state, synchronization reference and project license state.
-
-When no coherent project convention exists, the default documentation root is top-level `docs/`, outside the production/runtime code boundary.
-
-For distributable applications, the default minimum applicable documentation set is:
+Every task begins with:
 
 ```text
-docs/
-├── README.md
-├── INSTALLATION.md
-├── USER_MANUAL.md
-├── CHANGELOG.md
-├── LICENSE.md          # only after an explicit license decision
-└── wiki/
-    └── README.md
+ORIGINAL_USER_REQUEST.md
+CLARIFICATION_TRANSCRIPT.md
+APPROVED_REQUIREMENTS.md
 ```
 
-Add admin, upgrade, architecture, configuration, API, security, troubleshooting, release notes and additional wiki pages when applicable.
+Original user intent remains distinct from Architect interpretation. Material unanswered product/project decisions are resolved with OpenCode `question`; answered questions are not repeated. Explicit later supersession is recorded chronologically.
 
-Do not create filler documents. Preserve coherent existing conventions and root-level ecosystem/legal files when they are authoritative.
+A plan cannot override the canonical requirement trail.
 
-`docs/**` and `.ai/**` are excluded from the production/runtime artifact by default. Specific legal/notice/runtime exceptions must be recorded in `.ai/DEPLOYMENT_SCOPE.md`.
+## Context routing
 
-Every task records exactly one:
+A validated repository maintains `.ai/CONTEXT_INDEX.md` with material module/path, call/dependency, data/trust, security, documentation, validation and risk routing metadata.
 
-- `DOCUMENTATION_IMPACT: NONE`
-- `DOCUMENTATION_IMPACT: UPDATE_REQUIRED`
-- `DOCUMENTATION_IMPACT: CREATE_REQUIRED`
+Each task builds `.ai/tasks/<TASK-ID>/CONTEXT_MANIFEST.md` from that index plus current Git delta. It records selected context, safe exclusions and every material evidence-triggered expansion.
 
-Required documentation is synchronized by Executor before `TASK_VALIDATED` and reviewed with the implementation.
+Agents start from the manifest and relevant packet. Full repository rescans are not the default for routine work.
 
-Governance never chooses a software license automatically. Missing explicit license state is recorded as:
+## Minimum-change planning
+
+Implementation-ready plans contain `MINIMUM_CHANGE_ASSESSMENT`:
+
+- root cause/evidence-backed hypothesis;
+- existing capability/pattern reuse;
+- stdlib/native-platform option;
+- installed dependency option;
+- new dependency/abstraction justification;
+- smallest correct, secure and maintainable proposed change.
+
+For bugs, inspect relevant callers and prefer the correct shared root-cause fix. Minimalism never removes security, trust-boundary validation, data-loss protection, required error handling, accessibility or approved behavior.
+
+## Checkpoint state
+
+Each active task maintains `.ai/tasks/<TASK-ID>/RUN_STATE.json` at governance phase boundaries. It records current state, baseline/reference, plan version, repository target, review cycle/freeze, completion flags, last safe transition, resumability and blocker.
+
+Task commands emit a parseable `GOVERNANCE_RESULT` block with state, next action, cycle, human-input requirement and checkpoint path.
+
+## Fresh evidence packets
+
+Role handoffs are built under `.ai/tasks/<TASK-ID>/evidence/`:
 
 ```text
-LICENSE_DECISION_REQUIRED
+EXECUTION_PACKET.md
+REVIEW_IMPLEMENTATION_PACKET.md
+REVIEW_ARCHITECTURE_PACKET.md
+FINAL_PACKET.md
 ```
 
-Architect asks the developer/project owner when that decision is needed. Release readiness remains blocked until it is resolved.
-
-## Explicit documentation workflow
-
-```text
-/ai-docs
-```
-
-Creates a governed documentation task for an existing project. Architect inventories/clarifies/plans, Executor writes the approved docs, then both independent reviewers and Final Reviewer validate them against primary project evidence.
-
-Use it to create or synchronize README, installation guide, user manual, wiki, changelog, licensing documentation and other applicable project docs without changing application source unless the approved task explicitly requires it.
-
-## Explicit baseline audit
-
-```text
-/ai-audit
-```
-
-Revalidates the reusable baseline and documentation inventory without modifying application source or project documentation.
-
-Use it after a material architecture change, broad milestone, large merge/rebase, major dependency upgrade, substantial imported code, evidence of stale/incomplete baseline/documentation scope, or an explicit audit request.
-
-Do not run a complete baseline audit for every routine task.
-
-## Large repositories
-
-For very large repositories, comprehensive baseline analysis means broad structural and risk-based coverage rather than blindly reading every generated, vendored, cached or binary artifact. Material exclusions and unresolved unknowns must be recorded.
-
-After validation, routine tasks reuse the baseline. Architect inspects repository delta since the baseline or last validated task, then performs targeted analysis of affected modules, callers, callees, dependencies, data flows and impacted canonical documentation. Analysis expands only when evidence indicates wider impact.
-
-If evidence shows material staleness, set `BASELINE_REVALIDATION_REQUIRED` and complete adversarial baseline validation before planning or implementation continues.
-
-## Primary entry points
-
-`architect` remains the default primary agent.
-
-The installer also overrides OpenCode's built-in primary agents:
-
-- `Build`: governed full lifecycle using the Architect model. It cannot edit application source/project docs directly; it can clarify requirements, coordinate baseline validation and delegates writes only to `executor`.
-- `Plan`: governed planning-only mode using the Architect model. It cannot edit source/docs or delegate subagents. It can ask clarification questions but requires an existing `BASELINE_VALIDATED` baseline.
-
-This prevents manually switching to OpenCode Build or Plan from bypassing governance.
+Packets reference canonical evidence instead of copying chat history. Implementation and Architecture/Security packets target the same frozen task state but contain role-specific selected context. Neither contains the sibling current-cycle review. Final packet is built only after both independent reviews complete.
 
 ## Complete workflow
 
@@ -151,16 +81,16 @@ This prevents manually switching to OpenCode Build or Plan from bypassing govern
 /ai-workflow <task>
 ```
 
-Full lifecycle:
+Lifecycle:
 
 ```text
-INTAKE
-→ BASELINE_DRAFT
-→ BASELINE_DUAL_AUDIT
-→ BASELINE_ADJUDICATION
-→ BASELINE_VALIDATED
+BASELINE_VALIDATED
+→ REQUIREMENT_CAPTURE
 → CLARIFICATION
+→ APPROVED_REQUIREMENTS
+→ CONTEXT_ROUTING
 → PLANNING
+→ MINIMUM_CHANGE_GATE
 → TASK_PLANNED
 → READY_FOR_EXECUTION
 → IMPLEMENTING
@@ -172,89 +102,114 @@ INTAKE
 → LOCAL_COMMITTED
 ```
 
-For repositories that already have a current `BASELINE_VALIDATED` baseline, the baseline audit phases are reused/skipped and the workflow starts from incremental clarification/planning.
+Executor implements only an approved plan and synchronizes required project documentation before `TASK_VALIDATED`.
 
-Architect must reconcile the validated baseline and documentation scope with the current repository before every task handoff. Executor never implements unless the baseline is validated and the task is `READY_FOR_EXECUTION`.
+At `TASK_VALIDATED`, source/task documentation are frozen for the current review cycle. Architect creates the two fresh independent reviewer packets and requests both reviewers before consuming either result.
 
-Before execution, Architect determines documentation impact and resolves material ambiguity through `question` when necessary.
-
-Executor performs the approved source work and required project-documentation sync. `TASK_VALIDATED` requires both implementation acceptance criteria and required documentation checks to pass.
-
-After `TASK_VALIDATED`, source and task-documentation edits are frozen for the active review cycle.
-
-Architect requests two independent `TASK_REVIEW` assessments of the same code/documentation state:
-
-- `reviewer`: implementation, behaviour, regressions, tests and user-facing documentation accuracy;
-- `reviewer-architecture`: architecture, security, dependencies, data/schema safety, deployment scope, documentation structure and licensing consistency.
-
-Neither reviewer may receive or read the other reviewer's current-cycle findings. Architect requests both reviews before consuming either result and runs them concurrently when OpenCode supports concurrent Task calls.
-
-After both reviews complete, `final-reviewer` validates the original requirement, clarification decisions, approved plan, validated baseline/maps, documentation scope, current code/documentation diff, tests, execution evidence and both reports.
-
-Required documentation that is missing, materially stale, contradictory, unsafe or claims functionality not actually implemented prevents `PASS`.
+After both reviews complete, Architect creates `FINAL_PACKET.md`. Final Reviewer validates requirement provenance and Architect interpretation before implementation correctness, then validates reviewer allegations against primary evidence rather than counting votes.
 
 Final task verdicts:
 
-- `PASS`
-- `IMPLEMENTATION_DEFECT`
-- `PLAN_DEFECT`
-- `BLOCKED`
+- `PASS`;
+- `IMPLEMENTATION_DEFECT`;
+- `PLAN_DEFECT`;
+- `BLOCKED`.
 
-Implementation/documentation defects go back to Executor only after Final Reviewer validates the required corrections.
+A perfect implementation of a materially wrong plan is `PLAN_DEFECT`. Review evidence becomes stale when the frozen source/documentation target changes. Repair returns only Final Reviewer validated corrections through the appropriate Architect/Executor route.
 
-Plan defects go back to Architect for re-investigation and clarification where needed. A revised plan must explicitly return to `READY_FOR_EXECUTION` before execution resumes.
+Maximum failed task final-adjudication cycles: three, then `BLOCKED`.
 
-Automatic task correction is limited to three final-adjudication cycles. After the third failed cycle the workflow stops with `BLOCKED` and preserves unresolved evidence.
+After `PASS`, Executor creates one scoped local task commit. Push requires explicit user authorization.
 
-After Final Reviewer `PASS`, Executor creates one scoped local task commit containing validated task source, required project documentation and relevant `.ai/` evidence. Push is separate and requires explicit user authorization.
+## Governed steering
 
-## Planning only
+`.ai/tasks/<TASK-ID>/STEERING.md` may carry authoritative mid-task direction. Before it can change implementation:
+
+1. record material direction chronologically in `CLARIFICATION_TRANSCRIPT.md`;
+2. identify add/narrow/supersede semantics;
+3. update `APPROVED_REQUIREMENTS.md` only from authoritative input;
+4. reassess the plan;
+5. return to `PLANNING` when the plan became stale.
+
+Operational prioritization that does not change requirements may be recorded/applied without rewriting the plan.
+
+## Resume after interruption
+
+```text
+/ai-resume <TASK-ID>
+```
+
+Resume reads `RUN_STATE.json`, `.ai/STATUS.md`, requirement provenance, context manifest/index, steering and Git state. It validates the checkpointed repository target before routing to the last safe unfinished phase.
+
+Examples:
+
+- `READY_FOR_EXECUTION` → fresh execution packet/Executor;
+- interrupted `IMPLEMENTING` → reconcile worktree and continue only if plan/checkpoint still match;
+- `TASK_VALIDATED` → fresh dual review;
+- one review complete with unchanged frozen target → complete the missing independent review;
+- interrupted `FINAL_ADJUDICATION` → rebuild final packet and adjudicate;
+- `PASS` without commit → scoped Executor finalization;
+- `LOCAL_COMMITTED` → nothing to resume;
+- `BLOCKED`/`BASELINE_BLOCKED` → remain blocked until authoritative resolution.
+
+Resume never fabricates missing provenance/review history and never reuses stale review output after the target changes.
+
+## Optional task queue
+
+Large milestones may add `.ai/TASK_QUEUE.json` containing task IDs, priorities, dependencies and state. The orchestrator may select the highest-priority eligible task whose dependencies are complete.
+
+This is scheduling only: every task still runs the complete governance lifecycle, three-cycle limits remain, and human decisions still block. There is no unbounded autonomous loop.
+
+## Other commands
+
+Planning only:
 
 ```text
 /ai-plan <task>
 ```
 
-Architect can complete mandatory baseline validation first when needed, asks clarification questions instead of inventing decisions, determines documentation impact and produces an implementation-ready plan. No source/project-documentation implementation is performed.
-
-The built-in `Plan` primary agent cannot delegate; therefore it requires a pre-existing validated baseline rather than certifying one itself.
-
-## Execute an existing plan
+Execute an approved plan:
 
 ```text
 /ai-execute <task-id-or-plan-id>
 ```
 
-Execution is blocked unless the baseline is `BASELINE_VALIDATED`, the plan is Architect-approved, task state is `READY_FOR_EXECUTION`, documentation impact is resolved and no material implementation ambiguity remains.
-
-## Independent task review panel
+Independent dual review + final adjudication:
 
 ```text
 /ai-review <task-id>
 ```
 
-Runs the two independent reviewers in `TASK_REVIEW` mode against the same validated source/documentation state and then Final Reviewer adjudication.
+Explicit baseline/context-index audit:
 
-## Status
+```text
+/ai-audit
+```
+
+Governed project documentation task:
+
+```text
+/ai-docs
+```
+
+Status/checkpoint report:
 
 ```text
 /ai-status
 ```
 
-Reports baseline validation, documentation scope/synchronization, license state, outstanding clarification decisions, task state, reviewer/final status, Git/commit state, push authorization and unresolved external validation.
-
-## Final release
+Production gate:
 
 ```text
 /ai-release
 ```
 
-The release gate requires a current `BASELINE_VALIDATED` state and an explicit license decision. It validates the production artifact, required project documentation, clean installation/startup, secret safety, data/schema safety, required tests and real external integration validation.
+## Documentation and license
 
-For distributable apps, the maintained installation guide, user manual/wiki, changelog and licensing documentation must match the actual release candidate.
+`.ai/DOCUMENTATION_SCOPE.md` maps canonical documentation and applicability. Required task documentation is synchronized before validation and reviewed with code. `docs/**` and `.ai/**` are outside the runtime artifact by default except explicitly justified legal/packaging/runtime exceptions.
 
-It runs two fresh independent `RELEASE_REVIEW` assessments and sends both reports plus production/documentation evidence to Final Reviewer for adjudication.
+Governance never chooses/invents software licenses. Missing explicit license state becomes `LICENSE_DECISION_REQUIRED` and blocks release readiness until resolved.
 
-Final verdict is exactly one of:
+## Large repositories
 
-- `READY_FOR_PRODUCTION`
-- `NOT_READY_FOR_PRODUCTION`
+Initial baseline validation is broad and risk-based. Routine tasks reuse validated baseline/context index and inspect Git delta plus targeted affected paths. Full revalidation is reserved for material architectural/dependency/import changes, broad milestones, large merges/rebases, evidence of stale/incomplete context or explicit `/ai-audit`.
