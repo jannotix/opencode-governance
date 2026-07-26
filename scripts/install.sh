@@ -29,7 +29,7 @@ for value in "$ARCH_MODEL" "$EXEC_MODEL" "$REVIEW_IMPL_MODEL" "$REVIEW_ARCH_MODE
   fi
 done
 
-mkdir -p "$CONFIG_DIR/agents" "$CONFIG_DIR/commands" "$CONFIG_DIR/prompts" "$BACKUP_DIR"
+mkdir -p "$CONFIG_DIR/agents" "$CONFIG_DIR/commands" "$BACKUP_DIR"
 
 backup_if_exists() {
   local path="$1"
@@ -38,9 +38,8 @@ backup_if_exists() {
   fi
 }
 
-for file in architect.md executor.md reviewer.md reviewer-architecture.md final-reviewer.md; do backup_if_exists "$CONFIG_DIR/agents/$file"; done
+for file in architect.md build.md plan.md executor.md reviewer.md reviewer-architecture.md final-reviewer.md; do backup_if_exists "$CONFIG_DIR/agents/$file"; done
 for file in ai-init.md ai-plan.md ai-execute.md ai-review.md ai-workflow.md ai-status.md ai-release.md; do backup_if_exists "$CONFIG_DIR/commands/$file"; done
-for file in governed-build.txt governed-plan.txt; do backup_if_exists "$CONFIG_DIR/prompts/$file"; done
 backup_if_exists "$CONFIG_DIR/opencode.jsonc"
 backup_if_exists "$CONFIG_DIR/opencode.json"
 
@@ -58,19 +57,17 @@ PY
 }
 
 render "$ROOT_DIR/templates/agents/architect.md" "$CONFIG_DIR/agents/architect.md" "$ARCH_MODEL" "$ARCH_VARIANT" "__ARCHITECT_MODEL__" "__ARCHITECT_VARIANT_LINE__"
+render "$ROOT_DIR/templates/agents/build.md" "$CONFIG_DIR/agents/build.md" "$ARCH_MODEL" "$ARCH_VARIANT" "__ARCHITECT_MODEL__" "__ARCHITECT_VARIANT_LINE__"
+render "$ROOT_DIR/templates/agents/plan.md" "$CONFIG_DIR/agents/plan.md" "$ARCH_MODEL" "$ARCH_VARIANT" "__ARCHITECT_MODEL__" "__ARCHITECT_VARIANT_LINE__"
 render "$ROOT_DIR/templates/agents/executor.md" "$CONFIG_DIR/agents/executor.md" "$EXEC_MODEL" "$EXEC_VARIANT" "__EXECUTOR_MODEL__" "__EXECUTOR_VARIANT_LINE__"
 render "$ROOT_DIR/templates/agents/reviewer.md" "$CONFIG_DIR/agents/reviewer.md" "$REVIEW_IMPL_MODEL" "$REVIEW_IMPL_VARIANT" "__REVIEWER_IMPLEMENTATION_MODEL__" "__REVIEWER_IMPLEMENTATION_VARIANT_LINE__"
 render "$ROOT_DIR/templates/agents/reviewer-architecture.md" "$CONFIG_DIR/agents/reviewer-architecture.md" "$REVIEW_ARCH_MODEL" "$REVIEW_ARCH_VARIANT" "__REVIEWER_ARCHITECTURE_MODEL__" "__REVIEWER_ARCHITECTURE_VARIANT_LINE__"
 render "$ROOT_DIR/templates/agents/final-reviewer.md" "$CONFIG_DIR/agents/final-reviewer.md" "$FINAL_REVIEW_MODEL" "$FINAL_REVIEW_VARIANT" "__FINAL_REVIEWER_MODEL__" "__FINAL_REVIEWER_VARIANT_LINE__"
 cp "$ROOT_DIR/templates/commands/"*.md "$CONFIG_DIR/commands/"
-cp "$ROOT_DIR/templates/prompts/governed-build.txt" "$CONFIG_DIR/prompts/governed-build.txt"
-cp "$ROOT_DIR/templates/prompts/governed-plan.txt" "$CONFIG_DIR/prompts/governed-plan.txt"
 
-python3 - "$CONFIG_DIR" "$ARCH_MODEL" "$ARCH_VARIANT" <<'PY'
+python3 - "$CONFIG_DIR" <<'PY'
 import json, pathlib, re, sys
 root = pathlib.Path(sys.argv[1])
-arch_model = sys.argv[2]
-arch_variant = sys.argv[3]
 jsonc = root / "opencode.jsonc"
 jsonf = root / "opencode.json"
 target = jsonc if jsonc.exists() or not jsonf.exists() else jsonf
@@ -82,40 +79,15 @@ if target.exists():
     try:
         data = json.loads(stripped)
     except Exception:
-        raise SystemExit(f"Cannot safely merge {target}. Restore the backup and configure governance manually.")
+        raise SystemExit(f"Cannot safely merge {target}. Restore the backup and set default_agent manually to architect.")
 else:
     data = {"$schema": "https://opencode.ai/config.json"}
-
-build = {
-    "mode": "primary",
-    "model": arch_model,
-    "prompt": "{file:./prompts/governed-build.txt}",
-    "permission": {
-        "edit": {"*": "deny", ".ai/**": "allow"},
-        "task": {"*": "deny", "executor": "allow", "reviewer": "allow", "reviewer-architecture": "allow", "final-reviewer": "allow"},
-        "bash": {"*": "ask", "git status*": "allow", "git diff*": "allow", "git log*": "allow", "git show*": "allow", "git grep*": "allow", "rg *": "allow", "git push*": "deny", "git reset --hard*": "deny", "git clean*": "deny"}
-    }
-}
-plan = {
-    "mode": "primary",
-    "model": arch_model,
-    "prompt": "{file:./prompts/governed-plan.txt}",
-    "permission": {
-        "edit": {"*": "deny", ".ai/**": "allow"},
-        "task": "deny",
-        "bash": {"*": "ask", "git status*": "allow", "git diff*": "allow", "git log*": "allow", "git show*": "allow", "git grep*": "allow", "rg *": "allow", "git push*": "deny", "git reset --hard*": "deny", "git clean*": "deny"}
-    }
-}
-if arch_variant:
-    build["variant"] = arch_variant
-    plan["variant"] = arch_variant
-
-data.setdefault("agent", {})["build"] = build
-data["agent"]["plan"] = plan
 data["default_agent"] = "architect"
 target.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
 
 "$SCRIPT_DIR/verify.sh" "$CONFIG_DIR"
-echo "Installed. Architect is default; built-in Build is governed full workflow and Plan is governed planning-only. Restart OpenCode Desktop/TUI before use."
+echo "Installed. Architect is default; built-in Build is governed full workflow and Plan is governed planning-only."
+echo "Use full provider/model IDs to select the exact subscription/provider path for each role."
+echo "Restart OpenCode Desktop/TUI before use."
 echo "Backup: $BACKUP_DIR"
