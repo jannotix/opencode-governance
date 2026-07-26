@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.0 - 2026-07-26
+
+- Added mandatory adversarial validation of the initial reusable codebase baseline.
+- Added independent `BASELINE_AUDIT` modes for Implementation and Architecture/Security Reviewers.
+- Added Final Reviewer baseline adjudication with `BASELINE_PASS`, `BASELINE_DEFECT` and `BLOCKED` verdicts.
+- Blocked source implementation until the repository reaches `BASELINE_VALIDATED`.
+- Added bounded baseline correction/review cycles with `BASELINE_BLOCKED` after three failed adjudications.
+- Added `/ai-audit` for explicit full baseline revalidation after material repository changes or on demand.
+- Added lazy revalidation for existing repositories instead of rescanning all projects during governance updates.
+- Added baseline-audit evidence under `.ai/baseline-audits/`.
+- Updated Build, Plan, task execution, task review, release gates, status reporting, installers, verification, uninstall and documentation for baseline validation.
+- Preserved incremental/JIT analysis for routine tasks so validated large-repository baselines are reused instead of repeatedly rescanned.
+
 ## 1.2.0 - 2026-07-26
 
 - Added five configurable governance roles.
