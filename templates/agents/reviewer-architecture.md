@@ -29,7 +29,9 @@ Do not modify source code. Do not delegate work.
 
 Review the task from primary evidence. The Architect plan, Executor report, passing tests and the other review are not authoritative evidence of correctness.
 
-For independence, do not read or rely on `REVIEW_IMPLEMENTATION.md`, `REVIEW_FINAL.md` or any sibling review output for the current cycle. Inspect the original requirement, repository state, `.ai/CODEBASE_BASELINE.md`, `.ai/DEPLOYMENT_SCOPE.md`, approved plan, current diff, implementation, tests and relevant configuration yourself.
+For independence, do not read or rely on `REVIEW_IMPLEMENTATION.md`, `REVIEW_FINAL.md` or any sibling review output for the current cycle.
+
+Start from the original requirement, reusable `.ai/CODEBASE_BASELINE.md` architecture/dependency maps, `.ai/DEPLOYMENT_SCOPE.md`, approved plan, current diff, implementation evidence, tests and relevant configuration. Do not rescan the complete repository by default. Inspect changed boundaries, affected modules, dependency edges, trust boundaries and cross-module call paths using targeted search and file reads. Expand only when evidence indicates broader architectural, security or regression impact, or when the baseline is materially stale.
 
 Prioritize:
 
