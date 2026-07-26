@@ -2,7 +2,7 @@
 set -euo pipefail
 CONFIG_DIR="${1:-${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}}"
 required_agents=(architect build plan executor reviewer reviewer-architecture final-reviewer)
-required_commands=(ai-init ai-audit ai-plan ai-execute ai-review ai-workflow ai-status ai-release)
+required_commands=(ai-init ai-audit ai-docs ai-plan ai-execute ai-review ai-workflow ai-status ai-release)
 
 for name in "${required_agents[@]}"; do
   test -s "$CONFIG_DIR/agents/$name.md" || { echo "Missing agent: $name" >&2; exit 1; }
@@ -26,17 +26,32 @@ grep -Eq '^    reviewer-architecture: allow$' "$CONFIG_DIR/agents/build.md" || {
 grep -Eq '^    final-reviewer: allow$' "$CONFIG_DIR/agents/build.md" || { echo "Governed Build cannot delegate to final-reviewer" >&2; exit 1; }
 grep -Eq '^  task: deny$' "$CONFIG_DIR/agents/plan.md" || { echo "Governed Plan must deny task delegation" >&2; exit 1; }
 
+for name in architect build plan; do
+  grep -Eq '^  question: allow$' "$CONFIG_DIR/agents/$name.md" || { echo "$name must explicitly allow the OpenCode question tool" >&2; exit 1; }
+done
+
 grep -q 'BASELINE_VALIDATED' "$CONFIG_DIR/agents/architect.md" || { echo "Architect is missing baseline validation gate" >&2; exit 1; }
+grep -q 'DOCUMENTATION_SCOPE' "$CONFIG_DIR/agents/architect.md" || { echo "Architect is missing project documentation governance" >&2; exit 1; }
+grep -q 'DOCUMENTATION_IMPACT' "$CONFIG_DIR/agents/architect.md" || { echo "Architect is missing documentation impact planning" >&2; exit 1; }
+grep -q 'LICENSE_DECISION_REQUIRED' "$CONFIG_DIR/agents/architect.md" || { echo "Architect is missing explicit license-decision gating" >&2; exit 1; }
+grep -q 'DOCUMENTATION_IMPACT' "$CONFIG_DIR/agents/executor.md" || { echo "Executor is missing documentation synchronization rules" >&2; exit 1; }
+
 for name in reviewer reviewer-architecture; do
   for mode in TASK_REVIEW BASELINE_AUDIT RELEASE_REVIEW; do
     grep -q "$mode" "$CONFIG_DIR/agents/$name.md" || { echo "$name is missing $mode mode" >&2; exit 1; }
   done
+  grep -qi 'documentation' "$CONFIG_DIR/agents/$name.md" || { echo "$name is missing documentation review coverage" >&2; exit 1; }
 done
 for mode in TASK_REVIEW BASELINE_AUDIT RELEASE_REVIEW; do
   grep -q "$mode" "$CONFIG_DIR/agents/final-reviewer.md" || { echo "Final Reviewer is missing $mode mode" >&2; exit 1; }
 done
 grep -q 'BASELINE_PASS' "$CONFIG_DIR/agents/final-reviewer.md" || { echo "Final Reviewer is missing BASELINE_PASS" >&2; exit 1; }
 grep -q 'BASELINE_DEFECT' "$CONFIG_DIR/agents/final-reviewer.md" || { echo "Final Reviewer is missing BASELINE_DEFECT" >&2; exit 1; }
+grep -q 'LICENSE_DECISION_REQUIRED' "$CONFIG_DIR/agents/final-reviewer.md" || { echo "Final Reviewer is missing license-readiness gating" >&2; exit 1; }
+
+grep -q 'docs/INSTALLATION.md' "$CONFIG_DIR/commands/ai-docs.md" || { echo "/ai-docs is missing installation documentation coverage" >&2; exit 1; }
+grep -q 'docs/USER_MANUAL.md' "$CONFIG_DIR/commands/ai-docs.md" || { echo "/ai-docs is missing user manual coverage" >&2; exit 1; }
+grep -q 'docs/wiki/README.md' "$CONFIG_DIR/commands/ai-docs.md" || { echo "/ai-docs is missing wiki coverage" >&2; exit 1; }
 
 python3 - "$CONFIG_DIR" <<'PY'
 import json, pathlib, re, sys
