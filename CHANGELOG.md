@@ -10,6 +10,8 @@
 - Added reusable architecture and dependency/call-path maps to the codebase baseline.
 - Added incremental task planning from repository deltas instead of repeated full scans.
 - Added targeted reviewer and final-adjudication verification for large repositories.
+- Overrode OpenCode `Build` with the complete governed lifecycle and `Plan` with governed planning-only behavior.
+- Required full `provider/model-id` values so duplicate models exposed by different providers route deterministically.
 - Limited automatic repair to three final-review cycles.
 - Updated release review, installers, verification and uninstall scripts.
 - Kept provider and model configuration fully user-defined.
