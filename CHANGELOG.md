@@ -5,8 +5,9 @@
 - Added reusable `.ai/CONTEXT_INDEX.md` and per-task `CONTEXT_MANIFEST.md` for evidence-driven sparse context routing.
 - Added fresh referential role packets under each task `evidence/` directory so agents receive canonical task evidence without inheriting unrelated conversation history.
 - Added mandatory `MINIMUM_CHANGE_ASSESSMENT` to implementation-ready plans: reuse existing/native/stdlib/installed capabilities first and prefer the smallest correct, secure and maintainable root-cause change.
-- Added machine-readable per-task `RUN_STATE.json` checkpoints at governance phase boundaries.
+- Added stable machine-readable per-task `RUN_STATE.json` checkpoints at governance phase boundaries.
 - Added `/ai-resume` for safe recovery after interrupted sessions, crashes, quota exhaustion or restarts; stale review evidence is invalidated when the reviewed target changes.
+- Added lazy v1.6 adoption for existing in-progress tasks: missing checkpoint/context artifacts may be reconstructed only from authoritative existing evidence and Git state, never fabricated.
 - Added governed `STEERING.md` handling: material mid-task user direction must enter requirement provenance and trigger replanning when it changes the controlling plan.
 - Added machine-readable `GOVERNANCE_RESULT` status blocks for task-oriented commands.
 - Added optional `.ai/TASK_QUEUE.json` support for dependency-aware milestone task selection without introducing unbounded autonomous loops.

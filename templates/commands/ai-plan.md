@@ -20,7 +20,7 @@ For a new task create under `.ai/tasks/<TASK-ID>/`:
 - `STEERING.md` when steering is supplied/needed;
 - `evidence/` for role-specific handoff packets.
 
-Preserve the original request separately from Architect interpretation and redact only secret values. Clarifications are chronological; later supersession must be explicit.
+Preserve original request separately from Architect interpretation and redact only secret values. Clarifications are chronological; later supersession must be explicit.
 
 Reuse `.ai/CODEBASE_BASELINE.md`, `.ai/CONTEXT_INDEX.md`, documentation/deployment scope and current Git delta. Build `CONTEXT_MANIFEST.md` with selected modules/files, callers/callees, dependency edges, data flows/trust boundaries, tests, docs, exclusions and evidence-triggered expansions. Start bounded and expand only when primary evidence indicates wider impact.
 
@@ -30,21 +30,14 @@ Resolve every material ambiguity with `question`; do not repeat answered questio
 
 Perform impact analysis for scope, dependencies, regressions, tests, schema/data, deployment, integrations, security/secrets, maintainability and documentation. Determine exactly one `DOCUMENTATION_IMPACT`.
 
-Every implementation-ready plan must include `MINIMUM_CHANGE_ASSESSMENT`:
+Every implementation-ready plan must include `MINIMUM_CHANGE_ASSESSMENT`: root cause/evidence-backed hypothesis, whether capability/fix already exists, reusable project code/pattern, standard-library/native option, installed dependency option, justification for new dependency/abstraction and why the proposed change is the smallest correct secure maintainable solution. Never simplify away security, trust-boundary validation, data-loss protection, error handling, accessibility or approved behavior. For bugs inspect relevant callers and prefer a shared root-cause fix when appropriate.
 
-- root cause or explicit evidence-backed hypothesis;
-- whether capability/fix already exists in the codebase;
-- reusable existing code/pattern;
-- standard-library/native-platform option;
-- already-installed dependency option;
-- justification for any new dependency;
-- justification for any new abstraction/layer;
-- why the proposed change is the smallest correct, secure and maintainable solution.
+Write acceptance criteria traceable to approved requirements.
 
-Minimalism may never remove required security, trust-boundary validation, data-loss protection, error handling, accessibility or an approved requirement. For bugs, inspect relevant callers and prefer a shared root-cause fix over symptom-only patches.
+Initialize/update `RUN_STATE.json` using these canonical top-level fields: `schema_version`, `task_id`, `state`, `baseline_state`, `baseline_reference`, `plan_id`, `plan_version`, `repository_head`, `review_cycle`, `documentation_impact`, `review_frozen`, `execution_complete`, `implementation_review_complete`, `architecture_review_complete`, `final_adjudication_complete`, `last_safe_transition`, `resumable`, `human_input_required`, `blocker`, `updated_at`. Additional fields may be added but these names remain stable within the task.
 
-Write acceptance criteria traceable to approved requirements and update `RUN_STATE.json` at phase boundaries. Create `evidence/EXECUTION_PACKET.md` as a referential packet containing the exact repository/baseline reference, requirement artifacts, approved plan, context manifest, selected changed/affected paths, validation requirements and permitted evidence-triggered expansion rules. Do not copy unrelated conversation history.
+Create `evidence/EXECUTION_PACKET.md` as a referential packet containing exact repository/baseline reference, requirement artifacts, approved plan, context manifest, selected changed/affected paths, validation requirements and permitted evidence-triggered expansion rules. Do not copy unrelated conversation history.
 
 Set `PLANNING -> TASK_PLANNED -> READY_FOR_EXECUTION` only when all gates pass. Otherwise return the appropriate blocker.
 
-Finish task-related output with the `GOVERNANCE_RESULT` block documented by the governance policy. Stop after planning.
+Finish with `GOVERNANCE_RESULT`. Stop after planning.

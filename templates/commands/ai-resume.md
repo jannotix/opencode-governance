@@ -13,27 +13,29 @@ Do not infer progress from chat history. Reconstruct state only from repository 
 Required flow:
 
 1. locate exactly one matching task under `.ai/tasks/`;
-2. require `.ai/tasks/<TASK-ID>/RUN_STATE.json`, the canonical requirement trail, approved plan when planning has completed, and `.ai/CONTEXT_MANIFEST.md`/task context artifacts required by the recorded phase;
-3. read current `.ai/STATUS.md`, validated baseline/reference, `.ai/CONTEXT_INDEX.md`, task `CONTEXT_MANIFEST.md`, `STEERING.md` when present, and the checkpoint;
-4. inspect current Git HEAD/status/diff and compare them with the checkpointed repository reference and recorded review-freeze state;
-5. process any unprocessed material steering through `CLARIFICATION_TRANSCRIPT.md` and `APPROVED_REQUIREMENTS.md` before resuming; if steering invalidates the plan, return to `PLANNING` and create a revised plan rather than continuing execution;
-6. if the baseline is missing/materially stale, return `BASELINE_AUDIT_REQUIRED` or set `BASELINE_REVALIDATION_REQUIRED` as appropriate;
-7. if source/documentation changed after `TASK_VALIDATED` or during a recorded review freeze, invalidate stale current-cycle reviews and resume from validation/review as required;
-8. if Git state contains unrelated or ambiguous changes that cannot be reconciled safely with the checkpoint, return `BLOCKED` instead of guessing;
-9. resume from the last safe persisted phase; do not repeat completed phases whose evidence still matches, and never fabricate missing review/provenance history;
-10. preserve the three-cycle baseline/task adjudication limits;
-11. update `RUN_STATE.json`, `.ai/STATUS.md` and `.ai/PROJECT_HISTORY.md` at the next phase boundary without secret values.
+2. require canonical requirement provenance and inspect `.ai/STATUS.md`, validated baseline/reference, `.ai/CONTEXT_INDEX.md`, task `STEERING.md` when present and current Git state;
+3. read `RUN_STATE.json` when present and validate canonical fields: `schema_version`, `task_id`, `state`, `baseline_state`, `baseline_reference`, `plan_id`, `plan_version`, `repository_head`, `review_cycle`, `documentation_impact`, `review_frozen`, execution/reviewer/final completion flags, `last_safe_transition`, `resumable`, `human_input_required`, `blocker`, `updated_at`;
+4. for a pre-v1.6 in-progress task missing `RUN_STATE.json`, `CONTEXT_MANIFEST.md` or evidence packets, reconstruct only what authoritative existing `.ai/**` evidence plus current Git state prove; never fabricate historical phase/review completion; when safe reconstruction is impossible return `BLOCKED` or require authoritative clarification/revalidation;
+5. completed historical tasks do not need synthetic v1.6 artifacts;
+6. compare current Git HEAD/status/diff and changed paths with the checkpoint and relevant evidence packet; `repository_head` alone is insufficient for a dirty worktree;
+7. process unhandled material steering through `CLARIFICATION_TRANSCRIPT.md` and `APPROVED_REQUIREMENTS.md`; if steering invalidates the plan, return to `PLANNING` rather than continuing execution;
+8. if baseline/context index is missing/materially stale, return `BASELINE_AUDIT_REQUIRED` or set `BASELINE_REVALIDATION_REQUIRED`;
+9. if source/documentation changed after `TASK_VALIDATED` or during review freeze, invalidate stale current-cycle reviews and resume from validation/review as required;
+10. if unrelated/ambiguous Git changes cannot be reconciled with the checkpoint, return `BLOCKED` instead of guessing;
+11. resume from the last safe persisted phase; do not repeat completed phases whose evidence still matches;
+12. preserve three-cycle baseline/task adjudication limits;
+13. update `RUN_STATE.json`, `.ai/STATUS.md` and `.ai/PROJECT_HISTORY.md` at the next phase boundary without secrets.
 
-Valid examples of resume routing:
+Resume routing examples:
 
-- `READY_FOR_EXECUTION` -> Executor with a fresh `EXECUTION_PACKET.md`;
-- interrupted `IMPLEMENTING` -> reconcile worktree, then continue Executor only when the plan/checkpoint still match;
+- `READY_FOR_EXECUTION` -> fresh `EXECUTION_PACKET.md`/Executor;
+- interrupted `IMPLEMENTING` -> reconcile worktree and continue only when plan/checkpoint still match;
 - `TASK_VALIDATED` -> fresh independent dual review;
 - one/both reviews complete with unchanged frozen target -> complete missing review(s), then final adjudication;
-- `FINAL_ADJUDICATION` interrupted -> rebuild `FINAL_PACKET.md` from canonical evidence and completed independent reviews;
+- interrupted `FINAL_ADJUDICATION` -> rebuild `FINAL_PACKET.md` from canonical evidence and completed independent reviews;
 - `PASS` without local commit -> Executor finalization only;
 - `LOCAL_COMMITTED` -> nothing to resume;
-- `BLOCKED`/`BASELINE_BLOCKED` -> remain blocked until the recorded blocker is authoritatively resolved.
+- `BLOCKED`/`BASELINE_BLOCKED` -> remain blocked until recorded blocker is authoritatively resolved.
 
 Finish with:
 
