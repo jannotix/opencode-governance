@@ -1,16 +1,18 @@
 # OpenCode Governance
 
-A reusable governance workflow for OpenCode projects built around three responsibilities:
+A reusable, provider-agnostic and model-agnostic governance workflow for OpenCode projects built around five responsibilities:
 
-**Architect → Executor → Reviewer**
+**Architect → Executor → two independent Reviewers → Final Reviewer**
 
-The workflow is provider-agnostic and model-agnostic. You choose the models available in your own OpenCode installation during setup.
+You choose every model from those available in your own OpenCode installation. No provider or model is hardcoded in this repository, and the same model may be reused for multiple roles when desired.
 
 ## What it installs
 
 - `architect` primary agent
 - `executor` subagent
-- `reviewer` subagent
+- `reviewer` implementation/regression subagent
+- `reviewer-architecture` architecture/security/maintainability subagent
+- `final-reviewer` independent adjudication subagent
 - `/ai-init`
 - `/ai-plan`
 - `/ai-execute`
@@ -21,19 +23,29 @@ The workflow is provider-agnostic and model-agnostic. You choose the models avai
 - project-local `.ai/` governance state and task audit trail
 - `architect` as the default OpenCode agent
 
+The global OpenCode configuration used by this project applies to OpenCode Desktop as well as the TUI/CLI.
+
 ## Role boundaries
 
 ### Architect
 
-Performs the initial adversarial codebase baseline, plans every task just-in-time, governs dependencies, migrations, deployment scope and external validation, coordinates execution/review, and does not edit source code.
+Performs the initial adversarial codebase baseline, plans every task just-in-time, governs dependencies, migrations, deployment scope and external validation, coordinates execution and review, and does not edit source code.
 
 ### Executor
 
-Implements only `READY_FOR_EXECUTION` tasks, runs validation, preserves approved architecture, keeps code modular and maintainable, and creates the required local commit only after Reviewer `PASS`.
+Implements only `READY_FOR_EXECUTION` tasks, runs validation, preserves approved architecture, keeps code modular and maintainable, and creates the required local commit only after final adjudication returns `PASS`.
 
-### Reviewer
+### Implementation Reviewer
 
-Performs an independent adversarial review of requirements, architecture, implementation, security, secrets, dependencies, migrations, regression risk, tests, deployment scope and maintainability. It does not edit source code.
+Independently reviews requirements, implementation correctness, logic, edge cases, regressions, tests, compatibility and runtime behaviour. It does not edit source code and does not read the sibling review for the active cycle.
+
+### Architecture/Security Reviewer
+
+Independently reviews architecture, security, dependencies, migrations, scope discipline, deployment boundaries and maintainability. It does not edit source code and does not read the sibling review for the active cycle.
+
+### Final Reviewer
+
+Acts as an independent judge. It receives both review artifacts only after both reviewers finish, verifies every material finding against primary repository evidence, rejects false positives, preserves valid findings even when only one reviewer found them, and returns the controlling verdict. It does not edit source code.
 
 ## Install
 
@@ -72,9 +84,19 @@ chmod +x scripts/install.sh
 ./scripts/install.sh
 ```
 
-The installer asks for Architect, Executor and Reviewer model IDs plus optional variants/reasoning levels. No provider or model is hardcoded in this repository.
+The installer asks for model IDs and optional variants/reasoning levels for:
+
+1. Architect
+2. Executor
+3. Implementation Reviewer
+4. Architecture/Security Reviewer
+5. Final Reviewer/Judge
+
+The same model ID may be entered for more than one role. No provider or model is hardcoded in this repository.
 
 ### 3. Restart OpenCode
+
+Restart OpenCode Desktop or the TUI after installation.
 
 Open a repository and initialize governance once:
 
@@ -104,7 +126,7 @@ The workflow maintains:
 - `CODEBASE_BASELINE.md`: full adversarial reverse-engineering baseline created before first implementation and refreshed only when materially needed.
 - `DEPLOYMENT_SCOPE.md`: separates production runtime files from tests, `.ai/`, development docs, review evidence, local tooling, temp/IDE files and secrets.
 - `PROJECT_HISTORY.md`: append-only chronological engineering history without secret values.
-- `tasks/`: detailed task specifications, plans, execution reports and reviews.
+- `tasks/`: detailed task specifications, plans, execution reports and independent review/adjudication artifacts.
 
 ## Task workflow
 
@@ -121,21 +143,29 @@ TASK_VERIFYING
   ↓
 TASK_VALIDATED
   ↓
-REVIEW
+DUAL_REVIEW
+  ├── Implementation Reviewer
+  └── Architecture/Security Reviewer
+  ↓
+FINAL_ADJUDICATION
   ↓
 LOCAL_COMMITTED
 ```
 
 Architect re-checks the current repository before every task handoff. Executor never implements an unplanned task.
 
-Reviewer task verdicts:
+The two reviewers inspect the same implementation independently. Neither receives the other's review output. The Architect requests both reviews before consuming either result and runs them concurrently when the OpenCode runtime supports concurrent Task calls. Independence is mandatory even if the runtime serializes them.
+
+Only `final-reviewer` controls the task verdict:
 
 - `PASS`
 - `IMPLEMENTATION_DEFECT`
 - `PLAN_DEFECT`
 - `BLOCKED`
 
-Correction cycles are limited to three automatic review rounds.
+Raw reviewer allegations never go directly to Executor. The Final Reviewer validates findings against the repository first, and only validated corrections can enter an automatic repair cycle.
+
+Correction cycles are limited to three final adjudications. After the third failed cycle the workflow stops with `BLOCKED` and preserves the evidence instead of looping indefinitely.
 
 ## Engineering rules
 
@@ -173,14 +203,15 @@ Prefer small cohesive files and modules with clear responsibilities. Avoid both 
 ## Security and Git defaults
 
 - Architect cannot edit source code.
-- Reviewer cannot edit source code.
+- Both independent Reviewers cannot edit source code.
+- Final Reviewer cannot edit source code.
 - Executor can edit source code.
 - destructive Git/filesystem operations are denied by default.
 - secrets must never be stored in `.ai/` history.
 - plaintext secrets and tracked credential files are blocking findings.
 - secrets are excluded from Git by default.
 - adding an already tracked secret to `.gitignore` is not remediation; remove it from tracking and rotate/revoke it when exposure may have occurred.
-- after Reviewer `PASS`, Executor must create one scoped local commit for the validated task.
+- after Final Reviewer `PASS`, Executor must create one scoped local commit for the validated task.
 - never stage unrelated user changes and never use `git add .` blindly.
 - `git push` is never inferred from commit permission and requires explicit user authorization for that specific push.
 
@@ -215,7 +246,8 @@ The release workflow verifies:
 - the final artifact itself can be installed or started from a clean environment;
 - required tests/build/static analysis pass;
 - required real external integration validation is complete;
-- a fresh independent adversarial Reviewer assessment passes.
+- two fresh independent adversarial release reviews are completed;
+- Final Reviewer independently adjudicates the production candidate and both reviewer findings.
 
 Final production verdict:
 
