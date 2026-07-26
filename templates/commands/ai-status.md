@@ -21,11 +21,16 @@ Read the current project's governance state without changing source code or proj
 - project license state, including `LICENSE_DECISION_REQUIRED` when unresolved;
 - production exclusion status for `docs/**` and `.ai/**` plus explicit legal/runtime exceptions;
 - TASK ID when a task exists;
+- canonical requirement trail status:
+  - `ORIGINAL_USER_REQUEST.md`: PRESENT / MISSING;
+  - `CLARIFICATION_TRANSCRIPT.md`: PRESENT / MISSING;
+  - `APPROVED_REQUIREMENTS.md`: PRESENT / MISSING;
+  - requirement provenance consistency: CONSISTENT / CONFLICT / UNKNOWN;
 - current task stage;
 - Architect status and latest plan ID/version;
 - outstanding clarification questions or unresolved material decisions;
-- clarification decisions recorded for the current task;
-- whether the task is `READY_FOR_EXECUTION`;
+- clarification decisions recorded for current task;
+- whether task is `READY_FOR_EXECUTION`;
 - current `DOCUMENTATION_IMPACT` and required canonical documents/sections;
 - Executor status;
 - implementation Task Reviewer verdict/status;
@@ -33,8 +38,8 @@ Read the current project's governance state without changing source code or proj
 - final Task Reviewer/adjudicator verdict/status;
 - outstanding validated task findings/blockers;
 - task review cycle number;
-- whether the current source/documentation tree is frozen for review;
-- repository delta considered by the current plan when known;
+- whether current source/documentation tree is frozen for review;
+- repository delta considered by current plan when known;
 - deployment scope status;
 - latest `.ai/PROJECT_HISTORY.md` event;
 - git status summary;
