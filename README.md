@@ -24,6 +24,7 @@ Governed OpenCode primary entry points:
 Commands:
 
 - `/ai-init`
+- `/ai-audit`
 - `/ai-plan`
 - `/ai-execute`
 - `/ai-review`
@@ -37,23 +38,23 @@ Project state is stored under `.ai/`.
 
 ### Architect
 
-Analyzes the repository, defines task scope, creates the implementation plan, acceptance criteria and validation requirements, and coordinates the workflow. Source-code edits are denied.
+Analyzes the repository, creates the draft baseline, coordinates independent baseline validation, defines task scope, creates implementation plans, acceptance criteria and validation requirements, and coordinates the workflow. Source-code edits are denied.
 
 ### Executor
 
-Implements only Architect-approved tasks in `READY_FOR_EXECUTION`, runs validation and reports evidence. It cannot delegate.
+Implements only Architect-approved tasks in `READY_FOR_EXECUTION` from a currently validated baseline, runs validation and reports evidence. It cannot delegate.
 
 ### Implementation Reviewer
 
-Independently checks implementation correctness, runtime behaviour, regressions, tests and compatibility. Source-code edits are denied.
+Independently checks implementation correctness, runtime behaviour, regressions, tests and compatibility. It also performs an independent implementation/runtime audit during baseline validation. Source-code edits are denied.
 
 ### Architecture/Security Reviewer
 
-Independently checks architecture, security, dependencies, data/schema safety, deployment scope and maintainability. Source-code edits are denied.
+Independently checks architecture, security, dependencies, data/schema safety, deployment scope and maintainability. It also performs an independent architecture/security audit during baseline validation. Source-code edits are denied.
 
 ### Final Reviewer
 
-Validates both review reports against primary repository evidence, rejects false positives, preserves valid findings and returns the controlling verdict. Source-code edits are denied.
+Independently adjudicates baseline audits, task reviews and release reviews against primary repository evidence. It rejects false positives, preserves valid findings and returns the controlling verdict. Source-code edits are denied.
 
 ## Installation
 
@@ -98,10 +99,16 @@ Restart OpenCode after installation.
 
 ## Usage
 
-Initialize a repository once:
+Initialize and adversarially validate a repository once:
 
 ```text
 /ai-init
+```
+
+Explicitly revalidate the reusable codebase baseline after a material repository change or on demand:
+
+```text
+/ai-audit
 ```
 
 Run a complete governed task:
@@ -113,28 +120,81 @@ Run a complete governed task:
 You may also use OpenCode's primary selectors safely:
 
 - `Build` runs the governed complete lifecycle.
-- `Plan` performs governed planning only.
+- `Plan` performs governed planning only from a currently validated baseline. If validation is required, it stops with `BASELINE_AUDIT_REQUIRED` instead of self-certifying the repository.
 
 Neither bypasses the configured governance roles.
 
+## Adversarial baseline validation
+
+The Architect is not allowed to certify its own initial repository analysis.
+
+For the first governed use of a repository:
+
+```text
+Architect
+  ↓
+DRAFT CODEBASE BASELINE
+  ↓
+┌──────────────────────────────┐
+│ Implementation Reviewer      │
+│ Architecture/Security Reviewer│
+└──────────────┬───────────────┘
+               ↓
+         Final Reviewer
+               ↓
+      BASELINE_VALIDATED
+```
+
+The two baseline reviewers inspect the same repository reference independently and do not receive each other's current audit output. Final Reviewer validates their allegations against primary repository evidence rather than counting votes.
+
+A baseline can contain documented pre-existing defects. `BASELINE_VALIDATED` means the baseline materially records the architecture, important call paths, known defects/risks, security-sensitive areas, unknowns and audit exclusions found during the review. It does not mean the source code is bug-free.
+
+No source implementation may begin until the baseline is validated.
+
+Baseline adjudication is bounded to three cycles. After the third failed cycle the state becomes `BASELINE_BLOCKED`.
+
 ## Large repositories
 
-The initial intake creates `.ai/CODEBASE_BASELINE.md` with reusable repository context including:
+The initial intake creates a DRAFT `.ai/CODEBASE_BASELINE.md` with reusable repository context including:
 
 - repository reference commit;
 - architecture map;
 - dependency/call-path map;
 - data flows and trust boundaries;
 - tests and validation capabilities;
-- deployment and security context.
+- deployment and security context;
+- known defects and regression risks;
+- material exclusions and unresolved unknowns.
 
-Later tasks reuse that baseline and inspect Git deltas, affected modules, callers, callees, dependencies and data flows. A repository-wide rescan is not performed by default.
+That draft is independently audited by both reviewers and adjudicated by Final Reviewer before it becomes reusable.
 
-The reviewers and Final Reviewer use the same targeted approach and expand only when evidence indicates wider impact or a materially stale baseline.
+For very large repositories, comprehensive analysis means broad structural and risk-based coverage. Generated, vendored, cache or binary-only content should not consume context blindly; material exclusions must be recorded.
+
+Later routine tasks reuse the validated baseline and inspect Git deltas, affected modules, callers, callees, dependencies and data flows. A repository-wide audit is not performed by default.
+
+The task reviewers and Final Reviewer use the same targeted approach and expand only when evidence indicates wider impact or a materially stale baseline.
+
+A full adversarial baseline revalidation is required after material architectural change, broad milestone, large merge/rebase, major dependency upgrade, substantial imported code, or when evidence shows the baseline is materially stale/incomplete. `/ai-audit` can also be invoked explicitly.
 
 ## Workflow
 
+Initial repository gate:
+
 ```text
+BASELINE_DRAFT
+  ↓
+BASELINE_DUAL_AUDIT
+  ↓
+BASELINE_ADJUDICATION
+  ↓
+BASELINE_VALIDATED
+```
+
+Task lifecycle:
+
+```text
+BASELINE_VALIDATED
+  ↓
 PLANNING
   ↓
 TASK_PLANNED
@@ -156,7 +216,7 @@ FINAL_ADJUDICATION
 LOCAL_COMMITTED
 ```
 
-The two reviewers inspect the same validated implementation independently. Neither may use the other reviewer's current-cycle findings.
+The two task reviewers inspect the same validated implementation independently. Neither may use the other reviewer's current-cycle findings.
 
 Only `final-reviewer` controls the final task verdict:
 
@@ -165,7 +225,7 @@ Only `final-reviewer` controls the final task verdict:
 - `PLAN_DEFECT`
 - `BLOCKED`
 
-Only validated corrections may return to Executor. Automatic correction is limited to three final-review cycles. After `PASS`, Executor creates one scoped local commit. `git push` requires explicit user authorization.
+Only validated corrections may return to Executor. Automatic task correction is limited to three final-review cycles. After `PASS`, Executor creates one scoped local commit. `git push` requires explicit user authorization.
 
 ## Project state
 
@@ -175,13 +235,17 @@ Only validated corrections may return to Executor. Automatic correction is limit
 ├── DEPLOYMENT_SCOPE.md
 ├── PROJECT_HISTORY.md
 ├── STATUS.md
+├── baseline-audits/
 └── tasks/
 ```
 
-Existing project `.ai/` state is preserved across governance/model updates.
+`baseline-audits/` stores independent baseline-review and final-adjudication evidence by audit ID.
+
+Existing project `.ai/` state is preserved across governance/model updates. Existing baselines are not globally rescanned during an update; a repository is revalidated lazily when it is next used and lacks a valid baseline state or when material staleness is detected.
 
 ## Engineering rules
 
+- Validate the reusable baseline before first implementation.
 - Plan before implementation.
 - Keep changes scoped to the approved task.
 - Prefer existing dependencies when adequate.
@@ -205,7 +269,7 @@ macOS / Linux:
 ./scripts/verify.sh
 ```
 
-Verification checks the five governance roles, governed `Build`/`Plan` overrides, provider-qualified model IDs, commands, default Architect and resolved OpenCode configuration.
+Verification checks the five governance roles, governed `Build`/`Plan` overrides, provider-qualified model IDs, all commands including `/ai-audit`, baseline-audit capabilities, default Architect and resolved OpenCode configuration.
 
 ## Uninstall
 
