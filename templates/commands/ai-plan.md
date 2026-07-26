@@ -21,9 +21,21 @@ Do not create a task implementation plan from an unvalidated baseline.
 
 If an existing validated baseline is materially stale, set `BASELINE_REVALIDATION_REQUIRED` and revalidate it before planning continues.
 
-For routine tasks, reuse the validated baseline, architecture map, dependency/call-path map and documentation scope. Reconcile them with repository changes since the recorded reference point or last validated task using targeted Git history/diff/status inspection, then inspect only the affected modules, callers, callees, dependencies, data flows and canonical documentation required to establish task impact. Expand analysis only when evidence indicates a wider surface.
+For a new task, create the canonical requirement trail under `.ai/tasks/<TASK-ID>/` before final interpretation:
+
+- `ORIGINAL_USER_REQUEST.md` — preserve the original user/developer request and intent; redact only secret values;
+- `CLARIFICATION_TRANSCRIPT.md` — append material questions and authoritative answers chronologically; if no clarification is needed, record that explicitly;
+- `APPROVED_REQUIREMENTS.md` — normalized executable requirements derived only from the original request, authoritative clarifications and established repository facts, with provenance.
+
+Never replace the original request with an Architect summary. Never silently rewrite earlier clarification answers. If a later answer supersedes an earlier decision, record the superseding decision chronologically.
+
+For routine tasks, reuse the validated baseline, architecture map, dependency/call-path map and documentation scope. Reconcile them with repository changes since the recorded reference point or last validated task using targeted Git history/diff/status inspection, then inspect only affected modules, callers, callees, dependencies, data flows and canonical documentation required to establish task impact. Expand analysis only when evidence indicates a wider surface.
 
 Before finalizing scope, identify every material ambiguity in behaviour, UX, compatibility, data handling, integrations, deployment, packaging, documentation or licensing. When existing requirements and primary evidence do not resolve a decision, use the `question` tool to ask the developer/project owner. Continue clarification until the plan no longer depends on invented assumptions. Do not repeat questions already answered.
+
+After every material clarification, append it to `CLARIFICATION_TRANSCRIPT.md` and update `APPROVED_REQUIREMENTS.md` only when justified by authoritative user input. If user instructions conflict, ask which controls rather than choosing silently.
+
+Before planning, verify `APPROVED_REQUIREMENTS.md` materially preserves every controlling instruction from `ORIGINAL_USER_REQUEST.md` and `CLARIFICATION_TRANSCRIPT.md`. A plan may not weaken, broaden, contradict or omit a material user requirement without explicit authorization.
 
 Perform an adversarial impact analysis covering scope, affected components, dependencies, regression surface, tests, database/schema and data-change impact, deployment impact, external validation, security/secrets, maintainability and project documentation.
 
@@ -37,22 +49,21 @@ For distributable applications, ensure `.ai/DOCUMENTATION_SCOPE.md` normally req
 
 Never choose or infer a software license. If no authoritative license decision exists, ask the developer/project owner when required. Otherwise record `LICENSE_DECISION_REQUIRED`; release readiness must remain blocked until resolved.
 
-Create or update the task records under `.ai/tasks/<TASK-ID>/` with:
+Create or update remaining task records under `.ai/tasks/<TASK-ID>/` with:
 
-- specification;
-- clarification questions and authoritative answers;
-- accepted unresolved constraints/unknowns that do not block execution;
 - architecture analysis;
 - exact implementation plan;
+- references to the canonical requirement trail;
+- accepted unresolved constraints/unknowns that do not block execution;
 - documentation impact and canonical docs/sections;
-- acceptance criteria;
+- acceptance criteria traceable to approved requirements;
 - validation strategy;
 - evidence.
 
-Set the task state:
+Set task state:
 
 `PLANNING -> TASK_PLANNED -> READY_FOR_EXECUTION`
 
-Only set `READY_FOR_EXECUTION` when the task is fully planned, evidence-backed, executable, based on a currently validated baseline and free of unresolved material implementation ambiguity. Otherwise return `BLOCKED` or `BASELINE_BLOCKED` with the missing decision, evidence or prerequisite.
+Only set `READY_FOR_EXECUTION` when the task is fully planned, evidence-backed, executable, based on a currently validated baseline, materially consistent with the canonical requirement trail and free of unresolved material implementation ambiguity. Otherwise return `BLOCKED` or `BASELINE_BLOCKED` with the missing decision, evidence or prerequisite.
 
 Stop after planning is complete. Do not implement source or project-documentation changes.
