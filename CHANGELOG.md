@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.5.0 - 2026-07-26
+
+- Added canonical per-task requirement provenance under `.ai/tasks/<TASK-ID>/`.
+- Added `ORIGINAL_USER_REQUEST.md` to preserve the user's actual request independently from Architect interpretation.
+- Added append-only `CLARIFICATION_TRANSCRIPT.md` for material Architect questions, authoritative answers and explicit superseding decisions.
+- Added `APPROVED_REQUIREMENTS.md` as the normalized executable requirement set derived from original request, clarifications and established repository facts, with provenance.
+- Blocked `READY_FOR_EXECUTION` when the canonical requirement trail is missing, materially inconsistent or still ambiguous.
+- Required Executor to detect plan conflicts against approved requirements instead of blindly following an inconsistent plan.
+- Required both task reviewers to receive the same canonical requirement trail.
+- Required Final Reviewer to independently compare Architect requirements/plan against the original user request and clarification transcript before judging implementation.
+- Added mandatory `PLAN_DEFECT` when Architect materially omits, weakens, contradicts or unauthorizedly broadens a controlling user requirement, even when implementation perfectly follows the plan.
+- Added requirement-trail integrity reporting to `/ai-status` and verification checks to Windows/Unix installers.
+- Added secret redaction rules for persisted requirement evidence without changing requirement semantics.
+
 ## 1.4.0 - 2026-07-26
 
 - Added project documentation governance through `.ai/DOCUMENTATION_SCOPE.md`.
