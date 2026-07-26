@@ -39,7 +39,7 @@ backup_if_exists() {
 }
 
 for file in architect.md build.md plan.md executor.md reviewer.md reviewer-architecture.md final-reviewer.md; do backup_if_exists "$CONFIG_DIR/agents/$file"; done
-for file in ai-init.md ai-plan.md ai-execute.md ai-review.md ai-workflow.md ai-status.md ai-release.md; do backup_if_exists "$CONFIG_DIR/commands/$file"; done
+for file in ai-init.md ai-audit.md ai-plan.md ai-execute.md ai-review.md ai-workflow.md ai-status.md ai-release.md; do backup_if_exists "$CONFIG_DIR/commands/$file"; done
 backup_if_exists "$CONFIG_DIR/opencode.jsonc"
 backup_if_exists "$CONFIG_DIR/opencode.json"
 
@@ -88,6 +88,7 @@ PY
 
 "$SCRIPT_DIR/verify.sh" "$CONFIG_DIR"
 echo "Installed. Architect is default; built-in Build is governed full workflow and Plan is governed planning-only."
+echo "Initial or materially stale codebase baselines require independent dual audit plus final adjudication before implementation."
 echo "Use full provider/model IDs to select the exact subscription/provider path for each role."
 echo "Restart OpenCode Desktop/TUI before use."
 echo "Backup: $BACKUP_DIR"
