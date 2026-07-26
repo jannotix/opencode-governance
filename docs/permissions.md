@@ -8,6 +8,28 @@
 - destructive shell/Git operations: denied or require confirmation;
 - push: denied.
 
+## Governed Build
+
+`build` is a primary entry point using the Architect model and the complete governance lifecycle.
+
+- source edits: denied;
+- `.ai/**`: allowed;
+- delegation: Executor, both independent Reviewers and Final Reviewer only;
+- implementation must be delegated to Executor;
+- destructive shell/Git operations: denied or require confirmation;
+- push: denied.
+
+## Governed Plan
+
+`plan` is a primary planning-only entry point using the Architect model.
+
+- source edits: denied;
+- `.ai/**`: allowed;
+- delegation: denied;
+- implementation/review execution: denied by prompt policy;
+- destructive shell/Git operations: denied or require confirmation;
+- push: denied.
+
 ## Executor
 
 - source edits: allowed;
