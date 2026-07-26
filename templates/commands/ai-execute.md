@@ -13,11 +13,16 @@ Locate exactly one matching task under `.ai/tasks/`.
 Do not implement unless:
 
 - the repository baseline state is `BASELINE_VALIDATED`;
+- `.ai/tasks/<TASK-ID>/ORIGINAL_USER_REQUEST.md` exists;
+- `.ai/tasks/<TASK-ID>/CLARIFICATION_TRANSCRIPT.md` exists, even when it records that no clarification was required;
+- `.ai/tasks/<TASK-ID>/APPROVED_REQUIREMENTS.md` exists;
 - the task has an Architect-approved plan;
 - the current task state is `READY_FOR_EXECUTION`;
 - the plan contains a resolved `DOCUMENTATION_IMPACT` decision;
 - required prerequisites are available;
 - no unresolved material implementation ambiguity remains.
+
+Read the canonical requirement trail before implementation. Treat the approved plan as downstream from `APPROVED_REQUIREMENTS.md`. If the plan materially conflicts with the approved requirements or if the requirement trail appears incomplete/contradictory, return `PLAN_CONFLICT` instead of choosing an interpretation.
 
 If the baseline is missing, draft, materially stale, revalidation-required or blocked, return `BASELINE_AUDIT_REQUIRED` or `BLOCKED` instead of implementing.
 
