@@ -18,15 +18,31 @@ opencode models
 
 Copy the exact model ID shown by OpenCode.
 
-The three roles can use:
+The workflow has five independently configurable roles:
 
-- the same model;
-- three different models;
-- two models split across the three roles.
+1. Architect
+2. Executor
+3. Implementation Reviewer
+4. Architecture/Security Reviewer
+5. Final Reviewer/Judge
 
-For Architect and Reviewer, prefer models with strong reasoning, repository comprehension and review performance.
+You may use:
 
-For Executor, prefer a model with reliable tool use, implementation quality and test execution.
+- five different models;
+- one model for every role;
+- any mixed allocation between those extremes.
+
+The repository intentionally contains no recommended vendor/model IDs because availability, naming and model quality change independently of the governance workflow.
+
+## Role selection guidance
+
+For Architect, prefer strong repository reasoning, planning, dependency tracing and architectural judgement.
+
+For Executor, prefer reliable tool use, implementation quality, test execution, throughput and long-session stability.
+
+For the two independent Reviewers, diversity is useful when available. They should not share current-cycle findings before completing their own review.
+
+For Final Reviewer/Judge, prefer strong reasoning and evidence adjudication. It may use the same model as Architect or a different model; the workflow does not assume either choice.
 
 ## Variant / reasoning
 
