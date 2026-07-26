@@ -8,13 +8,18 @@ Provider and model agnostic. Model IDs are selected during installation and are 
 
 ## Components
 
-Agents:
+Governance roles:
 
 - `architect`
 - `executor`
 - `reviewer`
 - `reviewer-architecture`
 - `final-reviewer`
+
+Governed OpenCode primary entry points:
+
+- `build`: complete governed lifecycle using the Architect model; it cannot edit application source directly.
+- `plan`: governed planning-only mode using the Architect model; source editing and subagent delegation are denied.
 
 Commands:
 
@@ -36,11 +41,11 @@ Analyzes the repository, defines task scope, creates the implementation plan, ac
 
 ### Executor
 
-Implements only Architect-approved tasks in `READY_FOR_EXECUTION`, runs validation and reports evidence. It cannot delegate to other agents.
+Implements only Architect-approved tasks in `READY_FOR_EXECUTION`, runs validation and reports evidence. It cannot delegate.
 
 ### Implementation Reviewer
 
-Independently checks implementation correctness, requirements, runtime behaviour, regressions, tests and compatibility. Source-code edits are denied.
+Independently checks implementation correctness, runtime behaviour, regressions, tests and compatibility. Source-code edits are denied.
 
 ### Architecture/Security Reviewer
 
@@ -48,19 +53,17 @@ Independently checks architecture, security, dependencies, data/schema safety, d
 
 ### Final Reviewer
 
-Validates both review reports against the reusable repository baseline, current implementation evidence and targeted primary-source checks. It rejects false positives, preserves valid findings and returns the controlling verdict. Source-code edits are denied.
+Validates both review reports against primary repository evidence, rejects false positives, preserves valid findings and returns the controlling verdict. Source-code edits are denied.
 
 ## Installation
 
-### 1. Connect providers
-
-In OpenCode:
+Connect the required providers in OpenCode:
 
 ```text
 /connect
 ```
 
-List available model IDs:
+List exact model IDs:
 
 ```text
 /models
@@ -72,7 +75,7 @@ or:
 opencode models
 ```
 
-### 2. Install
+Always use the full `provider/model-id`. If the same model is exposed by more than one connected provider, the provider prefix determines which subscription/API route is used.
 
 Windows PowerShell:
 
@@ -87,37 +90,36 @@ chmod +x scripts/install.sh
 ./scripts/install.sh
 ```
 
-The installer asks for the model ID and optional variant for each role:
+The installer asks for the model ID and optional variant for each of the five governance roles. `Build` and `Plan` automatically use the configured Architect model and variant.
 
-1. Architect
-2. Executor
-3. Implementation Reviewer
-4. Architecture/Security Reviewer
-5. Final Reviewer
-
-The same model may be assigned to multiple roles.
-
-The installation writes the agents and commands to the global OpenCode configuration, so they are available in OpenCode Desktop and TUI/CLI.
+The installation writes global OpenCode agents and commands, sets `architect` as `default_agent`, preserves unrelated OpenCode configuration and creates timestamped backups of files it may replace.
 
 Restart OpenCode after installation.
 
 ## Usage
 
-Initialize governance in a repository:
+Initialize a repository once:
 
 ```text
 /ai-init
 ```
 
-Run a complete task:
+Run a complete governed task:
 
 ```text
-/ai-workflow Fix the authorization bug in the customer API
+/ai-workflow <task>
 ```
 
-## Repository analysis model
+You may also use OpenCode's primary selectors safely:
 
-The initial `/ai-init` performs the complete repository intake and stores reusable context in `.ai/CODEBASE_BASELINE.md`, including:
+- `Build` runs the governed complete lifecycle.
+- `Plan` performs governed planning only.
+
+Neither bypasses the configured governance roles.
+
+## Large repositories
+
+The initial intake creates `.ai/CODEBASE_BASELINE.md` with reusable repository context including:
 
 - repository reference commit;
 - architecture map;
@@ -126,9 +128,9 @@ The initial `/ai-init` performs the complete repository intake and stores reusab
 - tests and validation capabilities;
 - deployment and security context.
 
-Later tasks reuse that baseline. Architect inspects the repository delta since the baseline or last validated task and performs targeted analysis of affected modules, callers, callees, dependencies and data flows. A repository-wide rescan is not performed by default.
+Later tasks reuse that baseline and inspect Git deltas, affected modules, callers, callees, dependencies and data flows. A repository-wide rescan is not performed by default.
 
-The two reviewers and Final Reviewer follow the same targeted approach: baseline/maps + approved plan + current diff + tests + relevant call paths. They expand into additional modules only when evidence indicates wider impact or the baseline is materially stale.
+The reviewers and Final Reviewer use the same targeted approach and expand only when evidence indicates wider impact or a materially stale baseline.
 
 ## Workflow
 
@@ -154,9 +156,7 @@ FINAL_ADJUDICATION
 LOCAL_COMMITTED
 ```
 
-The two reviewers inspect the same validated implementation independently. Neither reviewer may use the other reviewer's current-cycle findings.
-
-Both reviews should be requested before either result is used. They may run concurrently when supported by the OpenCode runtime.
+The two reviewers inspect the same validated implementation independently. Neither may use the other reviewer's current-cycle findings.
 
 Only `final-reviewer` controls the final task verdict:
 
@@ -165,11 +165,7 @@ Only `final-reviewer` controls the final task verdict:
 - `PLAN_DEFECT`
 - `BLOCKED`
 
-Only findings validated by `final-reviewer` may be sent back to Executor for automatic correction.
-
-Automatic correction is limited to three final-review cycles. After the third failed cycle the task becomes `BLOCKED`.
-
-After `PASS`, Executor creates one scoped local commit. `git push` always requires explicit user authorization.
+Only validated corrections may return to Executor. Automatic correction is limited to three final-review cycles. After `PASS`, Executor creates one scoped local commit. `git push` requires explicit user authorization.
 
 ## Project state
 
@@ -182,64 +178,18 @@ After `PASS`, Executor creates one scoped local commit. `git push` always requir
 └── tasks/
 ```
 
-- `CODEBASE_BASELINE.md`: reusable repository reference, architecture map, dependency/call-path map and technical baseline.
-- `DEPLOYMENT_SCOPE.md`: production runtime boundary.
-- `PROJECT_HISTORY.md`: append-only engineering history without secret values.
-- `tasks/`: task plans, execution evidence and review artifacts.
+Existing project `.ai/` state is preserved across governance/model updates.
 
 ## Engineering rules
 
 - Plan before implementation.
 - Keep changes scoped to the approved task.
-- Prefer existing project dependencies when adequate.
-- Do not introduce duplicate libraries without justification.
-- Avoid speculative abstractions and unnecessary architecture.
+- Prefer existing dependencies when adequate.
+- Avoid speculative abstractions and duplicate libraries.
 - Prefer small cohesive modules over monolithic files or artificial fragmentation.
 - Preserve backward compatibility unless the approved plan explicitly changes it.
-- Use the project's existing schema/data change mechanism when database changes are required.
-- Validate external integrations against real sandbox/test endpoints when required.
+- Validate required external integrations against real sandbox/test endpoints.
 - Never store plaintext secrets in source, `.ai/` history or release artifacts.
-
-## Release gate
-
-Run:
-
-```text
-/ai-release
-```
-
-The release gate checks:
-
-- validated and locally committed tasks;
-- deployment scope;
-- production artifact contents;
-- secrets;
-- schema/data safety where applicable;
-- clean installation/startup of the produced artifact;
-- tests, build and static analysis;
-- required external integration validation;
-- two fresh independent reviews;
-- final production adjudication.
-
-Final verdict:
-
-```text
-READY_FOR_PRODUCTION
-```
-
-or:
-
-```text
-NOT_READY_FOR_PRODUCTION
-```
-
-## Documentation
-
-- [Installation](docs/installation.md)
-- [Model configuration](docs/model-configuration.md)
-- [Workflow](docs/workflow.md)
-- [Permissions](docs/permissions.md)
-- [Troubleshooting](docs/troubleshooting.md)
 
 ## Verification
 
@@ -255,21 +205,29 @@ macOS / Linux:
 ./scripts/verify.sh
 ```
 
-## Uninstall
+Verification checks the five governance roles, governed `Build`/`Plan` overrides, provider-qualified model IDs, commands, default Architect and resolved OpenCode configuration.
 
-Windows:
+## Uninstall
 
 ```powershell
 ./scripts/uninstall.ps1
 ```
 
-macOS / Linux:
+or:
 
 ```bash
 ./scripts/uninstall.sh
 ```
 
-Uninstall removes only files installed by this project. Provider authentication and project-local `.ai/` state are left untouched.
+Provider authentication, project `.ai/` state and backups are left untouched.
+
+## Documentation
+
+- [Installation](docs/installation.md)
+- [Model configuration](docs/model-configuration.md)
+- [Workflow](docs/workflow.md)
+- [Permissions](docs/permissions.md)
+- [Troubleshooting](docs/troubleshooting.md)
 
 ## License
 
