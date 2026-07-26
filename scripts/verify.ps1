@@ -26,7 +26,12 @@ if ($AgentText['build'] -notmatch '(?m)^\s+executor:\s+allow\s*$' -or
 }
 if ($AgentText['plan'] -notmatch '(?m)^\s+task:\s+deny\s*$') { throw 'Governed Plan must deny task delegation.' }
 
-foreach ($Name in @('ai-init','ai-plan','ai-execute','ai-review','ai-workflow','ai-status','ai-release')) {
+if ($AgentText['architect'] -notmatch 'BASELINE_VALIDATED') { throw 'Architect is missing baseline validation gate.' }
+if ($AgentText['reviewer'] -notmatch 'BASELINE_AUDIT') { throw 'Implementation Reviewer is missing BASELINE_AUDIT mode.' }
+if ($AgentText['reviewer-architecture'] -notmatch 'BASELINE_AUDIT') { throw 'Architecture Reviewer is missing BASELINE_AUDIT mode.' }
+if ($AgentText['final-reviewer'] -notmatch 'BASELINE_PASS' -or $AgentText['final-reviewer'] -notmatch 'BASELINE_DEFECT') { throw 'Final Reviewer is missing baseline adjudication verdicts.' }
+
+foreach ($Name in @('ai-init','ai-audit','ai-plan','ai-execute','ai-review','ai-workflow','ai-status','ai-release')) {
     $Path = Join-Path $ConfigDir "commands\$Name.md"
     if (-not (Test-Path $Path) -or (Get-Item $Path).Length -eq 0) { throw "Missing command: $Name" }
 }
