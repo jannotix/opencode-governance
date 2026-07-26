@@ -14,7 +14,9 @@ Creates the project-local governance state without modifying source code:
 - `.ai/STATUS.md`
 - `.ai/tasks/`
 
-Before first implementation, Architect performs a complete repository baseline. Later tasks use targeted just-in-time impact analysis and refresh the baseline only when materially necessary.
+Before first implementation, Architect performs a complete repository baseline containing the repository reference commit, architecture map, dependency/call-path map, data flows, trust boundaries, tests, deployment boundary and other required technical context.
+
+The baseline is reusable. Later tasks do not repeat a repository-wide scan by default. Architect inspects the repository delta since the baseline or last validated task, then performs targeted analysis of the affected modules, callers, callees, dependencies and data flows. The analysis expands only when evidence indicates wider impact. Baseline sections are refreshed only when materially stale.
 
 ## Complete workflow
 
@@ -36,7 +38,7 @@ PLANNING
 → LOCAL_COMMITTED
 ```
 
-Architect must re-check the current repository before every task handoff. Executor never implements unless the task is `READY_FOR_EXECUTION`.
+Architect must reconcile the reusable baseline with the current repository before every task handoff. Executor never implements unless the task is `READY_FOR_EXECUTION`.
 
 After `TASK_VALIDATED`, source edits are frozen for the active review cycle.
 
@@ -47,7 +49,7 @@ Architect then requests two independent reviews of the same task state and diff:
 
 Neither reviewer may receive or read the other reviewer's current-cycle findings. Architect requests both reviews before consuming either result and runs them concurrently when the OpenCode runtime supports concurrent Task calls. If the runtime serializes them, the same independence rules still apply.
 
-After both reviews complete, `final-reviewer` checks the primary repository evidence and adjudicates every material finding. Reviewer agreement is not treated as proof, and disagreement does not automatically mean failure.
+After both reviews complete, `final-reviewer` receives the original requirement, approved plan, reusable baseline/maps, current diff, tests, execution evidence and both review reports. It validates findings using targeted repository inspection of changed files and affected call paths. It does not perform a new repository-wide scan unless evidence indicates broader dependency, regression, security or architectural impact, or the baseline is materially stale.
 
 Final task verdicts:
 
@@ -70,7 +72,7 @@ After Final Reviewer `PASS`, Executor creates one scoped local task commit. Push
 /ai-plan <task>
 ```
 
-Architect performs current-state reconciliation, impact analysis, acceptance/test planning, data/schema analysis, dependency governance and external-validation planning. No implementation is performed.
+Architect reuses the baseline and repository maps, inspects the delta since the recorded reference point, and performs targeted impact analysis, acceptance/test planning, data/schema analysis, dependency governance and external-validation planning. No implementation is performed.
 
 ## Execute an existing plan
 
