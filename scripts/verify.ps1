@@ -27,8 +27,14 @@ if ($AgentText['build'] -notmatch '(?m)^\s+executor:\s+allow\s*$' -or
 if ($AgentText['plan'] -notmatch '(?m)^\s+task:\s+deny\s*$') { throw 'Governed Plan must deny task delegation.' }
 
 if ($AgentText['architect'] -notmatch 'BASELINE_VALIDATED') { throw 'Architect is missing baseline validation gate.' }
-if ($AgentText['reviewer'] -notmatch 'BASELINE_AUDIT') { throw 'Implementation Reviewer is missing BASELINE_AUDIT mode.' }
-if ($AgentText['reviewer-architecture'] -notmatch 'BASELINE_AUDIT') { throw 'Architecture Reviewer is missing BASELINE_AUDIT mode.' }
+foreach ($Name in @('reviewer','reviewer-architecture')) {
+    foreach ($Mode in @('TASK_REVIEW','BASELINE_AUDIT','RELEASE_REVIEW')) {
+        if ($AgentText[$Name] -notmatch $Mode) { throw "$Name is missing $Mode mode." }
+    }
+}
+foreach ($Mode in @('TASK_REVIEW','BASELINE_AUDIT','RELEASE_REVIEW')) {
+    if ($AgentText['final-reviewer'] -notmatch $Mode) { throw "Final Reviewer is missing $Mode mode." }
+}
 if ($AgentText['final-reviewer'] -notmatch 'BASELINE_PASS' -or $AgentText['final-reviewer'] -notmatch 'BASELINE_DEFECT') { throw 'Final Reviewer is missing baseline adjudication verdicts.' }
 
 foreach ($Name in @('ai-init','ai-audit','ai-plan','ai-execute','ai-review','ai-workflow','ai-status','ai-release')) {
