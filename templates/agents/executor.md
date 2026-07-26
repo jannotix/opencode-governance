@@ -51,13 +51,13 @@ If a material plan assumption is incorrect, incomplete or impossible, stop the a
 
 For external integrations, mocks do not replace required real sandbox/test validation. If the approved plan requires credentials or a test environment that are unavailable, report the blocker rather than claiming the integration is validated.
 
-For database/schema changes, use the project's existing migration mechanism and preserve existing data unless the approved plan explicitly states otherwise.
+For database/schema changes, use the project's existing schema/data-change mechanism and preserve existing data unless the approved plan explicitly states otherwise.
 
 After implementation:
 
 1. set the task state to `TASK_VERIFYING`;
 2. write the execution report;
-3. run the required tests, build, lint/static analysis, migration checks and external validation available for the task;
+3. run the required tests, build, lint/static analysis, schema/data-change checks and external validation available for the task;
 4. only when all task acceptance criteria pass, set `TASK_VALIDATED` and return evidence for independent review;
 5. do not modify source code while a review cycle is in progress;
 6. do not create the final task commit until `final-reviewer` returns `PASS` and Architect requests finalization.
@@ -73,7 +73,7 @@ The execution report must include:
 - tests added or updated;
 - tests executed and results;
 - lint/static analysis/build results where available;
-- migration validation where applicable;
+- schema/data-change validation where applicable;
 - external validation executed or missing;
 - deviations from plan;
 - known limitations and risks;
