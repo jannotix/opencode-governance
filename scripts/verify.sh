@@ -27,8 +27,14 @@ grep -Eq '^    final-reviewer: allow$' "$CONFIG_DIR/agents/build.md" || { echo "
 grep -Eq '^  task: deny$' "$CONFIG_DIR/agents/plan.md" || { echo "Governed Plan must deny task delegation" >&2; exit 1; }
 
 grep -q 'BASELINE_VALIDATED' "$CONFIG_DIR/agents/architect.md" || { echo "Architect is missing baseline validation gate" >&2; exit 1; }
-grep -q 'BASELINE_AUDIT' "$CONFIG_DIR/agents/reviewer.md" || { echo "Implementation Reviewer is missing BASELINE_AUDIT mode" >&2; exit 1; }
-grep -q 'BASELINE_AUDIT' "$CONFIG_DIR/agents/reviewer-architecture.md" || { echo "Architecture Reviewer is missing BASELINE_AUDIT mode" >&2; exit 1; }
+for name in reviewer reviewer-architecture; do
+  for mode in TASK_REVIEW BASELINE_AUDIT RELEASE_REVIEW; do
+    grep -q "$mode" "$CONFIG_DIR/agents/$name.md" || { echo "$name is missing $mode mode" >&2; exit 1; }
+  done
+done
+for mode in TASK_REVIEW BASELINE_AUDIT RELEASE_REVIEW; do
+  grep -q "$mode" "$CONFIG_DIR/agents/final-reviewer.md" || { echo "Final Reviewer is missing $mode mode" >&2; exit 1; }
+done
 grep -q 'BASELINE_PASS' "$CONFIG_DIR/agents/final-reviewer.md" || { echo "Final Reviewer is missing BASELINE_PASS" >&2; exit 1; }
 grep -q 'BASELINE_DEFECT' "$CONFIG_DIR/agents/final-reviewer.md" || { echo "Final Reviewer is missing BASELINE_DEFECT" >&2; exit 1; }
 
