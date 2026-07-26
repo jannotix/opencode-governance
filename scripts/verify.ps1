@@ -26,20 +26,36 @@ if ($AgentText['build'] -notmatch '(?m)^\s+executor:\s+allow\s*$' -or
 }
 if ($AgentText['plan'] -notmatch '(?m)^\s+task:\s+deny\s*$') { throw 'Governed Plan must deny task delegation.' }
 
+foreach ($Name in @('architect','build','plan')) {
+    if ($AgentText[$Name] -notmatch '(?m)^\s*question:\s+allow\s*$') { throw "$Name must explicitly allow the OpenCode question tool." }
+}
+
 if ($AgentText['architect'] -notmatch 'BASELINE_VALIDATED') { throw 'Architect is missing baseline validation gate.' }
+if ($AgentText['architect'] -notmatch 'DOCUMENTATION_SCOPE') { throw 'Architect is missing project documentation governance.' }
+if ($AgentText['architect'] -notmatch 'DOCUMENTATION_IMPACT') { throw 'Architect is missing documentation impact planning.' }
+if ($AgentText['architect'] -notmatch 'LICENSE_DECISION_REQUIRED') { throw 'Architect is missing explicit license-decision gating.' }
+if ($AgentText['executor'] -notmatch 'DOCUMENTATION_IMPACT') { throw 'Executor is missing documentation synchronization rules.' }
+
 foreach ($Name in @('reviewer','reviewer-architecture')) {
     foreach ($Mode in @('TASK_REVIEW','BASELINE_AUDIT','RELEASE_REVIEW')) {
         if ($AgentText[$Name] -notmatch $Mode) { throw "$Name is missing $Mode mode." }
     }
+    if ($AgentText[$Name] -notmatch 'documentation') { throw "$Name is missing documentation review coverage." }
 }
 foreach ($Mode in @('TASK_REVIEW','BASELINE_AUDIT','RELEASE_REVIEW')) {
     if ($AgentText['final-reviewer'] -notmatch $Mode) { throw "Final Reviewer is missing $Mode mode." }
 }
 if ($AgentText['final-reviewer'] -notmatch 'BASELINE_PASS' -or $AgentText['final-reviewer'] -notmatch 'BASELINE_DEFECT') { throw 'Final Reviewer is missing baseline adjudication verdicts.' }
+if ($AgentText['final-reviewer'] -notmatch 'LICENSE_DECISION_REQUIRED') { throw 'Final Reviewer is missing license-readiness gating.' }
 
-foreach ($Name in @('ai-init','ai-audit','ai-plan','ai-execute','ai-review','ai-workflow','ai-status','ai-release')) {
+foreach ($Name in @('ai-init','ai-audit','ai-docs','ai-plan','ai-execute','ai-review','ai-workflow','ai-status','ai-release')) {
     $Path = Join-Path $ConfigDir "commands\$Name.md"
     if (-not (Test-Path $Path) -or (Get-Item $Path).Length -eq 0) { throw "Missing command: $Name" }
+}
+
+$DocsCommand = Get-Content (Join-Path $ConfigDir 'commands\ai-docs.md') -Raw
+if ($DocsCommand -notmatch 'docs/INSTALLATION.md' -or $DocsCommand -notmatch 'docs/USER_MANUAL.md' -or $DocsCommand -notmatch 'docs/wiki/README.md') {
+    throw '/ai-docs is missing required distributable-application documentation coverage.'
 }
 
 $JsoncPath = Join-Path $ConfigDir 'opencode.jsonc'
