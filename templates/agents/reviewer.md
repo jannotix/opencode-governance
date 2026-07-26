@@ -46,7 +46,7 @@ Prioritize:
 - dead or unreachable implementation paths;
 - suspicious workarounds and unintended side effects.
 
-Also report material architecture, security, dependency, migration, deployment or maintainability defects you discover even when they are outside the priority list.
+Also report material architecture, security, dependency, schema/data-change, deployment or maintainability defects you discover even when they are outside the priority list.
 
 Independently output `SECRET_SCAN: PASS` or `SECRET_SCAN: FAIL`. Never reproduce secret values.
 
