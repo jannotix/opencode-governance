@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.4.0 - 2026-07-26
+
+- Added project documentation governance through `.ai/DOCUMENTATION_SCOPE.md`.
+- Added `/ai-docs` to generate, repair or synchronize project documentation through the governed Executor/review pipeline.
+- Added default out-of-runtime `docs/` layout for projects without an established documentation convention.
+- Added distributable-application documentation baseline: overview/readme, step-by-step installation, user manual, wiki/index, changelog and licensing documentation, with additional docs when applicable.
+- Added per-task `DOCUMENTATION_IMPACT`: `NONE`, `UPDATE_REQUIRED` or `CREATE_REQUIRED`.
+- Required Executor to synchronize applicable documentation before `TASK_VALIDATED`.
+- Added documentation consistency checks to Implementation, Architecture/Security and Final Reviewers for task, baseline and release reviews.
+- Added release blocking for missing/stale/contradictory required documentation.
+- Added explicit software-license decision handling with `LICENSE_DECISION_REQUIRED`; governance never chooses or invents a project license.
+- Kept `docs/**` and `.ai/**` outside the production/runtime artifact by default, with explicit legal/packaging/runtime exceptions only.
+- Added explicit OpenCode `question` permission for Architect, governed Build and governed Plan.
+- Added mandatory clarification of material project decisions instead of silent assumptions; `READY_FOR_EXECUTION` is blocked while relevant ambiguity remains.
+- Updated workflow, status, audit, release, installer, verification, uninstall and public documentation for clarification/documentation governance.
+
 ## 1.3.0 - 2026-07-26
 
 - Added mandatory adversarial validation of the initial reusable codebase baseline.
