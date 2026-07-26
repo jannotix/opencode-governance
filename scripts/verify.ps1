@@ -34,7 +34,11 @@ if ($AgentText['architect'] -notmatch 'BASELINE_VALIDATED') { throw 'Architect i
 if ($AgentText['architect'] -notmatch 'DOCUMENTATION_SCOPE') { throw 'Architect is missing project documentation governance.' }
 if ($AgentText['architect'] -notmatch 'DOCUMENTATION_IMPACT') { throw 'Architect is missing documentation impact planning.' }
 if ($AgentText['architect'] -notmatch 'LICENSE_DECISION_REQUIRED') { throw 'Architect is missing explicit license-decision gating.' }
-if ($AgentText['executor'] -notmatch 'DOCUMENTATION_IMPACT') { throw 'Executor is missing documentation synchronization rules.' }
+foreach ($Marker in @('ORIGINAL_USER_REQUEST.md','CLARIFICATION_TRANSCRIPT.md','APPROVED_REQUIREMENTS.md')) {
+    if ($AgentText['architect'] -notmatch [regex]::Escape($Marker)) { throw "Architect is missing canonical requirement artifact $Marker." }
+    if ($AgentText['final-reviewer'] -notmatch [regex]::Escape($Marker)) { throw "Final Reviewer is missing canonical requirement artifact $Marker." }
+}
+if ($AgentText['final-reviewer'] -notmatch 'perfect implementation' -and $AgentText['final-reviewer'] -notmatch 'materially wrong Architect plan') { throw 'Final Reviewer is missing explicit Architect-plan challenge policy.' }
 
 foreach ($Name in @('reviewer','reviewer-architecture')) {
     foreach ($Mode in @('TASK_REVIEW','BASELINE_AUDIT','RELEASE_REVIEW')) {
@@ -56,6 +60,12 @@ foreach ($Name in @('ai-init','ai-audit','ai-docs','ai-plan','ai-execute','ai-re
 $DocsCommand = Get-Content (Join-Path $ConfigDir 'commands\ai-docs.md') -Raw
 if ($DocsCommand -notmatch 'docs/INSTALLATION.md' -or $DocsCommand -notmatch 'docs/USER_MANUAL.md' -or $DocsCommand -notmatch 'docs/wiki/README.md') {
     throw '/ai-docs is missing required distributable-application documentation coverage.'
+}
+$WorkflowCommand = Get-Content (Join-Path $ConfigDir 'commands\ai-workflow.md') -Raw
+$ReviewCommand = Get-Content (Join-Path $ConfigDir 'commands\ai-review.md') -Raw
+foreach ($Marker in @('ORIGINAL_USER_REQUEST.md','CLARIFICATION_TRANSCRIPT.md','APPROVED_REQUIREMENTS.md')) {
+    if ($WorkflowCommand -notmatch [regex]::Escape($Marker)) { throw "/ai-workflow is missing canonical requirement artifact $Marker." }
+    if ($ReviewCommand -notmatch [regex]::Escape($Marker)) { throw "/ai-review is missing canonical requirement artifact $Marker." }
 }
 
 $JsoncPath = Join-Path $ConfigDir 'opencode.jsonc'
