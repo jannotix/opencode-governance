@@ -18,7 +18,9 @@ Read the current project's governance state without changing source code and rep
 - outstanding validated findings/blockers;
 - review cycle number;
 - whether the current source tree is frozen for review;
-- baseline status and last refresh reason;
+- baseline reference commit/state;
+- baseline/map freshness and last refresh reason;
+- repository delta considered by the current plan when known;
 - deployment scope status;
 - latest `.ai/PROJECT_HISTORY.md` event;
 - git status summary;
