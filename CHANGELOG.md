@@ -7,6 +7,9 @@
 - Added final finding adjudication before approval or repair.
 - Added reviewer isolation for each review cycle.
 - Added concurrent dual-review support when available.
+- Added reusable architecture and dependency/call-path maps to the codebase baseline.
+- Added incremental task planning from repository deltas instead of repeated full scans.
+- Added targeted reviewer and final-adjudication verification for large repositories.
 - Limited automatic repair to three final-review cycles.
 - Updated release review, installers, verification and uninstall scripts.
 - Kept provider and model configuration fully user-defined.
