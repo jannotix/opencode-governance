@@ -5,6 +5,7 @@
 - OpenCode Desktop or CLI installed.
 - At least one provider connected in OpenCode.
 - Exact model IDs available through `/models` or `opencode models`.
+- Windows PowerShell 5.1+ or PowerShell 7+ on Windows.
 
 The global OpenCode configuration is shared by Desktop, TUI and CLI.
 
