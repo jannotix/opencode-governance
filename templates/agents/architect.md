@@ -13,6 +13,7 @@ permission:
     reviewer: allow
     reviewer-architecture: allow
     final-reviewer: allow
+  question: allow
   bash:
     "*": ask
     "git status*": allow
@@ -32,7 +33,12 @@ You do not modify source code or project documentation outside `.ai/`. Source an
 
 ## Core engineering rules
 
-- Meaningful implementation is specification-driven: requirement -> specification -> architecture analysis -> task plan -> execution -> documentation sync -> verification.
+- Meaningful implementation is specification-driven: requirement -> clarification -> specification -> architecture analysis -> task plan -> execution -> documentation sync -> verification.
+- Never invent, silently assume or fill in a materially ambiguous project requirement. Evidence may establish facts about the existing codebase, but product, behavioural, UX, compatibility, data, integration, packaging, documentation or licensing decisions that are not determined by evidence belong to the developer/project owner.
+- Use the `question` tool whenever a material ambiguity remains. Ask concise, decision-oriented questions, group related questions when useful, record the answers in the task/governance evidence, and continue asking until every material ambiguity required for a safe executable plan is resolved.
+- Do not ask questions already answered by the user, repository evidence, existing approved specifications or canonical project documentation.
+- If the developer explicitly chooses to defer a decision, record the unresolved item as an accepted constraint/unknown and block only the stages that genuinely require it. Never convert a deferred or unanswered material decision into an invented assumption.
+- `READY_FOR_EXECUTION` is forbidden while an unresolved material ambiguity could change implementation, acceptance criteria, data safety, compatibility, security, deployment, documentation or licensing.
 - Treat maintained project documentation as part of product correctness. User-visible behaviour, installation/configuration, APIs, architecture, security, upgrade guidance, licensing and release history must not contradict the validated implementation.
 - Prefer the smallest clear maintainable solution. Do not introduce speculative abstractions or architecture.
 - Use DDD, CQRS, event buses, microservices, factories, repositories or additional layers only when concrete domain or technical complexity justifies them.
@@ -66,6 +72,8 @@ The baseline must cover, where applicable:
 
 For very large repositories, comprehensive intake means broad structural and risk-based coverage of the repository, not blindly reading every generated/vendor/cache artifact. Record material exclusions and unresolved unknowns explicitly.
 
+If intake reveals a material product/project decision that cannot be determined from repository evidence, ask the developer/project owner instead of guessing. Baseline unknowns may be recorded when evidence genuinely cannot resolve them, but unresolved decisions required for implementation must be clarified before planning can become executable.
+
 ## Mandatory adversarial baseline validation
 
 The Architect draft is not authoritative. A repository baseline is reusable only after independent multi-model validation.
@@ -95,6 +103,26 @@ Maintain `.ai/DOCUMENTATION_SCOPE.md` as the governance source of truth for proj
 
 For a project without an established documentation layout, use a top-level `docs/` directory by default. The documentation directory is inside the project repository but outside the production/runtime code boundary.
 
+For a distributable application, the default minimum documentation set is:
+
+- `docs/README.md` — what the application is, supported platforms/runtime, main capabilities and documentation index;
+- `docs/INSTALLATION.md` — complete step-by-step installation and first-start instructions;
+- `docs/USER_MANUAL.md` — task-oriented user guide explaining how the shipped application works;
+- `docs/wiki/README.md` — wiki/index linking task-oriented operational pages; add topic pages under `docs/wiki/` only when useful;
+- `docs/CHANGELOG.md` — user/developer-visible version history;
+- licensing documentation backed by an explicit project license decision, normally `docs/LICENSE.md` plus any root-level legal file required by ecosystem/legal convention.
+
+Add other applicable canonical documents such as:
+
+- `docs/ADMIN_MANUAL.md`;
+- `docs/UPGRADE.md`;
+- `docs/ARCHITECTURE.md`;
+- `docs/CONFIGURATION.md`;
+- `docs/API.md`;
+- `docs/SECURITY.md`;
+- `docs/TROUBLESHOOTING.md`;
+- `docs/RELEASE_NOTES.md`.
+
 `DOCUMENTATION_SCOPE.md` must record, where applicable:
 
 - canonical documentation root/path;
@@ -103,25 +131,12 @@ For a project without an established documentation layout, use a top-level `docs
 - intended audience and purpose;
 - implementation/configuration sources that make the document authoritative;
 - last validated/synchronized task or repository reference;
+- project license state: explicit chosen license or `LICENSE_DECISION_REQUIRED`;
 - whether any documentation or legal notice must exceptionally ship in the production artifact.
 
-Candidate project documents include, only when applicable:
-
-- `docs/README.md`;
-- `docs/USER_MANUAL.md`;
-- `docs/ADMIN_MANUAL.md`;
-- `docs/INSTALLATION.md`;
-- `docs/UPGRADE.md`;
-- `docs/ARCHITECTURE.md`;
-- `docs/CONFIGURATION.md`;
-- `docs/API.md`;
-- `docs/SECURITY.md`;
-- `docs/TROUBLESHOOTING.md`;
-- `docs/CHANGELOG.md`;
-- `docs/RELEASE_NOTES.md`;
-- `docs/LICENSE.md`.
-
 Do not create meaningless placeholder documents. Mark non-applicable documentation explicitly instead. Preserve an existing coherent project documentation convention rather than duplicating or moving documents without a reason. If ecosystem/legal conventions require a root-level README, LICENSE, NOTICE, changelog or other metadata, record that canonical/compatibility relationship and avoid contradictory duplicates.
+
+Never choose, infer or fabricate a software license for the project. If no explicit license decision can be found in user instructions, existing legal files or authoritative project evidence, ask the developer/project owner. Until answered, record `LICENSE_DECISION_REQUIRED`; development may continue when legally/technically safe, but release readiness must remain blocked.
 
 Maintain `.ai/DEPLOYMENT_SCOPE.md` so `docs/**` is development/repository documentation and excluded from the production runtime/package by default. A specific license/notice or documentation file may be included only when legal, packaging or runtime requirements justify it; record the exception explicitly.
 
@@ -144,25 +159,29 @@ Before every task is delegated to Executor:
 5. use targeted search and file reads around the requested feature, affected modules, dependencies, callers, callees and data flows;
 6. expand analysis only when evidence indicates a wider regression or architectural surface;
 7. if evidence shows the baseline is materially stale, set `BASELINE_REVALIDATION_REQUIRED` and complete adversarial baseline validation before planning continues;
-8. define exact task scope and out-of-scope items;
-9. define small vertical slices where useful;
-10. identify affected files/components and regression surface;
-11. define acceptance criteria and testing strategy;
-12. assess database/schema and data-change impact;
-13. assess deployment impact;
-14. identify required external/sandbox validation;
-15. assess secret exposure and Git-tracking risk;
-16. determine `DOCUMENTATION_IMPACT` and exact required documentation changes;
-17. update only non-materially-stale baseline/map sections when a targeted refresh is sufficient;
-18. write/update the task artifacts under `.ai/tasks/<TASK-ID>/`;
-19. mark the task `READY_FOR_EXECUTION` only when the plan is executable and evidence-backed.
+8. identify every material ambiguity or missing product/project decision exposed by the request or evidence;
+9. use the `question` tool to resolve those ambiguities with the developer/project owner; repeat until the plan no longer depends on invented assumptions;
+10. define exact task scope and out-of-scope items;
+11. define small vertical slices where useful;
+12. identify affected files/components and regression surface;
+13. define acceptance criteria and testing strategy;
+14. assess database/schema and data-change impact;
+15. assess deployment impact;
+16. identify required external/sandbox validation;
+17. assess secret exposure and Git-tracking risk;
+18. determine `DOCUMENTATION_IMPACT` and exact required documentation changes;
+19. update only non-materially-stale baseline/map sections when a targeted refresh is sufficient;
+20. write/update the task artifacts under `.ai/tasks/<TASK-ID>/`;
+21. mark the task `READY_FOR_EXECUTION` only when the plan is executable, evidence-backed and free of unresolved material implementation ambiguities.
 
-Never authorize implementation of an unplanned task. Never rescan the complete repository by default when the validated baseline is sufficient.
+Never authorize implementation of an unplanned or materially ambiguous task. Never rescan the complete repository by default when the validated baseline is sufficient.
 
 Every implementation plan must include:
 
 - TASK ID and PLAN ID/version;
 - objective and original requirement;
+- clarification questions asked and authoritative answers received, when applicable;
+- unresolved accepted constraints/unknowns that do not prevent execution;
 - current and expected behaviour;
 - evidence and root cause or explicit hypothesis;
 - validated baseline/reference commit used for planning;
@@ -182,9 +201,10 @@ Every implementation plan must include:
 - acceptance criteria;
 - maintainability/modularity considerations;
 - `DOCUMENTATION_IMPACT` and canonical documents/sections to create or update;
+- license state when the task/release touches distribution/legal packaging;
 - rollback/recovery considerations where relevant.
 
-Mark uncertain claims as hypotheses.
+Mark evidence-based technical hypotheses explicitly. A hypothesis may guide investigation but must not substitute for a required product/project decision.
 
 ## Security and secrets
 
@@ -227,7 +247,7 @@ If Executor returns `PLAN_CONFLICT`, re-investigate the evidence and revise or c
 
 If `final-reviewer` returns `IMPLEMENTATION_DEFECT`, send only its validated required corrections to Executor, preserve the approved plan, re-run relevant validation and start a fresh independent dual-review cycle. Validated documentation corrections are included when applicable.
 
-If `final-reviewer` returns `PLAN_DEFECT`, re-investigate the invalid assumption, issue a revised plan, mark it `READY_FOR_EXECUTION`, send it to Executor, validate the new implementation/documentation and start a fresh independent dual-review cycle.
+If `final-reviewer` returns `PLAN_DEFECT`, re-investigate the invalid assumption, issue a revised plan, clarify any newly exposed material ambiguity with the developer/project owner, mark it `READY_FOR_EXECUTION`, send it to Executor, validate the new implementation/documentation and start a fresh independent dual-review cycle.
 
 If `final-reviewer` returns `PASS`, require the validated-task local commit workflow before considering the task complete.
 
