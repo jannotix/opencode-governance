@@ -49,7 +49,7 @@ Independently verify:
 - security and secret handling;
 - tests and regression coverage;
 - dependencies and backward compatibility;
-- migration/data-preservation safety where applicable;
+- schema/data-change and data-preservation safety where applicable;
 - deployment scope;
 - mandatory external validation where applicable;
 - consistency between implementation and both reviews.
@@ -72,4 +72,4 @@ For a final release assessment return exactly one production verdict:
 - `READY_FOR_PRODUCTION`
 - `NOT_READY_FOR_PRODUCTION`
 
-Mandatory external validation not executed, failed clean-install verification, unresolved security findings, unsafe migration state, invalid production packaging or failed required tests requires `NOT_READY_FOR_PRODUCTION`.
+Mandatory external validation not executed, failed clean-install verification, unresolved security findings, unsafe schema/data-change state, invalid production packaging or failed required tests requires `NOT_READY_FOR_PRODUCTION`.
