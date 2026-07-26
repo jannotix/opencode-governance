@@ -6,7 +6,7 @@
 /ai-init
 ```
 
-Creates or upgrades the project-local governance state without modifying source code:
+Creates the project-local governance state without modifying source code:
 
 - `.ai/CODEBASE_BASELINE.md`
 - `.ai/DEPLOYMENT_SCOPE.md`
@@ -14,7 +14,7 @@ Creates or upgrades the project-local governance state without modifying source 
 - `.ai/STATUS.md`
 - `.ai/tasks/`
 
-Before first implementation, Architect performs a complete adversarial repository baseline. Later tasks use targeted just-in-time impact analysis and refresh the baseline only when materially necessary.
+Before first implementation, Architect performs a complete repository baseline. Later tasks use targeted just-in-time impact analysis and refresh the baseline only when materially necessary.
 
 ## Complete workflow
 
@@ -43,11 +43,11 @@ After `TASK_VALIDATED`, source edits are frozen for the active review cycle.
 Architect then requests two independent reviews of the same task state and diff:
 
 - `reviewer`: implementation, behaviour, regressions and tests;
-- `reviewer-architecture`: architecture, security, dependencies, migrations, deployment scope and maintainability.
+- `reviewer-architecture`: architecture, security, dependencies, data/schema safety, deployment scope and maintainability.
 
 Neither reviewer may receive or read the other reviewer's current-cycle findings. Architect requests both reviews before consuming either result and runs them concurrently when the OpenCode runtime supports concurrent Task calls. If the runtime serializes them, the same independence rules still apply.
 
-After both reviews complete, `final-reviewer` independently checks the primary repository evidence and adjudicates every material finding. Reviewer agreement is not treated as proof, and disagreement does not automatically mean failure.
+After both reviews complete, `final-reviewer` checks the primary repository evidence and adjudicates every material finding. Reviewer agreement is not treated as proof, and disagreement does not automatically mean failure.
 
 Final task verdicts:
 
@@ -70,7 +70,7 @@ After Final Reviewer `PASS`, Executor creates one scoped local task commit. Push
 /ai-plan <task>
 ```
 
-Architect performs current-state reconciliation, adversarial impact analysis, acceptance/test planning, migration/deployment analysis, dependency governance and external-validation planning. No implementation is performed.
+Architect performs current-state reconciliation, impact analysis, acceptance/test planning, data/schema analysis, dependency governance and external-validation planning. No implementation is performed.
 
 ## Execute an existing plan
 
@@ -102,7 +102,7 @@ Reports task state, baseline status, both reviewer statuses, final adjudication,
 /ai-release
 ```
 
-The final release gate validates the runtime-only production artifact, secret safety, migrations, clean installation/startup from the artifact itself, required tests and real external integration validation.
+The final release gate validates the production artifact, secret safety, data/schema safety, clean installation/startup from the artifact itself, required tests and real external integration validation.
 
 It then runs two fresh independent release reviews and sends both reports plus the production evidence to Final Reviewer for adjudication.
 
