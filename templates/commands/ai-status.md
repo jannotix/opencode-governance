@@ -12,9 +12,12 @@ Read the current project's governance state without changing source code and rep
 - Architect status and latest plan ID/version;
 - whether the task is `READY_FOR_EXECUTION`;
 - Executor status;
-- Reviewer verdict;
-- outstanding findings/blockers;
+- implementation Reviewer verdict/status;
+- architecture Reviewer verdict/status;
+- final Reviewer/adjudicator verdict/status;
+- outstanding validated findings/blockers;
 - review cycle number;
+- whether the current source tree is frozen for review;
 - baseline status and last refresh reason;
 - deployment scope status;
 - latest `.ai/PROJECT_HISTORY.md` event;
