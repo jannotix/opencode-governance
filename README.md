@@ -25,6 +25,7 @@ Commands:
 
 - `/ai-init`
 - `/ai-audit`
+- `/ai-docs`
 - `/ai-plan`
 - `/ai-execute`
 - `/ai-review`
@@ -32,29 +33,29 @@ Commands:
 - `/ai-status`
 - `/ai-release`
 
-Project state is stored under `.ai/`.
+Project governance state is stored under `.ai/`.
 
 ## Roles
 
 ### Architect
 
-Analyzes the repository, creates the draft baseline, coordinates independent baseline validation, defines task scope, creates implementation plans, acceptance criteria and validation requirements, and coordinates the workflow. Source-code edits are denied.
+Analyzes the repository, creates the draft baseline, coordinates independent baseline validation, clarifies ambiguous project decisions with the developer/project owner, defines task scope, plans implementation/documentation work and coordinates the workflow. Source/project-documentation edits are denied.
 
 ### Executor
 
-Implements only Architect-approved tasks in `READY_FOR_EXECUTION` from a currently validated baseline, runs validation and reports evidence. It cannot delegate.
+Implements only Architect-approved tasks in `READY_FOR_EXECUTION` from a currently validated baseline, synchronizes required project documentation, runs validation and reports evidence. It cannot delegate.
 
 ### Implementation Reviewer
 
-Independently checks implementation correctness, runtime behaviour, regressions, tests and compatibility. It also performs an independent implementation/runtime audit during baseline validation. Source-code edits are denied.
+Independently checks implementation correctness, runtime behaviour, regressions, tests, compatibility and user-facing documentation accuracy. It also performs an independent implementation/runtime audit during baseline validation. Source/documentation edits are denied.
 
 ### Architecture/Security Reviewer
 
-Independently checks architecture, security, dependencies, data/schema safety, deployment scope and maintainability. It also performs an independent architecture/security audit during baseline validation. Source-code edits are denied.
+Independently checks architecture, security, dependencies, data/schema safety, deployment scope, maintainability, documentation structure and license consistency. It also performs an independent architecture/security audit during baseline validation. Source/documentation edits are denied.
 
 ### Final Reviewer
 
-Independently adjudicates baseline audits, task reviews and release reviews against primary repository evidence. It rejects false positives, preserves valid findings and returns the controlling verdict. Source-code edits are denied.
+Independently adjudicates baseline audits, task reviews and release reviews against primary repository evidence. It rejects false positives, preserves valid findings and returns the controlling verdict. Source/documentation edits are denied.
 
 ## Installation
 
@@ -105,10 +106,16 @@ Initialize and adversarially validate a repository once:
 /ai-init
 ```
 
-Explicitly revalidate the reusable codebase baseline after a material repository change or on demand:
+Explicitly revalidate the reusable baseline after a material repository change or on demand:
 
 ```text
 /ai-audit
+```
+
+Generate or synchronize governed project documentation:
+
+```text
+/ai-docs
 ```
 
 Run a complete governed task:
@@ -120,9 +127,29 @@ Run a complete governed task:
 You may also use OpenCode's primary selectors safely:
 
 - `Build` runs the governed complete lifecycle.
-- `Plan` performs governed planning only from a currently validated baseline. If validation is required, it stops with `BASELINE_AUDIT_REQUIRED` instead of self-certifying the repository.
+- `Plan` performs governed planning only from a currently validated baseline.
 
 Neither bypasses the configured governance roles.
+
+## Clarification before implementation
+
+Architect, governed Build and governed Plan explicitly allow OpenCode's `question` tool.
+
+When approved requirements and repository evidence do not resolve a material product/project decision, governance asks the developer/project owner instead of inventing an answer.
+
+This applies to decisions that can affect:
+
+- behaviour or UX;
+- compatibility;
+- data handling;
+- integrations;
+- deployment/packaging;
+- documentation;
+- software licensing.
+
+`READY_FOR_EXECUTION` is prohibited while an unresolved material ambiguity could change implementation, acceptance criteria, safety or documentation.
+
+Questions already answered by the user or primary evidence must not be repeated.
 
 ## Adversarial baseline validation
 
@@ -133,25 +160,89 @@ For the first governed use of a repository:
 ```text
 Architect
   ↓
-DRAFT CODEBASE BASELINE
+DRAFT CODEBASE BASELINE + DOCUMENTATION INVENTORY
   ↓
-┌──────────────────────────────┐
-│ Implementation Reviewer      │
+┌───────────────────────────────┐
+│ Implementation Reviewer       │
 │ Architecture/Security Reviewer│
-└──────────────┬───────────────┘
+└──────────────┬────────────────┘
                ↓
          Final Reviewer
                ↓
-      BASELINE_VALIDATED
+       BASELINE_VALIDATED
 ```
 
 The two baseline reviewers inspect the same repository reference independently and do not receive each other's current audit output. Final Reviewer validates their allegations against primary repository evidence rather than counting votes.
 
-A baseline can contain documented pre-existing defects. `BASELINE_VALIDATED` means the baseline materially records the architecture, important call paths, known defects/risks, security-sensitive areas, unknowns and audit exclusions found during the review. It does not mean the source code is bug-free.
+A baseline can contain documented pre-existing defects or documentation gaps. `BASELINE_VALIDATED` means the baseline/documentation inventory materially records the architecture, important call paths, known defects/risks, security-sensitive areas, unknowns and audit exclusions found during review. It does not mean the source code is bug-free or release-ready.
 
 No source implementation may begin until the baseline is validated.
 
 Baseline adjudication is bounded to three cycles. After the third failed cycle the state becomes `BASELINE_BLOCKED`.
+
+## Project documentation governance
+
+Every governed project maintains:
+
+```text
+.ai/DOCUMENTATION_SCOPE.md
+```
+
+This records canonical documentation paths, applicability, audience, source-of-truth references, synchronization state, license state and production-package exceptions.
+
+When a project has no coherent documentation convention, the default layout is:
+
+```text
+project/
+├── <production/runtime code>
+├── docs/
+│   ├── README.md
+│   ├── INSTALLATION.md
+│   ├── USER_MANUAL.md
+│   ├── CHANGELOG.md
+│   ├── LICENSE.md
+│   ├── wiki/
+│   │   └── README.md
+│   └── <other applicable docs>
+└── .ai/
+```
+
+For distributable applications, the default minimum applicable set is:
+
+- project overview/readme;
+- complete step-by-step installation guide;
+- user manual;
+- wiki/index with task-oriented pages;
+- changelog;
+- licensing documentation backed by an explicit license decision.
+
+Additional admin, upgrade, architecture, configuration, API, security, troubleshooting and release documentation is maintained when applicable.
+
+Do not create filler documentation. Preserve coherent existing project conventions.
+
+`docs/**` is inside the project repository but outside the production/runtime package by default. `.ai/**` is governance-only. Explicit legal/notice/runtime exceptions must be recorded in `.ai/DEPLOYMENT_SCOPE.md`.
+
+Every task records exactly one documentation impact:
+
+- `DOCUMENTATION_IMPACT: NONE`
+- `DOCUMENTATION_IMPACT: UPDATE_REQUIRED`
+- `DOCUMENTATION_IMPACT: CREATE_REQUIRED`
+
+Required documentation is synchronized by Executor before `TASK_VALIDATED` and reviewed with the code. Missing, stale or contradictory required documentation prevents Final Reviewer `PASS`.
+
+### License decisions
+
+Governance never chooses or invents a software license.
+
+If an explicit project-owner decision or authoritative existing legal file does not establish the license, governance records:
+
+```text
+LICENSE_DECISION_REQUIRED
+```
+
+The Architect asks the developer/project owner when the decision is required. Release readiness remains blocked until it is resolved.
+
+See [Project documentation governance](docs/project-documentation.md).
 
 ## Large repositories
 
@@ -164,15 +255,14 @@ The initial intake creates a DRAFT `.ai/CODEBASE_BASELINE.md` with reusable repo
 - tests and validation capabilities;
 - deployment and security context;
 - known defects and regression risks;
+- documentation state;
 - material exclusions and unresolved unknowns.
 
 That draft is independently audited by both reviewers and adjudicated by Final Reviewer before it becomes reusable.
 
 For very large repositories, comprehensive analysis means broad structural and risk-based coverage. Generated, vendored, cache or binary-only content should not consume context blindly; material exclusions must be recorded.
 
-Later routine tasks reuse the validated baseline and inspect Git deltas, affected modules, callers, callees, dependencies and data flows. A repository-wide audit is not performed by default.
-
-The task reviewers and Final Reviewer use the same targeted approach and expand only when evidence indicates wider impact or a materially stale baseline.
+Later routine tasks reuse the validated baseline and inspect Git deltas, affected modules, callers, callees, dependencies, data flows and impacted canonical documentation. A repository-wide audit is not performed by default.
 
 A full adversarial baseline revalidation is required after material architectural change, broad milestone, large merge/rebase, major dependency upgrade, substantial imported code, or when evidence shows the baseline is materially stale/incomplete. `/ai-audit` can also be invoked explicitly.
 
@@ -195,6 +285,8 @@ Task lifecycle:
 ```text
 BASELINE_VALIDATED
   ↓
+CLARIFICATION
+  ↓
 PLANNING
   ↓
 TASK_PLANNED
@@ -202,6 +294,8 @@ TASK_PLANNED
 READY_FOR_EXECUTION
   ↓
 IMPLEMENTING
+  ↓
+DOCUMENTATION_SYNC
   ↓
 TASK_VERIFYING
   ↓
@@ -216,7 +310,7 @@ FINAL_ADJUDICATION
 LOCAL_COMMITTED
 ```
 
-The two task reviewers inspect the same validated implementation independently. Neither may use the other reviewer's current-cycle findings.
+The two task reviewers inspect the same validated implementation/documentation state independently. Neither may use the other reviewer's current-cycle findings.
 
 Only `final-reviewer` controls the final task verdict:
 
@@ -233,27 +327,29 @@ Only validated corrections may return to Executor. Automatic task correction is 
 .ai/
 ├── CODEBASE_BASELINE.md
 ├── DEPLOYMENT_SCOPE.md
+├── DOCUMENTATION_SCOPE.md
 ├── PROJECT_HISTORY.md
 ├── STATUS.md
 ├── baseline-audits/
 └── tasks/
 ```
 
-`baseline-audits/` stores independent baseline-review and final-adjudication evidence by audit ID.
-
-Existing project `.ai/` state is preserved across governance/model updates. Existing baselines are not globally rescanned during an update; a repository is revalidated lazily when it is next used and lacks a valid baseline state or when material staleness is detected.
+Existing project `.ai/` state and project documentation are preserved across governance/model updates. Existing baselines are not globally rescanned during an update; a repository is revalidated lazily when it is next used and lacks a valid baseline state or when material staleness is detected.
 
 ## Engineering rules
 
+- Clarify material ambiguity instead of inventing decisions.
 - Validate the reusable baseline before first implementation.
 - Plan before implementation.
 - Keep changes scoped to the approved task.
+- Synchronize required project documentation before task validation.
 - Prefer existing dependencies when adequate.
 - Avoid speculative abstractions and duplicate libraries.
 - Prefer small cohesive modules over monolithic files or artificial fragmentation.
 - Preserve backward compatibility unless the approved plan explicitly changes it.
 - Validate required external integrations against real sandbox/test endpoints.
-- Never store plaintext secrets in source, `.ai/` history or release artifacts.
+- Never store plaintext secrets in source, documentation, `.ai/` history or release artifacts.
+- Never choose a software license without an explicit project decision.
 
 ## Verification
 
@@ -269,7 +365,7 @@ macOS / Linux:
 ./scripts/verify.sh
 ```
 
-Verification checks the five governance roles, governed `Build`/`Plan` overrides, provider-qualified model IDs, all commands including `/ai-audit`, baseline-audit capabilities, default Architect and resolved OpenCode configuration.
+Verification checks the five governance roles, governed `Build`/`Plan` overrides, provider-qualified model IDs, all commands including `/ai-audit` and `/ai-docs`, baseline-audit capabilities, explicit clarification support, documentation governance, default Architect and resolved OpenCode configuration.
 
 ## Uninstall
 
@@ -283,13 +379,14 @@ or:
 ./scripts/uninstall.sh
 ```
 
-Provider authentication, project `.ai/` state and backups are left untouched.
+Provider authentication, project `.ai/` state, project documentation and backups are left untouched.
 
 ## Documentation
 
 - [Installation](docs/installation.md)
 - [Model configuration](docs/model-configuration.md)
 - [Workflow](docs/workflow.md)
+- [Project documentation governance](docs/project-documentation.md)
 - [Permissions](docs/permissions.md)
 - [Troubleshooting](docs/troubleshooting.md)
 
