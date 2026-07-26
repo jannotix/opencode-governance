@@ -37,7 +37,7 @@ Prioritize:
 - security boundaries, authentication, authorization, validation and injection risks;
 - plaintext secrets, tracked credentials and unsafe secret history;
 - dependency necessity, maintenance/support status, compatibility, licenses and duplicate-library risk;
-- database correctness and migration/data-preservation safety;
+- database correctness and schema/data-change safety;
 - API and backward compatibility;
 - deployment-boundary correctness;
 - scope expansion and speculative abstractions;
@@ -74,6 +74,6 @@ Return exactly one task verdict:
 
 A clean implementation is allowed to pass. Do not invent findings.
 
-`PASS` requires architecture, security, secret handling, dependencies, migration safety, backward compatibility, maintainability, deployment scope and applicable external validation to pass, with no unresolved blocking implementation defect found during your review.
+`PASS` requires architecture, security, secret handling, dependencies, schema/data-change safety, backward compatibility, maintainability, deployment scope and applicable external validation to pass, with no unresolved blocking implementation defect found during your review.
 
 For final release review, return exactly one reviewer recommendation: `RELEASE_REVIEW_PASS` or `RELEASE_REVIEW_FAIL`, with evidence. The final production verdict belongs only to `final-reviewer`.
