@@ -1,18 +1,23 @@
 # OpenCode Governance
 
-A reusable, provider-agnostic and model-agnostic governance workflow for OpenCode projects built around five responsibilities:
+Governance workflow for OpenCode projects:
 
-**Architect → Executor → two independent Reviewers → Final Reviewer**
+**Architect → Executor → Independent Reviewers → Final Reviewer**
 
-You choose every model from those available in your own OpenCode installation. No provider or model is hardcoded in this repository, and the same model may be reused for multiple roles when desired.
+Provider and model agnostic. Model IDs are selected during installation and are never hardcoded in the repository.
 
-## What it installs
+## Components
 
-- `architect` primary agent
-- `executor` subagent
-- `reviewer` implementation/regression subagent
-- `reviewer-architecture` architecture/security/maintainability subagent
-- `final-reviewer` independent adjudication subagent
+Agents:
+
+- `architect`
+- `executor`
+- `reviewer`
+- `reviewer-architecture`
+- `final-reviewer`
+
+Commands:
+
 - `/ai-init`
 - `/ai-plan`
 - `/ai-execute`
@@ -20,44 +25,42 @@ You choose every model from those available in your own OpenCode installation. N
 - `/ai-workflow`
 - `/ai-status`
 - `/ai-release`
-- project-local `.ai/` governance state and task audit trail
-- `architect` as the default OpenCode agent
 
-The global OpenCode configuration used by this project applies to OpenCode Desktop as well as the TUI/CLI.
+Project state is stored under `.ai/`.
 
-## Role boundaries
+## Roles
 
 ### Architect
 
-Performs the initial adversarial codebase baseline, plans every task just-in-time, governs dependencies, migrations, deployment scope and external validation, coordinates execution and review, and does not edit source code.
+Analyzes the repository, defines task scope, creates the implementation plan, acceptance criteria and validation requirements, and coordinates the workflow. Source-code edits are denied.
 
 ### Executor
 
-Implements only `READY_FOR_EXECUTION` tasks, runs validation, preserves approved architecture, keeps code modular and maintainable, and creates the required local commit only after final adjudication returns `PASS`.
+Implements only Architect-approved tasks in `READY_FOR_EXECUTION`, runs validation and reports evidence. It cannot delegate to other agents.
 
 ### Implementation Reviewer
 
-Independently reviews requirements, implementation correctness, logic, edge cases, regressions, tests, compatibility and runtime behaviour. It does not edit source code and does not read the sibling review for the active cycle.
+Independently checks implementation correctness, requirements, runtime behaviour, regressions, tests and compatibility. Source-code edits are denied.
 
 ### Architecture/Security Reviewer
 
-Independently reviews architecture, security, dependencies, migrations, scope discipline, deployment boundaries and maintainability. It does not edit source code and does not read the sibling review for the active cycle.
+Independently checks architecture, security, dependencies, data/schema safety, deployment scope and maintainability. Source-code edits are denied.
 
 ### Final Reviewer
 
-Acts as an independent judge. It receives both review artifacts only after both reviewers finish, verifies every material finding against primary repository evidence, rejects false positives, preserves valid findings even when only one reviewer found them, and returns the controlling verdict. It does not edit source code.
+Validates both review reports against the repository and implementation evidence. It rejects false positives, preserves valid findings and returns the controlling verdict. Source-code edits are denied.
 
-## Install
+## Installation
 
-### 1. Connect your providers in OpenCode
+### 1. Connect providers
 
-Open OpenCode and connect the providers you intend to use:
+In OpenCode:
 
 ```text
 /connect
 ```
 
-List the exact model IDs exposed by your installation:
+List available model IDs:
 
 ```text
 /models
@@ -69,7 +72,7 @@ or:
 opencode models
 ```
 
-### 2. Run the installer
+### 2. Install
 
 Windows PowerShell:
 
@@ -84,51 +87,35 @@ chmod +x scripts/install.sh
 ./scripts/install.sh
 ```
 
-The installer asks for model IDs and optional variants/reasoning levels for:
+The installer asks for the model ID and optional variant for each role:
 
 1. Architect
 2. Executor
 3. Implementation Reviewer
 4. Architecture/Security Reviewer
-5. Final Reviewer/Judge
+5. Final Reviewer
 
-The same model ID may be entered for more than one role. No provider or model is hardcoded in this repository.
+The same model may be assigned to multiple roles.
 
-### 3. Restart OpenCode
+The installation writes the agents and commands to the global OpenCode configuration, so they are available in OpenCode Desktop and TUI/CLI.
 
-Restart OpenCode Desktop or the TUI after installation.
+Restart OpenCode after installation.
 
-Open a repository and initialize governance once:
+## Usage
+
+Initialize governance in a repository:
 
 ```text
 /ai-init
 ```
 
-Then run a complete governed task:
+Run a complete task:
 
 ```text
 /ai-workflow Fix the authorization bug in the customer API
 ```
 
-## Project governance state
-
-The workflow maintains:
-
-```text
-.ai/
-├── CODEBASE_BASELINE.md
-├── DEPLOYMENT_SCOPE.md
-├── PROJECT_HISTORY.md
-├── STATUS.md
-└── tasks/
-```
-
-- `CODEBASE_BASELINE.md`: full adversarial reverse-engineering baseline created before first implementation and refreshed only when materially needed.
-- `DEPLOYMENT_SCOPE.md`: separates production runtime files from tests, `.ai/`, development docs, review evidence, local tooling, temp/IDE files and secrets.
-- `PROJECT_HISTORY.md`: append-only chronological engineering history without secret values.
-- `tasks/`: detailed task specifications, plans, execution reports and independent review/adjudication artifacts.
-
-## Task workflow
+## Workflow
 
 ```text
 PLANNING
@@ -144,92 +131,61 @@ TASK_VERIFYING
 TASK_VALIDATED
   ↓
 DUAL_REVIEW
-  ├── Implementation Reviewer
-  └── Architecture/Security Reviewer
+  ├── reviewer
+  └── reviewer-architecture
   ↓
 FINAL_ADJUDICATION
   ↓
 LOCAL_COMMITTED
 ```
 
-Architect re-checks the current repository before every task handoff. Executor never implements an unplanned task.
+The two reviewers inspect the same validated implementation independently. Neither reviewer may use the other reviewer's current-cycle findings.
 
-The two reviewers inspect the same implementation independently. Neither receives the other's review output. The Architect requests both reviews before consuming either result and runs them concurrently when the OpenCode runtime supports concurrent Task calls. Independence is mandatory even if the runtime serializes them.
+Both reviews should be requested before either result is used. They may run concurrently when supported by the OpenCode runtime.
 
-Only `final-reviewer` controls the task verdict:
+Only `final-reviewer` controls the final task verdict:
 
 - `PASS`
 - `IMPLEMENTATION_DEFECT`
 - `PLAN_DEFECT`
 - `BLOCKED`
 
-Raw reviewer allegations never go directly to Executor. The Final Reviewer validates findings against the repository first, and only validated corrections can enter an automatic repair cycle.
+Only findings validated by `final-reviewer` may be sent back to Executor for automatic correction.
 
-Correction cycles are limited to three final adjudications. After the third failed cycle the workflow stops with `BLOCKED` and preserves the evidence instead of looping indefinitely.
+Automatic correction is limited to three final-review cycles. After the third failed cycle the task becomes `BLOCKED`.
+
+After `PASS`, Executor creates one scoped local commit. `git push` always requires explicit user authorization.
+
+## Project state
+
+```text
+.ai/
+├── CODEBASE_BASELINE.md
+├── DEPLOYMENT_SCOPE.md
+├── PROJECT_HISTORY.md
+├── STATUS.md
+└── tasks/
+```
+
+- `CODEBASE_BASELINE.md`: repository architecture and technical baseline.
+- `DEPLOYMENT_SCOPE.md`: production runtime boundary.
+- `PROJECT_HISTORY.md`: append-only engineering history without secret values.
+- `tasks/`: task plans, execution evidence and review artifacts.
 
 ## Engineering rules
 
-### Specification-driven development
+- Plan before implementation.
+- Keep changes scoped to the approved task.
+- Prefer existing project dependencies when adequate.
+- Do not introduce duplicate libraries without justification.
+- Avoid speculative abstractions and unnecessary architecture.
+- Prefer small cohesive modules over monolithic files or artificial fragmentation.
+- Preserve backward compatibility unless the approved plan explicitly changes it.
+- Use the project's existing schema/data migration mechanism when database changes are required.
+- Validate external integrations against real sandbox/test endpoints when required.
+- Never store plaintext secrets in source, `.ai/` history or release artifacts.
 
-Meaningful implementation follows:
-
-```text
-requirement → specification → architecture analysis → task plan → execution → verification
-```
-
-### Dependencies
-
-Reuse existing project libraries where adequate. Do not introduce duplicate libraries for the same capability.
-
-Before adding a dependency, verify:
-
-- actual necessity;
-- active maintenance;
-- stable supported release;
-- non-deprecated/EOL status;
-- stack compatibility;
-- security posture;
-- license compatibility;
-- transitive dependency impact.
-
-### Architecture
-
-Use DDD, CQRS, event buses, microservices, factories, repositories or extra layers only when concrete domain or technical complexity justifies them. Avoid speculative architecture and overengineering.
-
-### Maintainability
-
-Prefer small cohesive files and modules with clear responsibilities. Avoid both monolithic god files and artificial micro-file fragmentation. No arbitrary line-count limits are imposed.
-
-## Security and Git defaults
-
-- Architect cannot edit source code.
-- Both independent Reviewers cannot edit source code.
-- Final Reviewer cannot edit source code.
-- Executor can edit source code.
-- destructive Git/filesystem operations are denied by default.
-- secrets must never be stored in `.ai/` history.
-- plaintext secrets and tracked credential files are blocking findings.
-- secrets are excluded from Git by default.
-- adding an already tracked secret to `.gitignore` is not remediation; remove it from tracking and rotate/revoke it when exposure may have occurred.
-- after Final Reviewer `PASS`, Executor must create one scoped local commit for the validated task.
-- never stage unrelated user changes and never use `git add .` blindly.
-- `git push` is never inferred from commit permission and requires explicit user authorization for that specific push.
-
-## Existing installations and migrations
-
-Before changes that can affect an installed system, Architect identifies the installed version, runtime, database/schema state, migration mechanism, deployment mechanism and data-preservation requirements.
-
-Schema changes must use the project's existing migration mechanism and preserve existing data unless the approved specification explicitly requires otherwise.
-
-## External integrations and local validation
-
-Mocks are not proof of a real external integration. When meaningful, validate against the real sandbox/test endpoint using minimal test credentials or environment access.
-
-Prefer reproducible local validation. Existing Docker/Compose infrastructure may be used for databases, Redis, queues, object storage, search and similar dependencies when practical.
-
-Mandatory external validation that is not executed blocks production readiness.
-
-## Production release gate
+## Release gate
 
 Run:
 
@@ -237,19 +193,20 @@ Run:
 /ai-release
 ```
 
-The release workflow verifies:
+The release gate checks:
 
-- all required tasks are validated and locally committed;
-- deployment scope is correct;
-- the final production artifact excludes development-only material and secrets;
-- migration/upgrade safety where applicable;
-- the final artifact itself can be installed or started from a clean environment;
-- required tests/build/static analysis pass;
-- required real external integration validation is complete;
-- two fresh independent adversarial release reviews are completed;
-- Final Reviewer independently adjudicates the production candidate and both reviewer findings.
+- validated and locally committed tasks;
+- deployment scope;
+- production artifact contents;
+- secrets;
+- schema/data safety where applicable;
+- clean installation/startup of the produced artifact;
+- tests, build and static analysis;
+- required external integration validation;
+- two fresh independent reviews;
+- final production adjudication.
 
-Final production verdict:
+Final verdict:
 
 ```text
 READY_FOR_PRODUCTION
@@ -297,7 +254,7 @@ macOS / Linux:
 ./scripts/uninstall.sh
 ```
 
-Uninstall removes only files owned by this project. Provider authentication, backups and project-local `.ai/` state are left untouched.
+Uninstall removes only files installed by this project. Provider authentication and project-local `.ai/` state are left untouched.
 
 ## License
 
