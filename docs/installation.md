@@ -3,10 +3,10 @@
 ## Prerequisites
 
 - OpenCode Desktop or CLI installed.
-- At least one model provider connected in OpenCode.
-- Exact model IDs visible through `/models` or `opencode models`.
+- At least one provider connected in OpenCode.
+- Exact model IDs available through `/models` or `opencode models`.
 
-OpenCode's global configuration is shared by Desktop, TUI and CLI, so this installer configures the same agents and commands for all interfaces.
+The global OpenCode configuration is shared by Desktop, TUI and CLI.
 
 ## Windows
 
@@ -23,16 +23,25 @@ chmod +x scripts/install.sh
 
 The installer:
 
-1. discovers the OpenCode configuration path;
-2. creates a timestamped backup of files it may replace;
-3. asks for exact model IDs for Architect, Executor, Implementation Reviewer, Architecture/Security Reviewer and Final Reviewer/Judge;
-4. asks for optional variants/reasoning levels for each role;
-5. allows the same model ID to be reused across multiple roles;
-6. renders the five agent templates without hardcoded providers or models;
-7. installs the custom commands;
-8. sets `architect` as `default_agent` while preserving existing configuration where possible;
-9. runs verification.
+1. detects the OpenCode configuration directory;
+2. creates a timestamped backup of configuration files it may replace;
+3. asks for the model ID of each governance role;
+4. asks for optional variants/reasoning levels;
+5. renders the agent templates;
+6. installs the governance commands;
+7. sets `architect` as `default_agent` while preserving unrelated OpenCode configuration;
+8. runs verification.
 
-Restart OpenCode Desktop or the TUI after installation.
+Configured roles:
 
-For an existing OpenCode Governance installation, running the installer again creates a new timestamped backup before replacing project-owned agent/command files. Provider authentication and project-local `.ai/` state are not removed.
+- Architect
+- Executor
+- Implementation Reviewer
+- Architecture/Security Reviewer
+- Final Reviewer
+
+The same model ID may be used for multiple roles.
+
+No provider or model ID is hardcoded in the repository.
+
+Restart OpenCode Desktop or TUI after installation.
