@@ -45,12 +45,12 @@ Before the first implementation in a repository, perform adversarial reverse-eng
 
 The baseline must cover, where applicable:
 
-- repository state and commit;
+- baseline repository commit/reference;
 - stack and supported runtimes;
 - entry points;
-- architecture and modules;
+- architecture map of major modules, boundaries and responsibilities;
+- dependency/call-path map of important module relationships and high-value execution paths;
 - data flows and trust boundaries;
-- dependencies;
 - database/schema state and data-change mechanism;
 - external integrations;
 - tests and validation capabilities;
@@ -61,7 +61,7 @@ The baseline must cover, where applicable:
 - existing installed version/state;
 - blocking unknowns.
 
-Do not repeat a full scan for every small task. Refresh the baseline after major architectural change, broad milestone, large merge/rebase, major dependency upgrade, imported code or when the baseline is materially stale.
+Treat the baseline and its maps as reusable context. Do not repeat a full repository scan for routine tasks. Refresh only affected portions after material architectural change, broad milestone, large merge/rebase, major dependency upgrade, imported code, or when evidence shows the baseline is stale or incomplete.
 
 Maintain `.ai/DEPLOYMENT_SCOPE.md` defining production runtime files separately from tests, development documentation, `.ai/`, review evidence, local tooling, IDE/temp files and secrets. Do not blindly restructure an existing repository solely to create this boundary.
 
@@ -71,20 +71,23 @@ Maintain append-only `.ai/PROJECT_HISTORY.md` without secret values.
 
 Before every task is delegated to Executor:
 
-1. reconcile the baseline with the current repository state and changes since the previous task;
-2. inspect the relevant implementation and dependencies;
-3. define exact task scope and out-of-scope items;
-4. define small vertical slices where useful;
-5. identify affected files/components and regression surface;
-6. define acceptance criteria and testing strategy;
-7. assess database/schema and data-change impact;
-8. assess deployment impact;
-9. identify required external/sandbox validation;
-10. assess secret exposure and Git-tracking risk;
-11. write/update the task artifacts under `.ai/tasks/<TASK-ID>/`;
-12. mark the task `READY_FOR_EXECUTION` only when the plan is executable and evidence-backed.
+1. read the existing baseline and reusable architecture/dependency maps;
+2. reconcile them with repository changes since the recorded baseline or last validated task using targeted Git history/diff/status inspection;
+3. use targeted search and file reads around the requested feature, affected modules, dependencies, callers, callees and data flows;
+4. expand analysis only when evidence indicates a wider regression or architectural surface;
+5. define exact task scope and out-of-scope items;
+6. define small vertical slices where useful;
+7. identify affected files/components and regression surface;
+8. define acceptance criteria and testing strategy;
+9. assess database/schema and data-change impact;
+10. assess deployment impact;
+11. identify required external/sandbox validation;
+12. assess secret exposure and Git-tracking risk;
+13. update only materially stale baseline/map sections when necessary;
+14. write/update the task artifacts under `.ai/tasks/<TASK-ID>/`;
+15. mark the task `READY_FOR_EXECUTION` only when the plan is executable and evidence-backed.
 
-Never authorize implementation of an unplanned task.
+Never authorize implementation of an unplanned task. Never rescan the complete repository by default when the existing baseline is sufficient.
 
 Every implementation plan must include:
 
@@ -92,6 +95,8 @@ Every implementation plan must include:
 - objective and original requirement;
 - current and expected behaviour;
 - evidence and root cause or explicit hypothesis;
+- baseline/reference commit used for planning;
+- repository delta inspected since that reference;
 - scope and out-of-scope items;
 - affected components;
 - dependencies/call paths;
@@ -134,7 +139,7 @@ For every review cycle:
 2. do not include either reviewer's output in the prompt or context supplied to the other reviewer;
 3. request both reviews before using either result; when the runtime supports concurrent Task calls, run them concurrently;
 4. each reviewer must ignore sibling review artifacts for the current cycle and write only its own artifact;
-5. after both reviews complete, invoke `final-reviewer` with the original requirement, approved plan, execution evidence, current diff and both review artifacts;
+5. after both reviews complete, invoke `final-reviewer` with the original requirement, approved plan, reusable baseline/maps, execution evidence, current diff, tests and both review artifacts;
 6. only the `final-reviewer` verdict controls task approval or correction routing.
 
 Parallel execution is preferred, but independence is mandatory even if the runtime serializes the two review invocations.
