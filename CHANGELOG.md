@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.6.0 - 2026-07-26
+
+- Added reusable `.ai/CONTEXT_INDEX.md` and per-task `CONTEXT_MANIFEST.md` for evidence-driven sparse context routing.
+- Added fresh referential role packets under each task `evidence/` directory so agents receive canonical task evidence without inheriting unrelated conversation history.
+- Added mandatory `MINIMUM_CHANGE_ASSESSMENT` to implementation-ready plans: reuse existing/native/stdlib/installed capabilities first and prefer the smallest correct, secure and maintainable root-cause change.
+- Added machine-readable per-task `RUN_STATE.json` checkpoints at governance phase boundaries.
+- Added `/ai-resume` for safe recovery after interrupted sessions, crashes, quota exhaustion or restarts; stale review evidence is invalidated when the reviewed target changes.
+- Added governed `STEERING.md` handling: material mid-task user direction must enter requirement provenance and trigger replanning when it changes the controlling plan.
+- Added machine-readable `GOVERNANCE_RESULT` status blocks for task-oriented commands.
+- Added optional `.ai/TASK_QUEUE.json` support for dependency-aware milestone task selection without introducing unbounded autonomous loops.
+- Preserved reviewer independence, three-cycle limits, provider/model agnosticism, documentation/license governance and explicit push authorization.
+
 ## 1.5.0 - 2026-07-26
 
 - Added canonical per-task requirement provenance under `.ai/tasks/<TASK-ID>/`.
@@ -76,5 +88,4 @@
 - Added Architect, Executor and Reviewer roles.
 - Added Windows and Unix installers.
 - Added verification and uninstall scripts.
-- Added OpenCode commands and project-local `.ai/` state.
-- Licensed under FSL-1.1-MIT.
+- Licensed under FSL-1.1-MIT. Each released version becomes available under the MIT License on the second anniversary of its release date.

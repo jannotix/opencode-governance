@@ -8,35 +8,23 @@ Review the governed task identified by:
 
 $ARGUMENTS
 
-Do not modify source code or project documentation.
+Require exactly one `TASK_VALIDATED` task, `BASELINE_VALIDATED`, canonical requirement trail, approved plan with `MINIMUM_CHANGE_ASSESSMENT`, `CONTEXT_MANIFEST.md`, execution evidence and consistent `RUN_STATE.json`. Process material steering before freezing review; steering that changes requirements invalidates the current plan/review target and returns to planning.
 
-Requirements:
+Freeze source and task documentation. Build two fresh referential packets under `.ai/tasks/<TASK-ID>/evidence/`:
 
-1. locate exactly one matching governed task and confirm it is ready for review;
-2. require repository baseline to be currently `BASELINE_VALIDATED`;
-3. require canonical requirement artifacts:
-   - `.ai/tasks/<TASK-ID>/ORIGINAL_USER_REQUEST.md`;
-   - `.ai/tasks/<TASK-ID>/CLARIFICATION_TRANSCRIPT.md`;
-   - `.ai/tasks/<TASK-ID>/APPROVED_REQUIREMENTS.md`;
-4. inspect those three artifacts directly; do not substitute an Architect summary for the original request;
-5. inspect approved plan, `.ai/DOCUMENTATION_SCOPE.md`, task state, execution evidence and current source/documentation Git diff;
-6. confirm required documentation sync completed and plan's `DOCUMENTATION_IMPACT` was satisfied;
-7. freeze source and task-documentation edits for the review cycle;
-8. invoke `reviewer` and `reviewer-architecture` independently in `TASK_REVIEW` mode against the same canonical requirement trail, task state, code diff and documentation diff;
-9. do not expose either reviewer's output to the other reviewer;
-10. request both reviews before consuming either result and run them concurrently when supported by runtime;
-11. after both reviews complete, invoke `final-reviewer` in `TASK_REVIEW` mode with original request, clarification transcript, approved requirements, validated baseline/maps, documentation scope, approved plan, execution evidence, source/documentation diff and both review artifacts;
-12. require Final Reviewer to first compare `APPROVED_REQUIREMENTS.md` and the plan against `ORIGINAL_USER_REQUEST.md` plus controlling clarification answers;
-13. a material user requirement omitted, weakened, contradicted or broadened without authorization is `PLAN_DEFECT`, even if implementation matches plan and both advisory reviewers pass;
-14. require Final Reviewer to verify user-facing docs, installation steps, wiki/manual, changelog, configuration/API/security guidance and licensing documentation are accurate wherever applicable;
-15. return only controlling verdict from `final-reviewer`:
-   - `PASS`
-   - `IMPLEMENTATION_DEFECT`
-   - `PLAN_DEFECT`
-   - `BLOCKED`.
+- `REVIEW_IMPLEMENTATION_PACKET.md` for changed implementation paths, relevant callers/callees, tests, requirement/plan references and documentation impact;
+- `REVIEW_ARCHITECTURE_PACKET.md` for changed boundaries/modules, dependency edges, trust/security/data/deployment surfaces, requirement/plan references and documentation impact.
 
-The two independent reviewers are advisory. Their agreement is not sufficient for approval, and disagreement is not automatically a failure. `final-reviewer` must validate findings and Architect interpretation against primary evidence.
+Both packets reference the same canonical requirement trail and frozen repository target but may contain role-specific context. Neither packet may include the sibling current-cycle review. Do not include unrelated conversation history.
 
-Required documentation that is missing, stale, contradictory, unsafe or inconsistent with implementation prevents `PASS`.
+Invoke `reviewer` and `reviewer-architecture` independently. Each begins from its packet/context manifest and expands only on primary evidence, recording material expansion. Request both before consuming either result and run concurrently when supported.
 
-`PASS` authorizes Architect to request validated local task commit from Executor. It does not authorize `git push`.
+After both complete, create `FINAL_PACKET.md` referencing canonical provenance, approved plan, context manifest, frozen diff/target, execution/tests/docs evidence and both independent reviews. Then invoke `final-reviewer`.
+
+Final Reviewer must first compare `APPROVED_REQUIREMENTS.md`/plan with `ORIGINAL_USER_REQUEST.md` plus controlling clarifications. Material omission, weakening, contradiction, fabrication or unauthorized broadening/narrowing is `PLAN_DEFECT` even when implementation follows plan and both reviewers pass.
+
+Only Final Reviewer controls `PASS`, `IMPLEMENTATION_DEFECT`, `PLAN_DEFECT` or `BLOCKED`. Update `RUN_STATE.json` at `DUAL_REVIEW`, `FINAL_ADJUDICATION` and final verdict boundaries. Stale reviews must never be reused after the frozen target changes.
+
+`PASS` authorizes task-scoped local commit, never push.
+
+Finish with `GOVERNANCE_RESULT`.

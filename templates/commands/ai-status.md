@@ -1,51 +1,40 @@
 ---
-description: Show the current governed task, baseline and documentation status
+description: Show current governed baseline, task, context and resume status
 agent: architect
 subtask: false
 ---
 
-Read the current project's governance state without changing source code or project documentation and report:
+Read governance state without changing source code or project documentation.
 
-- current governance state;
-- baseline validation state: `BASELINE_DRAFT` / `BASELINE_REVALIDATION_REQUIRED` / `BASELINE_VALIDATED` / `BASELINE_BLOCKED`;
-- validated baseline repository reference when available;
-- latest baseline AUDIT ID and cycle number;
-- Implementation Baseline Reviewer recommendation/status;
-- Architecture/Security Baseline Reviewer recommendation/status;
-- Final Baseline Reviewer verdict/status;
-- outstanding validated baseline gaps, recorded codebase defects/risks and unresolved unknowns;
-- baseline/map freshness and last refresh/revalidation reason;
-- documentation root and `.ai/DOCUMENTATION_SCOPE.md` status;
-- required documentation present/current/stale/missing summary;
-- documentation synchronization reference/task when known;
-- project license state, including `LICENSE_DECISION_REQUIRED` when unresolved;
-- production exclusion status for `docs/**` and `.ai/**` plus explicit legal/runtime exceptions;
-- TASK ID when a task exists;
-- canonical requirement trail status:
-  - `ORIGINAL_USER_REQUEST.md`: PRESENT / MISSING;
-  - `CLARIFICATION_TRANSCRIPT.md`: PRESENT / MISSING;
-  - `APPROVED_REQUIREMENTS.md`: PRESENT / MISSING;
-  - requirement provenance consistency: CONSISTENT / CONFLICT / UNKNOWN;
-- current task stage;
-- Architect status and latest plan ID/version;
-- outstanding clarification questions or unresolved material decisions;
-- clarification decisions recorded for current task;
-- whether task is `READY_FOR_EXECUTION`;
-- current `DOCUMENTATION_IMPACT` and required canonical documents/sections;
-- Executor status;
-- implementation Task Reviewer verdict/status;
-- architecture Task Reviewer verdict/status;
-- final Task Reviewer/adjudicator verdict/status;
-- outstanding validated task findings/blockers;
-- task review cycle number;
-- whether current source/documentation tree is frozen for review;
-- repository delta considered by current plan when known;
-- deployment scope status;
-- latest `.ai/PROJECT_HISTORY.md` event;
-- git status summary;
-- last validated task local commit when identifiable;
-- push status: NOT_AUTHORIZED / AUTHORIZED / PERFORMED;
-- missing mandatory external validation;
-- release readiness when known.
+Report concisely:
 
-Never expose secret values while reporting status.
+- current governance/baseline state and validated repository reference;
+- baseline audit cycle/latest reviewer/final verdicts and outstanding validated gaps/unknowns;
+- `.ai/CONTEXT_INDEX.md` presence/freshness;
+- documentation root/scope/synchronization/license/deployment exclusion state;
+- current TASK ID/stage/plan/version and requirement-provenance consistency;
+- `CONTEXT_MANIFEST.md` presence, selected surface and material expansion count;
+- `MINIMUM_CHANGE_ASSESSMENT` presence/status;
+- `RUN_STATE.json` presence, last safe transition, checkpoint repository reference, cycle, resumability and blocker;
+- unprocessed `STEERING.md` entries and whether they require provenance update/replanning;
+- evidence packet status: execution, implementation review, architecture review and final;
+- Executor/reviewer/final status and outstanding validated findings;
+- review-freeze state and whether current Git target still matches it;
+- repository delta considered, Git status, last validated local commit and push authorization;
+- missing mandatory external validation and release readiness;
+- optional `.ai/TASK_QUEUE.json` summary when present: next eligible task, dependency blockers and queue state.
+
+Never expose secret values.
+
+Finish with:
+
+```text
+GOVERNANCE_RESULT
+TASK_ID: <id or NONE>
+STATE: <state>
+NEXT_ACTION: <action or NONE>
+CYCLE: <n/3 or N/A>
+HUMAN_INPUT_REQUIRED: YES|NO
+RESUMABLE: YES|NO
+CHECKPOINT: <RUN_STATE path or NONE>
+```
