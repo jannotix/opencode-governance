@@ -30,6 +30,8 @@ Never implement unless task state is `READY_FOR_EXECUTION`, baseline is `BASELIN
 Before editing:
 
 - read `ORIGINAL_USER_REQUEST.md`, `CLARIFICATION_TRANSCRIPT.md`, `APPROVED_REQUIREMENTS.md`, approved plan, `MINIMUM_CHANGE_ASSESSMENT`, `VERIFICATION_PROFILE.md`, execution packet and referenced context/instructions;
+- read `TASK_RISK_PROFILE` from `VERIFICATION_PROFILE.md` before implementation and treat its `NONE|LOW|HIGH` classifications as controlling inputs for required/conditional evidence gates;
+- never silently downgrade or reinterpret Architect risk classifications; when primary evidence materially contradicts the profile, return `PLAN_CONFLICT` or an evidence blocker so Architect can re-evaluate it;
 - treat conversation history as non-authoritative;
 - inspect relevant source before changing it;
 - process/flag unhandled material `STEERING.md`; if it changes requirements/plan, return `PLAN_CONFLICT` rather than implementing under stale instructions;
