@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.8.0 - 2026-07-27
+
+- Added a single **Evidence-Driven Verification** layer around the existing governance workflow; no new governance agent or external runtime dependency was introduced.
+- Added reusable `.ai/INSTRUCTION_INDEX.md` to map repository-local instruction sources, path scope, precedence/specificity and unresolved instruction conflicts separately from code/context routing.
+- Added per-task `VERIFICATION_PROFILE.md` with `TASK_RISK_PROFILE` (`NONE|LOW|HIGH`) for security, data migration, public contract, dependency, deployment, performance, generated artifact, destructive action, input validation, test reliability and human ownership risk.
+- Added per-task `evidence/VERIFICATION_EVIDENCE.md` as the single compact result surface for deterministic validation evidence instead of creating one governance artifact per gate.
+- Added authoritative `VALIDATION_PROFILE`/CI-parity discovery from existing repository commands/tooling; governance never installs a verifier or invents thresholds merely to satisfy a gate.
+- Added `BUGFIX_PROOF` with reproducible pre-fix failure/post-fix pass when technically possible, optional bounded negative control for critical fixes and honest characterization when reproduction is unavailable.
+- Added `TEST_IMPACT_MAP` for changed-path to direct/dependent/integration-test mapping while preserving authoritative CI/high-risk full-suite requirements.
+- Added `CONTRACT_COMPATIBILITY` for affected public API/schema/library/CLI/config/event contracts, including explicit authorization requirement for breaking changes.
+- Added non-secret `ENVIRONMENT_FINGERPRINT` and dependency-specific evidence freshness so source, contract, lockfile, generator, migration, environment/toolchain or validation-config changes invalidate only dependent evidence/reviews.
+- Added `DEPENDENCY_DELTA`, `GENERATED_ARTIFACT_GATE` and `MIGRATION_PROOF`; scanners remain evidence rather than proof, dependencies are never auto-fixed, and irreversible migrations require approved backup/forward-recovery evidence.
+- Added conditional `NON_FUNCTIONAL_BUDGETS`, `FLAKINESS_EVIDENCE`, `ADVERSARIAL_INPUT_VALIDATION` and `CODEOWNERS_HUMAN_GATE` using only authoritative project capabilities/policies when applicable.
+- Added stable `EVIDENCE_STATUS: COMPLETE|PARTIAL|BLOCKED|N/A` to task-oriented governance results.
+- Extended `/ai-resume`, dual review and `/ai-release` to invalidate stale dependent evidence and prevent PASS/production readiness from relying on unavailable, stale or failed required proof.
+- Updated installers, verification scripts and public documentation for v1.8 while preserving context routing/resume, requirement provenance, adaptive output efficiency, usage telemetry, reviewer independence, three-cycle limits, provider/model agnosticism and explicit push authorization.
+
 ## 1.7.0 - 2026-07-27
 
 - Added `/ai-metrics` for read-only governance usage telemetry using usage recorded by OpenCode rather than model-generated estimates.
