@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.0 - 2026-07-27
+
+- Added **Operational Assurance** as the v2 governance layer, extending Evidence-Driven Verification from code/test evidence to realistic runtime behavior, recovery and external side-effect boundaries without adding a new governance agent, slash command or mandatory runtime dependency.
+- Added conditional `PREVIEW_ENVIRONMENT_GATE`, `USER_FLOW_VERIFICATION`, `VISUAL_BEHAVIOR_GATE`, `RELEASE_RECOVERY_PROOF`, `TOOL_CAPABILITY_PROFILE` with `MCP_CAPABILITY_ASSESSMENT`, and `SAFE_EXPERIMENTATION`; these gates reuse existing/approved project mechanisms and never silently provision production infrastructure, use production data/credentials, widen permissions, deploy, rollback, push or merge.
+- Added bounded `READ_ONLY_DISCOVERY_SWARM` for materially multi-surface tasks using OpenCode read-only `Explore` and `Scout`; writable `General` is intentionally excluded from governance discovery, workers are isolated from sibling conclusions and their summaries remain non-authoritative routing evidence until verified against primary sources.
+- Added `GOVERNED_SKILL_ROUTING` using task-relevant OpenCode/project skills indexed in `.ai/INSTRUCTION_INDEX.md` with source/ID, scope/trigger, freshness and trust classification `PROJECT_AUTHORITATIVE|PROJECT_ADVISORY|WORKSPACE_ADVISORY|EXTERNAL_UNTRUSTED`; skill content never outranks canonical Requirement Provenance or silently authorizes side effects.
+- Added `.ai/GOVERNANCE_MEMORY.md` for narrowly scoped, evidence-backed reusable lessons with `stale_when` and `ACTIVE|STALE|REVOKED`; memory is advisory routing evidence, never a waiver, and completed historical tasks are not retroactively given fabricated memory.
+- Added `CLOSED_LOOP_LEARNING` for proven escaped/repeated defects, validation gaps, scoped false-positive rationales, recovery lessons and tooling constraints. Reviewers challenge candidate learning independently and only Final Reviewer `MEMORY_DECISION: APPROVE` permits Architect to persist the exact validated lesson.
+- Added `DEPENDENCY_ADMISSION_GATE` before new direct dependency installation with exact package/source/version, existing-capability necessity, identity/existence and available maintenance/compatibility/security/license evidence; suspected typo/slopsquat, unverifiable identity, `REJECT` or unresolved `HUMAN_DECISION` cannot be silently installed.
+- Added `PRE_CHANGE_SAFEPOINT` before required high-risk destructive/migration/deployment-state mutations, capturing non-secret recoverable Git/worktree/schema/config/artifact plus required existing backup/recovery references before mutation; resume/release never fabricate a historical safepoint.
+- Extended evidence freshness, `/ai-resume`, independent dual review and `/ai-release` across selected skills, governance memory, dependency admission, safepoints, preview/runtime targets, tool/MCP capabilities, recovery inputs and experimentation boundaries while invalidating only dependent evidence.
+- Updated all seven agent templates, the existing eleven commands, Windows/Unix installers, strict verifiers and public documentation while preserving Requirement Provenance, validated baseline/context routing, single-writer Executor, reviewer independence, Final Reviewer control, Evidence-Driven Verification, adaptive output efficiency, real-usage metrics, three-cycle limits, provider/model agnosticism and explicit push authorization.
+
 ## 1.8.1 - 2026-07-27
 
 - Fixed the canonical v1.8 Executor/verifier mismatch that caused `scripts/verify.ps1` and `scripts/verify.sh` to fail because `TASK_RISK_PROFILE` was required by the verifier but not explicitly referenced by `templates/agents/executor.md`.
