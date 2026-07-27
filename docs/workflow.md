@@ -75,6 +75,26 @@ FINAL_PACKET.md
 
 Packets reference canonical evidence instead of copying chat history. Implementation and Architecture/Security packets target the same frozen task state but contain role-specific selected context. Neither contains the sibling current-cycle review. Final packet is built only after both independent reviews complete.
 
+## Adaptive output efficiency
+
+All governance agents use `ADAPTIVE_OUTPUT_EFFICIENCY`: reasoning depth is not reduced, but handoffs and reports default to concise, evidence-dense output. Agents reference canonical artifacts rather than duplicating them, omit filler/repeated conclusions and preserve exact technical evidence.
+
+Compression stops when it could create ambiguity or weaken correctness, especially for security, destructive/irreversible actions, schema/data changes, unresolved requirements, architectural disagreements, blockers and recovery instructions.
+
+Reviewer findings keep all required evidence in a compact structured form so Final Reviewer can adjudicate without consuming repeated narrative.
+
+## Usage telemetry
+
+```text
+/ai-metrics [scope]
+```
+
+`/ai-metrics` is observational. It reads usage already recorded by OpenCode through supported stats/session/export capabilities. It never estimates missing token counts, never proportionally assigns model totals to roles and never changes governance state.
+
+When runtime evidence allows it, usage is aggregated by governance role/model. Missing fields or attribution are reported as `UNAVAILABLE`/`PARTIAL`. Sanitized session export is used when supported and needed for attribution; raw transcript content is not persisted as governance evidence.
+
+See [Token efficiency and usage telemetry](token-efficiency.md).
+
 ## Complete workflow
 
 ```text
@@ -196,6 +216,12 @@ Status/checkpoint report:
 
 ```text
 /ai-status
+```
+
+Recorded usage telemetry:
+
+```text
+/ai-metrics [scope]
 ```
 
 Production gate:
