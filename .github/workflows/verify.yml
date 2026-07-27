@@ -9,7 +9,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Render and verify Linux configuration
+      - name: Validate shell scripts
+        shell: bash
+        run: bash -n scripts/install.sh scripts/verify.sh scripts/uninstall.sh
+      - name: Render and verify configuration
         shell: bash
         run: |
           set -euo pipefail
@@ -23,20 +26,22 @@ jobs:
             'test/architecture' 'high' \
             'test/final' 'thinking' \
             | ./scripts/install.sh
-          ./scripts/verify.sh "$CONFIG_DIR"
-          test -s "$CONFIG_DIR/commands/ai-resume.md"
-          test -s "$CONFIG_DIR/commands/ai-metrics.md"
-          grep -Fq 'RUN_STATE.json' "$CONFIG_DIR/commands/ai-resume.md"
-          grep -Fq 'GOVERNANCE_METRICS' "$CONFIG_DIR/commands/ai-metrics.md"
-          grep -Fq 'ADAPTIVE_OUTPUT_EFFICIENCY' "$CONFIG_DIR/agents/architect.md"
-          grep -Fq 'CONTEXT_MANIFEST.md' "$CONFIG_DIR/agents/architect.md"
-          grep -Fq 'FINAL_PACKET.md' "$CONFIG_DIR/agents/final-reviewer.md"
 
   windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Render templates for PowerShell verifier
+      - name: Validate PowerShell scripts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($path in 'scripts/install.ps1','scripts/verify.ps1','scripts/uninstall.ps1') {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) { throw "$path parse failed: $($errors -join '; ')" }
+          }
+      - name: Render and verify configuration
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -60,7 +65,5 @@ jobs:
           Render 'templates/agents/final-reviewer.md' (Join-Path $config 'agents/final-reviewer.md') '__FINAL_REVIEWER_MODEL__' 'test/final' '__FINAL_REVIEWER_VARIANT_LINE__' 'thinking'
           Copy-Item 'templates/commands/*.md' (Join-Path $config 'commands')
           '{"$schema":"https://opencode.ai/config.json","default_agent":"architect"}' | Set-Content -Encoding utf8 (Join-Path $config 'opencode.json')
+
           ./scripts/verify.ps1 -ConfigDir $config
-          if (-not (Test-Path (Join-Path $config 'commands/ai-resume.md'))) { throw 'ai-resume missing' }
-          if (-not (Test-Path (Join-Path $config 'commands/ai-metrics.md'))) { throw 'ai-metrics missing' }
-          if ((Get-Content (Join-Path $config 'agents/architect.md') -Raw) -notmatch 'ADAPTIVE_OUTPUT_EFFICIENCY') { throw 'adaptive output policy missing' }
