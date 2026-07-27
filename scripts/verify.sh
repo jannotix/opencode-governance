@@ -2,12 +2,13 @@
 set -euo pipefail
 CONFIG_DIR="${1:-${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}}"
 required_agents=(architect build plan executor reviewer reviewer-architecture final-reviewer)
-required_commands=(ai-init ai-audit ai-docs ai-plan ai-execute ai-review ai-workflow ai-status ai-resume ai-release)
+required_commands=(ai-init ai-audit ai-docs ai-plan ai-execute ai-review ai-workflow ai-status ai-resume ai-metrics ai-release)
 
 for name in "${required_agents[@]}"; do
   test -s "$CONFIG_DIR/agents/$name.md" || { echo "Missing agent: $name" >&2; exit 1; }
   grep -Eq '^model: [^[:space:]/]+/[^[:space:]]+$' "$CONFIG_DIR/agents/$name.md" || { echo "Missing provider-qualified model: $name" >&2; exit 1; }
   ! grep -Eq '__[A-Z_]+__' "$CONFIG_DIR/agents/$name.md" || { echo "Unrendered placeholder: $name" >&2; exit 1; }
+  grep -Fq 'ADAPTIVE_OUTPUT_EFFICIENCY' "$CONFIG_DIR/agents/$name.md" || { echo "$name missing v1.7 adaptive output efficiency policy" >&2; exit 1; }
 done
 for name in "${required_commands[@]}"; do test -s "$CONFIG_DIR/commands/$name.md" || { echo "Missing command: $name" >&2; exit 1; }; done
 
@@ -23,6 +24,7 @@ for marker in EXECUTION_PACKET.md CONTEXT_MANIFEST.md RUN_STATE.json MINIMUM_CHA
 grep -Fq 'REVIEW_IMPLEMENTATION_PACKET.md' "$CONFIG_DIR/agents/reviewer.md" || { echo 'Implementation Reviewer packet policy missing' >&2; exit 1; }
 grep -Fq 'REVIEW_ARCHITECTURE_PACKET.md' "$CONFIG_DIR/agents/reviewer-architecture.md" && grep -Fqi 'context-efficient' "$CONFIG_DIR/agents/reviewer-architecture.md" || { echo 'Architecture Reviewer context policy missing' >&2; exit 1; }
 grep -Fq 'FINAL_PACKET.md' "$CONFIG_DIR/agents/final-reviewer.md" && grep -Fq 'perfect implementation' "$CONFIG_DIR/agents/final-reviewer.md" || { echo 'Final Reviewer policy missing' >&2; exit 1; }
+for name in reviewer reviewer-architecture; do for marker in 'F-###' 'Evidence:' 'Verify:'; do grep -Fq "$marker" "$CONFIG_DIR/agents/$name.md" || { echo "$name missing compact finding marker $marker" >&2; exit 1; }; done; done
 for name in reviewer reviewer-architecture; do for mode in TASK_REVIEW BASELINE_AUDIT RELEASE_REVIEW; do grep -Fq "$mode" "$CONFIG_DIR/agents/$name.md" || { echo "$name missing $mode" >&2; exit 1; }; done; done
 for mode in TASK_REVIEW BASELINE_AUDIT RELEASE_REVIEW; do grep -Fq "$mode" "$CONFIG_DIR/agents/final-reviewer.md" || { echo "Final Reviewer missing $mode" >&2; exit 1; }; done
 for marker in BASELINE_PASS BASELINE_DEFECT LICENSE_DECISION_REQUIRED; do grep -Fq "$marker" "$CONFIG_DIR/agents/final-reviewer.md" || { echo "Final Reviewer missing $marker" >&2; exit 1; }; done
@@ -31,6 +33,7 @@ for marker in docs/INSTALLATION.md docs/USER_MANUAL.md docs/wiki/README.md; do g
 for marker in ORIGINAL_USER_REQUEST.md CLARIFICATION_TRANSCRIPT.md APPROVED_REQUIREMENTS.md CONTEXT_MANIFEST.md RUN_STATE.json MINIMUM_CHANGE_ASSESSMENT; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-workflow.md" || { echo "/ai-workflow missing $marker" >&2; exit 1; }; done
 for marker in REVIEW_IMPLEMENTATION_PACKET.md REVIEW_ARCHITECTURE_PACKET.md FINAL_PACKET.md; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-review.md" || { echo "/ai-review missing $marker" >&2; exit 1; }; done
 for marker in RUN_STATE.json STEERING.md GOVERNANCE_RESULT; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-resume.md" || { echo "/ai-resume missing $marker" >&2; exit 1; }; done
+for marker in 'opencode stats' '--models' 'opencode session list' 'opencode export' '--sanitize' GOVERNANCE_METRICS 'ESTIMATED_VALUES: NONE' UNAVAILABLE; do grep -Fq -- "$marker" "$CONFIG_DIR/commands/ai-metrics.md" || { echo "/ai-metrics missing $marker" >&2; exit 1; }; done
 
 python3 - "$CONFIG_DIR" <<'PY'
 import json,pathlib,re,sys
