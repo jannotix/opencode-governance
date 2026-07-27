@@ -22,6 +22,17 @@ Do not overwrite valid existing project state.
 
 Build a DRAFT baseline from broad structural and risk-based reverse engineering: repository reference, stack/runtimes, entry points, architecture, important dependency/call paths, data flows/trust boundaries, schema/data mechanisms, integrations, validation capabilities, public contracts, generated-artifact mechanisms, migration mechanisms, deployment, security-sensitive areas, known defects/risks, documentation state, technical constraints, unknowns and material exclusions. Do not waste context blindly reading generated/vendor/cache/binary artifacts.
 
+Discover reusable Operational Assurance capabilities from repository/configuration evidence when present:
+
+- existing local preview, ephemeral, staging, sandbox or test-environment mechanisms and their documented production boundaries;
+- existing browser/E2E/native/manual-reproducible user-flow mechanisms;
+- existing screenshot/visual-regression/responsive-state mechanisms;
+- documented release rollback, forward-recovery, previous-artifact, backup/restore and recovery mechanisms;
+- configured external tools/MCP surfaces and their documented capabilities/side effects, without reading or persisting secret values;
+- existing project-local sandbox/container/worktree/temporary-isolation mechanisms suitable for safe experimentation.
+
+Operational-capability discovery during `/ai-init` is read-only. Do not provision environments, invoke privileged/destructive external tools or MCP actions, execute user flows merely for discovery, create worktrees/clones/containers, deploy, rollback, push, merge, or use production data/credentials.
+
 Create/update `.ai/CONTEXT_INDEX.md` as a compact routing index of material modules/paths, entry points, important callers/callees, dependency edges, data stores, trust boundaries, security-sensitive surfaces, canonical documentation, tests/validation capabilities and known risks. It is an index, not a copy of source code.
 
 Create/update `.ai/INSTRUCTION_INDEX.md` from authoritative repository-local instruction/contribution/development files. Record source path, scope/applicable paths, precedence/specificity, material constraints and unresolved conflicts. Tool-specific instructions never silently override the canonical user requirement trail. Material unresolved instruction conflicts require authoritative clarification rather than an invented precedence.
@@ -38,4 +49,4 @@ On `BASELINE_PASS`, set `BASELINE_VALIDATED`, record the validated repository re
 
 Initialize `PROJECT_HISTORY.md` as append-only. Never store secret values.
 
-Do not build per-task `VERIFICATION_PROFILE.md` or `VERIFICATION_EVIDENCE.md` during initialization; Evidence-Driven Verification is created lazily for each governed task. Do not rebuild/re-audit a valid baseline merely because `/ai-init` is run again. Use `/ai-audit` for explicit/material revalidation.
+Do not build per-task `VERIFICATION_PROFILE.md`, `VERIFICATION_EVIDENCE.md` or `OPERATIONAL_ASSURANCE` results during initialization. Evidence-Driven Verification and Operational Assurance are created lazily for each governed task. Do not rebuild/re-audit a valid baseline merely because `/ai-init` is run again. Use `/ai-audit` for explicit/material revalidation.
