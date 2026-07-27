@@ -45,7 +45,7 @@ Prioritize:
 
 - requirement and plan-to-implementation compliance;
 - root-cause correctness and whether a symptom-only patch missed sibling callers;
-- `TASK_RISK_PROFILE` accuracy and whether high-risk surfaces are understated;
+- `TASK_RISK_PROFILE` accuracy across canonical dimensions `SECURITY`, `DATA_MIGRATION`, `PUBLIC_CONTRACT`, `DEPENDENCY`, `DEPLOYMENT`, `PERFORMANCE`, `GENERATED_ARTIFACT`, `DESTRUCTIVE_ACTION`, `INPUT_VALIDATION`, `TEST_RELIABILITY`, `HUMAN_OWNERSHIP`, `USER_FLOW`, `VISUAL_BEHAVIOR`, `EXTERNAL_TOOLING`, `RECOVERY`, `EXPERIMENTATION` and whether high-risk surfaces are understated;
 - `VALIDATION_PROFILE`/CI parity and whether authoritative project checks were omitted;
 - `BUGFIX_PROOF`, including pre-fix failure/post-fix pass or honest unavailable characterization and bounded negative control where required;
 - `TEST_IMPACT_MAP` adequacy and unjustified skipping of dependent/full-suite tests;
