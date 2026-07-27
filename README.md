@@ -33,6 +33,7 @@ OpenCode primary overrides:
 /ai-workflow
 /ai-status
 /ai-resume
+/ai-metrics
 /ai-release
 ```
 
@@ -151,6 +152,18 @@ Role handoffs use fresh referential packets:
 Packets reference canonical artifacts instead of copying unrelated conversation history. The two reviewer packets never contain the sibling current-cycle review. Final packet is built only after both independent reviews complete.
 
 See [Context efficiency and resumable governance](docs/context-efficiency-resume.md).
+
+## Adaptive output efficiency and usage telemetry
+
+All seven governance agents use `ADAPTIVE_OUTPUT_EFFICIENCY`: reasoning depth is preserved while output defaults to concise, evidence-dense communication. Agents omit filler, repeated canonical evidence and obvious tool narration, while preserving exact technical evidence and expanding whenever brevity could create safety or correctness ambiguity.
+
+```text
+/ai-metrics [scope]
+```
+
+`/ai-metrics` reads usage already recorded by the installed OpenCode runtime. It may use model stats and sanitized session data for proven task/role attribution, but never estimates missing token counts or proportionally splits model totals across roles. Missing fields remain `UNAVAILABLE`.
+
+See [Token efficiency and usage telemetry](docs/token-efficiency.md).
 
 ## Minimum necessary change
 
@@ -278,7 +291,7 @@ macOS/Linux:
 ./scripts/verify.sh
 ```
 
-Verification checks all seven agents, all ten commands, provider-qualified model IDs, governed Build/Plan behavior, requirement provenance, context routing, minimum-change gate, fresh evidence packets, resume/checkpoint markers, reviewer modes, documentation/license gates and `default_agent`.
+Verification checks all seven agents, all eleven commands, provider-qualified model IDs, governed Build/Plan behavior, requirement provenance, context routing, minimum-change gate, fresh evidence packets, resume/checkpoint markers, adaptive output efficiency, real-usage metrics policy, reviewer modes, documentation/license gates and `default_agent`.
 
 ## Uninstall
 
@@ -300,6 +313,7 @@ Provider authentication, project `.ai/` state, project documentation and backups
 - [Workflow](docs/workflow.md)
 - [Requirement provenance](docs/requirement-provenance.md)
 - [Context efficiency and resumable governance](docs/context-efficiency-resume.md)
+- [Token efficiency and usage telemetry](docs/token-efficiency.md)
 - [Model configuration](docs/model-configuration.md)
 - [Project documentation governance](docs/project-documentation.md)
 - [Permissions](docs/permissions.md)
