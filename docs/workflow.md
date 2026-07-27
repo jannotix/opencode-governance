@@ -6,7 +6,7 @@
 /ai-init
 ```
 
-Creates/reuses baseline, context index, instruction index, documentation/deployment scope, history/status, audit and task directories. Architect performs broad structural/risk-based intake, then two independent baseline audits and Final Reviewer adjudication:
+Creates/reuses baseline, context index, instruction/skill index, governance memory, documentation/deployment scope, history/status, audit and task directories. Architect performs broad structural/risk-based intake, then two independent baseline audits and Final Reviewer adjudication:
 
 ```text
 BASELINE_DRAFT
@@ -17,7 +17,9 @@ BASELINE_DRAFT
 → BASELINE_VALIDATED
 ```
 
-`BASELINE_PASS` means reusable baseline/context/instruction/documentation evidence is materially trustworthy; it does not mean the codebase is defect-free. Maximum failed baseline adjudications: three, then `BASELINE_BLOCKED`.
+`BASELINE_PASS` means reusable baseline/context/instruction/skill/memory/documentation evidence is materially trustworthy; it does not mean the codebase is defect-free. Maximum failed baseline adjudications: three, then `BASELINE_BLOCKED`.
+
+`GOVERNANCE_MEMORY.md` starts empty unless authoritative validated historical evidence exists. Memory is never reconstructed from chat history.
 
 ## Requirement and clarification gate
 
@@ -29,16 +31,32 @@ CLARIFICATION_TRANSCRIPT.md
 APPROVED_REQUIREMENTS.md
 ```
 
-Original user intent remains distinct from Architect interpretation. Material unanswered decisions or unresolved instruction conflicts are resolved with OpenCode `question`; answered questions are not repeated. A plan cannot override the canonical requirement trail.
+Original user intent remains distinct from Architect interpretation. Material unanswered decisions or unresolved instruction/skill conflicts are resolved with OpenCode `question`; answered questions are not repeated. A plan cannot override the canonical requirement trail.
 
-## Context and instruction routing
+## Governed discovery, skills, context and memory
 
-A validated repository maintains:
+Validated repositories maintain:
 
-- `.ai/CONTEXT_INDEX.md` for material module/path, call/dependency, data/trust, security, documentation, validation and risk routing metadata;
-- `.ai/INSTRUCTION_INDEX.md` for authoritative repository-local instruction sources, applicable paths/scope, precedence/specificity and unresolved conflicts.
+- `.ai/CONTEXT_INDEX.md` — code/system routing;
+- `.ai/INSTRUCTION_INDEX.md` — authoritative instructions plus indexed skills, scope, precedence/trust and conflicts;
+- `.ai/GOVERNANCE_MEMORY.md` — only validated reusable lessons with scope/evidence/`stale_when`.
 
-Each task builds `CONTEXT_MANIFEST.md` from validated indexes plus current Git delta. Full repository rescans are not the default for routine work.
+For materially multi-surface tasks, Architect/Build may use `READ_ONLY_DISCOVERY_SWARM`: 2–4 independent OpenCode `Explore`/`Scout` subtasks. `Explore` is for local codebase discovery, `Scout` for external dependency/upstream/documentation research. Writable `General` is not part of governance discovery.
+
+Discovery summaries are not authoritative. Material claims are checked against primary evidence before entering `CONTEXT_MANIFEST.md`.
+
+`GOVERNED_SKILL_ROUTING` selects only task-relevant indexed skills after checking winning ID/source, scope/trigger, freshness and trust:
+
+```text
+PROJECT_AUTHORITATIVE
+PROJECT_ADVISORY
+WORKSPACE_ADVISORY
+EXTERNAL_UNTRUSTED
+```
+
+Skills never outrank the canonical user requirement trail and never silently authorize side effects.
+
+Each task builds `CONTEXT_MANIFEST.md` from validated indexes, relevant active memory, selected skills, current Git delta and verified discovery evidence. Full repository rescans are not the default for routine work.
 
 ## Minimum-change planning
 
@@ -48,58 +66,105 @@ For bugs, inspect relevant callers and prefer the correct shared root-cause fix.
 
 ## Evidence-Driven Verification
 
-Every v1.8 task creates:
+Every governed task creates:
 
 ```text
 VERIFICATION_PROFILE.md
 evidence/VERIFICATION_EVIDENCE.md
 ```
 
-`VERIFICATION_PROFILE.md` contains `TASK_RISK_PROFILE` with `NONE | LOW | HIGH` for security, data migration, public contracts, dependencies, deployment, performance, generated artifacts, destructive actions, input validation, test reliability and human ownership.
+`VERIFICATION_PROFILE.md` contains `TASK_RISK_PROFILE` and discovers authoritative `VALIDATION_PROFILE`/CI-equivalent mechanisms.
 
-Risk may add proof requirements but never removes normal validation, independent dual review or Final Reviewer adjudication.
-
-The profile discovers existing authoritative `VALIDATION_PROFILE`/CI-equivalent mechanisms and plans applicable gates:
+Core gates:
 
 ```text
 BUGFIX_PROOF
 TEST_IMPACT_MAP
 CONTRACT_COMPATIBILITY
 ENVIRONMENT_FINGERPRINT
+DEPENDENCY_ADMISSION_GATE
 DEPENDENCY_DELTA
 GENERATED_ARTIFACT_GATE
+PRE_CHANGE_SAFEPOINT
 MIGRATION_PROOF
 NON_FUNCTIONAL_BUDGETS
 FLAKINESS_EVIDENCE
 ADVERSARIAL_INPUT_VALIDATION
 CODEOWNERS_HUMAN_GATE
+CLOSED_LOOP_LEARNING
 ```
 
 Planning states are `REQUIRED | CONDITIONAL | NOT_APPLICABLE`. Evidence states are `PASS | FAIL | UNAVAILABLE | STALE | BLOCKED`.
 
-Governance does not install/add external tools merely to satisfy a gate and does not invent thresholds. Existing repository tooling is preferred. Required `UNAVAILABLE` evidence needs a justified sufficient primary-evidence alternative or remains blocking.
+`UNAVAILABLE` is never silently converted to `PASS`.
 
-Important semantics:
+### Dependency admission
 
-- reproducible bug fixes preserve pre-fix FAIL and post-fix PASS; critical fixes may use a safe bounded negative control;
-- test-impact selection may optimize large-repository validation but never bypass authoritative CI/high-risk full-suite requirements;
-- public contract changes are classified compatible, breaking or explicitly authorized breaking;
-- environment/toolchain facts are non-secret and can make runtime/build/test evidence stale;
-- dependency scanner output is evidence, not proof, and dependencies are never auto-fixed;
-- generator inputs require the project's real generation mechanism when applicable;
-- migrations are `REVERSIBLE | FORWARD_ONLY | IRREVERSIBLE`; irreversible work requires approved backup/forward-recovery evidence;
-- only existing authoritative non-functional budgets are enforced;
-- rerun PASS never erases an earlier unexplained FAIL;
-- high-risk input surfaces use existing fuzz/property/schema-negative testing or equivalent bounded primary evidence when required;
-- repository-required human-owner approval is recorded and never fabricated.
+A new direct dependency must be admitted **before installation**. `DEPENDENCY_ADMISSION_GATE` records exact package/source/version, why existing/native capabilities are insufficient, external identity/existence evidence, available maintenance/compatibility/security/license evidence and one result:
+
+```text
+ADMIT
+REJECT
+HUMAN_DECISION
+NOT_APPLICABLE
+```
+
+Suspected typo/slopsquat, unverifiable identity or unresolved material risk cannot be silently admitted. Admission does not authorize unrelated upgrades.
+
+### Pre-change safepoint
+
+When a high-risk destructive/migration/deployment-state mutation requires `PRE_CHANGE_SAFEPOINT`, evidence is captured before mutation:
+
+- Git/worktree state;
+- relevant schema/migration state;
+- lockfile/config/artifact fingerprints;
+- required existing backup/snapshot reference;
+- authoritative rollback/forward-recovery path.
+
+Governance does not fabricate a historical safepoint or silently create privileged production backups.
+
+### Closed-loop learning
+
+When evidence shows an escaped/repeated defect, validation gap, stable false-positive rationale, recovery lesson or tooling constraint, `CLOSED_LOOP_LEARNING` records:
+
+```text
+WHAT_ESCAPED
+WHY_NOT_DETECTED
+WHICH_GATE_SHOULD_HAVE_CAUGHT_IT
+WHAT_REUSABLE_RULE_CHANGES
+```
+
+Reviewers challenge the candidate independently. Final Reviewer writes `MEMORY_DECISION: NONE | APPROVE | REJECT`. Only an approved candidate may be persisted by Architect to `GOVERNANCE_MEMORY.md` with exact scope/evidence/`stale_when`.
 
 See [Evidence-Driven Verification](evidence-driven-verification.md).
+
+## Operational Assurance
+
+v2.0 adds these conditional gates inside the same verification profile/evidence pair:
+
+```text
+PREVIEW_ENVIRONMENT_GATE
+USER_FLOW_VERIFICATION
+VISUAL_BEHAVIOR_GATE
+RELEASE_RECOVERY_PROOF
+TOOL_CAPABILITY_PROFILE
+MCP_CAPABILITY_ASSESSMENT
+SAFE_EXPERIMENTATION
+```
+
+The six Operational Assurance features are preview, user-flow, visual behavior, recovery proof, tool/MCP capability governance and safe experimentation. MCP assessment is part of the tool capability feature, not a separate agent or command.
+
+Operational Assurance may require more proof but may never grant more privilege. It never silently provisions production infrastructure, uses production data/credentials, widens OpenCode permissions, deploys, rolls back, pushes or merges merely to satisfy a gate.
+
+See [Operational Assurance](operational-assurance.md).
 
 ## Checkpoint state and evidence freshness
 
 Each active task maintains `RUN_STATE.json` at governance phase boundaries. Task commands expose `GOVERNANCE_RESULT` plus `EVIDENCE_STATUS`.
 
-Evidence is dependency-specific. Source/docs, public contracts, lockfiles/dependency manifests, generator inputs, migrations, environment/toolchain or validation configuration changes invalidate only dependent evidence and downstream reviews.
+Evidence freshness is dependency-specific. Changes to source/docs, public contracts, dependency admission/lockfiles, safepoint/recovery inputs, generator inputs, migrations, environment/toolchain, validation configuration, selected skill, preview runtime, tool/MCP capability or isolation target invalidate only dependent evidence/reviews.
+
+A stale/revoked Governance Memory entry is removed from routing; it does not force unrelated task phases to restart.
 
 ## Fresh evidence packets
 
@@ -128,27 +193,33 @@ BASELINE_VALIDATED
 → REQUIREMENT_CAPTURE
 → CLARIFICATION
 → APPROVED_REQUIREMENTS
+→ GOVERNED_DISCOVERY
+→ SKILL_ROUTING
 → CONTEXT_ROUTING
 → PLANNING
 → MINIMUM_CHANGE_GATE
 → EVIDENCE_PLANNING
+→ OPERATIONAL_PLANNING
 → TASK_PLANNED
 → READY_FOR_EXECUTION
+→ PRE_CHANGE_SAFEPOINT_WHEN_REQUIRED
 → IMPLEMENTING
 → DOCUMENTATION_SYNC
 → EVIDENCE_VALIDATION
+→ OPERATIONAL_VALIDATION
 → TASK_VERIFYING
 → TASK_VALIDATED
 → DUAL_REVIEW
 → FINAL_ADJUDICATION
+→ VALIDATED_LEARNING
 → LOCAL_COMMITTED
 ```
 
-Executor implements only an approved plan, synchronizes required documentation and produces fresh required verification evidence before `TASK_VALIDATED`.
+Executor is the only application-source/project-documentation writer. It implements only an approved plan, synchronizes required documentation and produces fresh required verification/operational evidence before `TASK_VALIDATED`.
 
 At `TASK_VALIDATED`, source/task documentation and evidence target are frozen. Architect creates two fresh independent reviewer packets and requests both reviewers before consuming either result.
 
-Final Reviewer validates requirement provenance first, then plan authorization, risk classification, evidence sufficiency/freshness, implementation and reviewer allegations. Reviewer agreement is never counted as proof.
+Final Reviewer validates requirement provenance first, then plan authorization, skill/memory relevance, risk classification, dependency admission/safepoint, evidence sufficiency/freshness, implementation and reviewer allegations. Reviewer agreement is never counted as proof.
 
 Final task verdicts:
 
@@ -159,7 +230,7 @@ Final task verdicts:
 
 A perfect implementation of a materially wrong plan is `PLAN_DEFECT`. Required stale/insufficient evidence cannot support PASS. Maximum failed final-adjudication cycles: three, then `BLOCKED`.
 
-After `PASS`, Executor creates one scoped local task commit. Push requires explicit user authorization. Repository-required human-owner approval remains enforced at the boundary defined by project policy.
+After an approved `MEMORY_DECISION`, Architect may update Governance Memory. After final `PASS`, Executor creates one scoped local task commit. Push requires explicit user authorization.
 
 ## Adaptive output efficiency
 
@@ -185,20 +256,19 @@ Material `STEERING.md` direction is appended to clarification provenance, update
 /ai-resume <TASK-ID>
 ```
 
-Resume reads checkpoint/provenance/context/instruction/verification artifacts and Git state. It reconciles `ENVIRONMENT_FINGERPRINT` and evidence dependencies before routing to the last safe unfinished phase.
+Resume reads checkpoint/provenance/context/instruction/skill/memory/verification artifacts and Git state. It never fabricates historical dependency admission, safepoint, Operational Assurance execution or memory approval.
 
 Examples:
 
-- `READY_FOR_EXECUTION` → fresh execution packet/Executor;
-- interrupted `IMPLEMENTING` → reconcile worktree/evidence dependencies;
-- interrupted `EVIDENCE_VALIDATION` → rerun only missing/stale required gates;
+- `READY_FOR_EXECUTION` → refresh skill/memory refs and execution packet; route through required safepoint before risky mutation;
+- interrupted `PRE_CHANGE_SAFEPOINT` → finish/validate safepoint before mutation;
+- interrupted `IMPLEMENTING` → reconcile worktree/admission/safepoint/evidence dependencies;
+- interrupted validation → rerun only missing/stale required gates;
 - `TASK_VALIDATED` → confirm evidence freshness, then fresh dual review;
 - interrupted `FINAL_ADJUDICATION` → rebuild final packet from fresh canonical evidence;
-- `PASS` without commit → scoped Executor finalization;
+- `PASS` + approved unpersisted memory → persist exact validated entry, then finalization;
 - `LOCAL_COMMITTED` → nothing to resume;
 - `BLOCKED`/`BASELINE_BLOCKED` → remain blocked until authoritative resolution.
-
-Resume never fabricates missing provenance/review/evidence history and never erases prior failures/flakiness evidence.
 
 ## Optional task queue
 
@@ -219,7 +289,7 @@ Large milestones may add `.ai/TASK_QUEUE.json` containing task IDs, priorities, 
 
 ## Release gate
 
-Release review re-evaluates production-wide evidence, including public contract compatibility, dependency/lockfile delta, generated artifacts, migrations/data preservation, environment/release toolchain, existing non-functional budgets, unresolved flakiness, high-risk input evidence and authoritative human-owner release gates when applicable.
+Release review re-evaluates production-wide evidence, including dependency admission, dependency/lockfile delta, required safepoint/recovery proof, public contract compatibility, generated artifacts, migrations/data preservation, environment/release toolchain, Operational Assurance, existing non-functional budgets, unresolved flakiness, high-risk input evidence and authoritative human-owner release gates when applicable.
 
 Final release verdict remains:
 
@@ -236,4 +306,4 @@ Governance never chooses/invents software licenses. Missing explicit license sta
 
 ## Large repositories
 
-Routine tasks reuse validated indexes, Git delta, context routing and test-impact evidence. Full revalidation remains reserved for materially stale evidence or broad architectural/dependency/import changes.
+Routine tasks reuse validated indexes/memory, Git delta, context routing, optional bounded read-only discovery and test-impact evidence. Full revalidation remains reserved for materially stale evidence or broad architectural/dependency/import changes.
