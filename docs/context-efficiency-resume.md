@@ -9,18 +9,59 @@ OpenCode Governance keeps durable project knowledge outside transient model cont
 - preserve reviewer independence with fresh role-specific evidence packets;
 - make interrupted tasks safely resumable from persisted evidence and Git state;
 - prefer the smallest correct, secure and maintainable change;
+- use bounded read-only parallel discovery only when it materially improves intake;
+- load specialist skills and validated governance memory only when relevant;
 - allow human steering without bypassing requirement provenance;
 - expose stable machine-readable task state for automation and future UI integrations.
 
 No external memory, loop, orchestration or retrieval package is required.
 
-## Reusable context index
+## Reusable routing evidence
 
-A validated baseline maintains `.ai/CONTEXT_INDEX.md`.
+A validated repository maintains:
 
-The index is a compact routing map, not a source-code copy. It records material modules/paths, entry points, important callers/callees, dependency edges, data stores, trust boundaries, security-sensitive surfaces, canonical documentation, tests/validation capabilities and known risks.
+```text
+.ai/CONTEXT_INDEX.md
+.ai/INSTRUCTION_INDEX.md
+.ai/GOVERNANCE_MEMORY.md
+```
 
-The index is validated with the baseline. Routine tasks reuse it together with the current Git delta. Material architectural change that invalidates it requires targeted refresh or baseline revalidation.
+`CONTEXT_INDEX.md` is a compact routing map, not a source-code copy. It records material modules/paths, entry points, important callers/callees, dependency edges, data stores, trust boundaries, security-sensitive surfaces, canonical documentation, tests/validation capabilities and known risks.
+
+`INSTRUCTION_INDEX.md` records authoritative repository-local instructions plus indexed project/OpenCode skills. Skills are indexed by winning ID/source, scope/trigger, freshness and trust classification; their full bodies are not injected into every task.
+
+`GOVERNANCE_MEMORY.md` contains only Final Reviewer-validated reusable lessons with exact scope, evidence, `stale_when` and `ACTIVE | STALE | REVOKED`. Memory is advisory routing evidence and never overrides current requirements, authoritative scoped instructions or fresh primary evidence.
+
+Routine tasks reuse validated routing evidence together with the current Git delta. Material architecture/instruction/skill changes or memory staleness invalidate only the affected routing evidence unless a broader baseline revalidation is justified.
+
+## Read-only discovery swarm
+
+For materially multi-surface tasks, Architect/Build may use `READ_ONLY_DISCOVERY_SWARM` with a bounded 2–4 independent workers:
+
+- OpenCode `Explore` for read-only local codebase discovery;
+- OpenCode `Scout` for read-only external dependency/upstream/documentation research.
+
+Writable `General` is intentionally not part of governance discovery.
+
+Discovery workers:
+
+- never edit source, project docs or `.ai/**`;
+- do not make product/project decisions;
+- do not receive sibling discovery conclusions;
+- return routing hypotheses/evidence references rather than authoritative conclusions.
+
+Architect verifies material claims against primary evidence before synthesizing them into `CONTEXT_MANIFEST.md`. Trivial/single-surface tasks do not use a swarm merely for parallelism.
+
+## Governed skill routing
+
+`GOVERNED_SKILL_ROUTING` loads only task-relevant skills indexed in `INSTRUCTION_INDEX.md` after checking:
+
+- winning ID/source;
+- scope/trigger;
+- freshness;
+- trust: `PROJECT_AUTHORITATIVE | PROJECT_ADVISORY | WORKSPACE_ADVISORY | EXTERNAL_UNTRUSTED`.
+
+A skill never outranks canonical user Requirement Provenance. Advisory/untrusted skills cannot silently authorize writes, dependency installation, security weakening, external side effects or deployment.
 
 ## Task context manifest
 
@@ -29,7 +70,10 @@ Every governed task maintains `.ai/tasks/<TASK-ID>/CONTEXT_MANIFEST.md` with:
 - selected modules/files/components;
 - relevant callers/callees and dependency edges;
 - affected data flows/trust boundaries;
+- applicable instruction/skill sources;
+- relevant active Governance Memory entries;
 - relevant tests and canonical documentation;
+- discovery-swarm evidence references when used;
 - exclusions and why they are safe to exclude;
 - evidence-triggered context expansions.
 
@@ -46,11 +90,11 @@ REVIEW_ARCHITECTURE_PACKET.md
 FINAL_PACKET.md
 ```
 
-Packets identify exact task/repository target, requirement trail, plan, context manifest, changed/affected paths, tests/evidence and expansion conditions. They reference canonical artifacts instead of duplicating their full contents.
+Packets identify exact task/repository target, requirement trail, plan, context manifest, selected instruction/skill/memory references, verification profile/evidence, changed/affected paths and expansion conditions. They reference canonical artifacts instead of duplicating their full contents.
 
 The two reviewer packets are independent and never contain sibling current-cycle review output. `FINAL_PACKET.md` is created only after both independent reviews complete and may reference both reports.
 
-Conversation history is not authoritative task evidence.
+Conversation history, discovery summaries, skill prose and Governance Memory are not authoritative task evidence.
 
 ## Minimum necessary change
 
@@ -106,15 +150,43 @@ Use these field names consistently. Additional backward-compatible fields may be
 
 Checkpoint updates occur at phase boundaries, not after every tool call.
 
-`/ai-resume <TASK-ID>` validates the checkpoint against Git state, canonical requirement provenance, baseline freshness and unprocessed steering. It resumes from the last safe phase only when evidence still matches. It never fabricates missing history and never treats stale review output as valid after the reviewed target changed.
+`/ai-resume <TASK-ID>` validates the checkpoint against Git state, canonical requirement provenance, baseline/index/memory freshness, selected skills, verification/operational evidence and unprocessed steering. It resumes from the last safe phase only when evidence still matches.
+
+### v2 no-fabrication rules
+
+Resume never retroactively invents:
+
+- `DEPENDENCY_ADMISSION_GATE = ADMIT` for a package already installed without authoritative admission evidence;
+- a `PRE_CHANGE_SAFEPOINT` after the risky mutation has already happened;
+- preview/user-flow/visual/recovery/tool/isolation evidence that was never captured;
+- prior `Explore`/`Scout` discovery completion;
+- skill use that is not recorded by current authoritative task evidence;
+- `MEMORY_DECISION: APPROVE` or a Governance Memory entry from conversation history/raw reviewer allegations.
+
+If a required historical fact cannot be reconstructed safely, resume routes to the earliest safe re-evaluation point or returns `BLOCKED` rather than guessing.
+
+### Dependency-specific invalidation
+
+Resume invalidates only evidence that depends on changed surfaces. Examples:
+
+- changed source/docs/contracts → affected tests/contracts/reviews;
+- changed package identity/version/source or lockfile → dependency admission/delta and dependent validation;
+- changed safepoint/recovery assumptions → safepoint/recovery evidence;
+- changed selected skill source/version/trust → dependent plan/evidence;
+- a Governance Memory `stale_when` condition becoming true → only that memory entry becomes unusable;
+- changed preview/runtime target → preview/user-flow/visual evidence;
+- changed tool/MCP capability/permission → capability evidence;
+- changed isolation target → safe-experiment evidence.
+
+Unrelated completed phases remain reusable.
 
 ### Adoption for existing tasks
 
-Governance updates never fabricate v1.6 history for old tasks.
+Governance updates never fabricate historical v2 evidence for old tasks.
 
-For a pre-v1.6 in-progress task that lacks `RUN_STATE.json`, `CONTEXT_MANIFEST.md` or evidence packets, `/ai-resume` may create the missing v1.6 artifacts only from existing authoritative `.ai/**` evidence and current Git state. If the current phase, reviewed target or requirement state cannot be reconstructed safely, return `BLOCKED` or require authoritative clarification/revalidation instead of guessing.
+For an older in-progress task, `/ai-resume` may create missing current-version routing/verification artifacts only from authoritative existing `.ai/**` evidence and current Git state. If phase, dependency admission, safepoint, reviewed target or requirement state cannot be reconstructed safely, return `BLOCKED` or require authoritative clarification/revalidation instead of guessing.
 
-Completed historical tasks do not need synthetic v1.6 artifacts.
+Completed historical tasks do not need synthetic v2 artifacts or Governance Memory entries.
 
 ## Governed steering
 
@@ -143,6 +215,7 @@ CYCLE: <n/3 or N/A>
 HUMAN_INPUT_REQUIRED: YES|NO
 RESUMABLE: YES|NO
 CHECKPOINT: <RUN_STATE path or NONE>
+EVIDENCE_STATUS: COMPLETE|PARTIAL|BLOCKED|N/A
 ```
 
 The block is intentionally small and stable for deterministic parsing.
