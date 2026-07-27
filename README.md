@@ -8,10 +8,10 @@ The repository does not hardcode model IDs. Exact `provider/model-id` routes and
 
 ## Governance roles
 
-- `architect` — requirements, baseline/context analysis, planning and orchestration; no application-source writes.
-- `executor` — implements only approved `READY_FOR_EXECUTION` plans, synchronizes required project documentation and validates the task.
-- `reviewer` — independent implementation/runtime/regression/documentation review.
-- `reviewer-architecture` — independent architecture/security/data/dependency/deployment/maintainability review.
+- `architect` — requirements, baseline/context/instruction analysis, planning, evidence planning and orchestration; no application-source writes.
+- `executor` — implements only approved `READY_FOR_EXECUTION` plans, synchronizes required project documentation and produces validation evidence.
+- `reviewer` — independent implementation/runtime/regression/documentation/evidence review.
+- `reviewer-architecture` — independent architecture/security/data/dependency/deployment/maintainability/evidence review.
 - `final-reviewer` — independent controlling adjudicator for baseline, task and release reviews.
 
 OpenCode primary overrides:
@@ -39,20 +39,7 @@ OpenCode primary overrides:
 
 ## Installation
 
-Connect the required providers in OpenCode and list exact model IDs:
-
-```text
-/connect
-/models
-```
-
-or:
-
-```bash
-opencode models
-```
-
-Always select the full `provider/model-id`; the provider prefix determines the subscription/API route.
+Connect the required providers and list exact model IDs with `/models` or `opencode models`, then run:
 
 Windows PowerShell:
 
@@ -67,9 +54,7 @@ chmod +x scripts/install.sh
 ./scripts/install.sh
 ```
 
-The installer asks for the model and optional variant/reasoning level for the five governance roles. Build and Plan inherit the Architect model/variant. It preserves unrelated OpenCode configuration, creates timestamped backups and verifies the rendered configuration.
-
-Restart OpenCode Desktop/TUI after installation.
+Build and Plan inherit the Architect model/variant. Installation preserves unrelated OpenCode configuration, creates timestamped backups and verifies the rendered configuration. Restart OpenCode Desktop/TUI after installation.
 
 ## First repository use
 
@@ -83,6 +68,7 @@ Initial governance creates/reuses:
 .ai/
 ├── CODEBASE_BASELINE.md
 ├── CONTEXT_INDEX.md
+├── INSTRUCTION_INDEX.md
 ├── DEPLOYMENT_SCOPE.md
 ├── DOCUMENTATION_SCOPE.md
 ├── PROJECT_HISTORY.md
@@ -91,24 +77,7 @@ Initial governance creates/reuses:
 └── tasks/
 ```
 
-The initial baseline and context index are drafts until independently audited:
-
-```text
-Architect draft baseline + context index
-            ↓
-┌────────────────────────────────┐
-│ Implementation Reviewer        │
-│ Architecture/Security Reviewer │
-└───────────────┬────────────────┘
-                ↓
-          Final Reviewer
-                ↓
-       BASELINE_VALIDATED
-```
-
-The reviewers inspect primary repository evidence independently and do not receive each other's current audit output. Final Reviewer validates allegations rather than counting votes.
-
-No source implementation may begin without `BASELINE_VALIDATED`. Baseline adjudication is bounded to three failed cycles, then `BASELINE_BLOCKED`.
+The baseline, context index and instruction index are drafts until independently audited by both reviewers and adjudicated by Final Reviewer. No source implementation may begin without `BASELINE_VALIDATED`. Baseline adjudication is bounded to three failed cycles, then `BASELINE_BLOCKED`.
 
 ## Canonical requirement provenance
 
@@ -120,77 +89,104 @@ Every governed task keeps the user's request separate from Architect interpretat
 ├── CLARIFICATION_TRANSCRIPT.md
 ├── APPROVED_REQUIREMENTS.md
 ├── CONTEXT_MANIFEST.md
+├── VERIFICATION_PROFILE.md
 ├── RUN_STATE.json
 ├── STEERING.md                  # when used
 └── evidence/
+    ├── EXECUTION_PACKET.md
+    ├── VERIFICATION_EVIDENCE.md
+    ├── REVIEW_IMPLEMENTATION_PACKET.md
+    ├── REVIEW_ARCHITECTURE_PACKET.md
+    └── FINAL_PACKET.md
 ```
 
-`ORIGINAL_USER_REQUEST.md` preserves the actual request. `CLARIFICATION_TRANSCRIPT.md` is chronological and records explicit superseding decisions. `APPROVED_REQUIREMENTS.md` contains normalized executable requirements with provenance.
+`ORIGINAL_USER_REQUEST.md` preserves actual user intent. Clarifications are chronological and explicit supersession is preserved. The Architect plan is downstream evidence and cannot override the canonical requirement trail. A materially wrong plan remains `PLAN_DEFECT` even when implemented perfectly.
 
-The implementation plan is downstream evidence. A plan that materially omits, weakens, contradicts, fabricates or unauthorizedly broadens/narrows a controlling requirement is defective even when implemented perfectly.
+## Context and instruction routing
 
-Architect, Build and Plan explicitly allow OpenCode's `question` tool for unresolved material decisions. Questions already answered by the user or primary evidence must not be repeated.
+`.ai/CONTEXT_INDEX.md` is a compact routing map of material modules, call/dependency edges, data/trust boundaries, security-sensitive surfaces, canonical docs, tests and known risks.
 
-See [Requirement provenance](docs/requirement-provenance.md).
+`.ai/INSTRUCTION_INDEX.md` separately maps authoritative repository-local instruction sources to scope/applicable paths and precedence. Material instruction conflicts that repository evidence cannot resolve require authoritative clarification rather than silent precedence invention.
 
-## Context-efficient governance
+Each task creates `CONTEXT_MANIFEST.md` from validated indexes plus current Git delta. Agents start from the selected task surface and expand only when primary evidence indicates wider impact.
 
-Validated repositories maintain `.ai/CONTEXT_INDEX.md`, a compact routing map of material modules, call/dependency edges, data/trust boundaries, security-sensitive surfaces, canonical docs, tests and known risks.
-
-Each task creates `CONTEXT_MANIFEST.md` from the validated index plus current Git delta. Agents start from the selected task surface and expand only when primary evidence indicates wider dependency, regression, security, documentation or architectural impact.
-
-Role handoffs use fresh referential packets:
-
-```text
-.ai/tasks/<TASK-ID>/evidence/
-├── EXECUTION_PACKET.md
-├── REVIEW_IMPLEMENTATION_PACKET.md
-├── REVIEW_ARCHITECTURE_PACKET.md
-└── FINAL_PACKET.md
-```
-
-Packets reference canonical artifacts instead of copying unrelated conversation history. The two reviewer packets never contain the sibling current-cycle review. Final packet is built only after both independent reviews complete.
+Role handoffs use fresh referential packets rather than unrelated conversation history. Reviewer packets never contain sibling current-cycle findings.
 
 See [Context efficiency and resumable governance](docs/context-efficiency-resume.md).
 
+## Evidence-Driven Verification
+
+v1.8 adds a deterministic evidence layer around the existing multi-model workflow.
+
+Every task creates `VERIFICATION_PROFILE.md` with a `TASK_RISK_PROFILE` using `NONE | LOW | HIGH` for:
+
+- security;
+- data migration;
+- public contracts;
+- dependencies;
+- deployment;
+- performance;
+- generated artifacts;
+- destructive actions;
+- input validation;
+- test reliability;
+- human ownership.
+
+Risk classification may add proof requirements but never removes normal acceptance validation, independent dual review or Final Reviewer adjudication.
+
+The profile discovers the repository's existing authoritative `VALIDATION_PROFILE`/CI-equivalent commands and selects applicable gates:
+
+- `BUGFIX_PROOF`;
+- `TEST_IMPACT_MAP`;
+- `CONTRACT_COMPATIBILITY`;
+- `ENVIRONMENT_FINGERPRINT`;
+- `DEPENDENCY_DELTA`;
+- `GENERATED_ARTIFACT_GATE`;
+- `MIGRATION_PROOF`;
+- `NON_FUNCTIONAL_BUDGETS`;
+- `FLAKINESS_EVIDENCE`;
+- `ADVERSARIAL_INPUT_VALIDATION`;
+- `CODEOWNERS_HUMAN_GATE`.
+
+Executor records actual results in `evidence/VERIFICATION_EVIDENCE.md` using `PASS | FAIL | UNAVAILABLE | STALE | BLOCKED`.
+
+Governance does **not** hardcode or install external scanners, fuzzers, contract checkers, mutation tools, benchmark tools or code generators. Existing project tooling may be used as evidence. `UNAVAILABLE` never silently becomes `PASS`; required unavailable evidence needs an explicitly sufficient primary-evidence alternative or remains blocking.
+
+A rerun PASS never erases an earlier unexplained FAIL. Scanner output is evidence, not proof. Test-impact selection never overrides authoritative CI/high-risk full-suite requirements. Public breaking changes require explicit authorization. Irreversible migrations require approved backup/forward-recovery evidence. Existing non-functional thresholds are enforced; governance never invents new thresholds.
+
+Evidence freshness is dependency-specific: changes to source/docs, contracts, lockfiles, generator inputs, migrations, environment/toolchain or validation configuration invalidate only the evidence/reviews that depend on those surfaces.
+
+See [Evidence-Driven Verification](docs/evidence-driven-verification.md).
+
 ## Adaptive output efficiency and usage telemetry
 
-All seven governance agents use `ADAPTIVE_OUTPUT_EFFICIENCY`: reasoning depth is preserved while output defaults to concise, evidence-dense communication. Agents omit filler, repeated canonical evidence and obvious tool narration, while preserving exact technical evidence and expanding whenever brevity could create safety or correctness ambiguity.
+All seven governance agents use `ADAPTIVE_OUTPUT_EFFICIENCY`: reasoning depth is preserved while output defaults to concise, evidence-dense communication.
 
 ```text
 /ai-metrics [scope]
 ```
 
-`/ai-metrics` reads usage already recorded by the installed OpenCode runtime. It may use model stats and sanitized session data for proven task/role attribution, but never estimates missing token counts or proportionally splits model totals across roles. Missing fields remain `UNAVAILABLE`.
+`/ai-metrics` reads usage already recorded by OpenCode and never estimates missing token counts or proportionally splits model totals across roles. Missing fields remain `UNAVAILABLE`.
 
 See [Token efficiency and usage telemetry](docs/token-efficiency.md).
 
 ## Minimum necessary change
 
-Every implementation-ready plan contains `MINIMUM_CHANGE_ASSESSMENT`:
+Every implementation-ready plan contains `MINIMUM_CHANGE_ASSESSMENT`: root cause/evidence-backed hypothesis, existing capability/pattern reuse, standard/native option, installed dependency option, justification for new dependencies/abstractions and why the proposed diff is the smallest correct, secure and maintainable change.
 
-- root cause or evidence-backed hypothesis;
-- existing code/pattern reuse;
-- standard-library/native-platform option;
-- already-installed dependency option;
-- justification for new dependencies or abstractions;
-- why the proposed diff is the smallest correct, secure and maintainable change.
-
-Minimalism never removes required security, trust-boundary validation, data-loss protection, error handling, accessibility or approved behavior. Bug fixes should address the shared root cause when relevant callers demonstrate it, rather than only patching the reported symptom.
+Minimalism never removes required security, trust-boundary validation, data-loss protection, error handling, accessibility or approved behavior.
 
 ## Checkpoint and resume
 
 Each active task maintains machine-readable `.ai/tasks/<TASK-ID>/RUN_STATE.json` at phase boundaries.
 
-After an interrupted session, restart, crash or provider quota exhaustion:
-
 ```text
 /ai-resume <TASK-ID>
 ```
 
-Resume validates the checkpoint against Git state, baseline freshness, requirement provenance, steering and the frozen review target. It resumes only from a safe persisted phase. Missing history is never invented, and review evidence is invalidated when the reviewed target has changed.
+Resume validates Git/checkpoint/provenance/instruction/context/evidence state. It also reconciles `ENVIRONMENT_FINGERPRINT` and evidence dependencies. A changed source, contract, lockfile, generator input, migration, environment/toolchain or validation configuration invalidates only dependent evidence/reviews; unrelated completed phases are not restarted.
 
-Task-oriented commands expose a parseable block:
+Task-oriented commands expose:
 
 ```text
 GOVERNANCE_RESULT
@@ -201,23 +197,18 @@ CYCLE: <n/3 or N/A>
 HUMAN_INPUT_REQUIRED: YES|NO
 RESUMABLE: YES|NO
 CHECKPOINT: <RUN_STATE path or NONE>
+EVIDENCE_STATUS: COMPLETE|PARTIAL|BLOCKED|N/A
 ```
 
-## Governed steering
+## Governed steering and task queue
 
-Mid-task authoritative direction may be recorded in `STEERING.md`. Material steering cannot silently mutate the task after planning: it must enter `CLARIFICATION_TRANSCRIPT.md`, update approved requirements only when authorized, and force replanning when the current plan is no longer valid.
+Material mid-task `STEERING.md` direction must enter requirement provenance and force replanning when it invalidates the current plan.
 
-## Optional task queue
+Large milestones may use optional `.ai/TASK_QUEUE.json` with priority, dependencies and state. Each task still passes the complete governance lifecycle; no unbounded autonomous loop is introduced.
 
-Large milestones may use `.ai/TASK_QUEUE.json` with task priority, dependencies and state. Governance may select the highest-priority eligible task, but every task still passes the normal baseline, provenance, planning, execution and review gates. No unbounded autonomous loop is introduced.
+## Project documentation and licensing
 
-## Project documentation governance
-
-`.ai/DOCUMENTATION_SCOPE.md` records canonical project documentation paths, applicability, audience, synchronization state and license state.
-
-Without an existing coherent convention, top-level `docs/` is the default documentation root outside the production/runtime package. For distributable applications, the normal minimum applicable set is overview/readme, step-by-step installation, user manual, wiki/index, changelog and licensing documentation, plus other admin/upgrade/architecture/configuration/API/security/troubleshooting/release documentation when applicable.
-
-Every task records `DOCUMENTATION_IMPACT: NONE | UPDATE_REQUIRED | CREATE_REQUIRED`. Required documentation is synchronized by Executor before `TASK_VALIDATED` and reviewed with the implementation.
+`.ai/DOCUMENTATION_SCOPE.md` records canonical project documentation paths, applicability, audience, synchronization state and license state. Every task records `DOCUMENTATION_IMPACT: NONE | UPDATE_REQUIRED | CREATE_REQUIRED`; required documentation is synchronized before validation and reviewed with implementation.
 
 Governance never chooses a software license. Missing explicit owner/legal evidence becomes `LICENSE_DECISION_REQUIRED` and blocks release readiness until resolved.
 
@@ -226,19 +217,21 @@ Governance never chooses a software license. Missing explicit owner/legal eviden
 ```text
 BASELINE_VALIDATED
         ↓
-REQUIREMENT_CAPTURE
+REQUIREMENT_CAPTURE / CLARIFICATION
         ↓
-CLARIFICATION / APPROVED_REQUIREMENTS
+APPROVED_REQUIREMENTS
         ↓
-CONTEXT_ROUTING
+CONTEXT + INSTRUCTION ROUTING
         ↓
 PLANNING / MINIMUM_CHANGE_GATE
+        ↓
+EVIDENCE_PLANNING
         ↓
 READY_FOR_EXECUTION
         ↓
 EXECUTOR
         ↓
-DOCUMENTATION_SYNC / TASK_VERIFYING
+DOCUMENTATION_SYNC / EVIDENCE_VALIDATION
         ↓
 TASK_VALIDATED
         ↓
@@ -254,13 +247,11 @@ PASS / IMPLEMENTATION_DEFECT / PLAN_DEFECT / BLOCKED
           LOCAL_COMMITTED
 ```
 
-The source/documentation target is frozen during each review cycle. Only Final Reviewer validated corrections may drive automatic repair. Task final-adjudication failures are bounded to three cycles, then `BLOCKED`.
-
-After `PASS`, Executor creates one scoped local task commit. `git push` always requires explicit user authorization.
+The source/documentation/evidence target is frozen during each review cycle. Only Final Reviewer validated corrections may drive automatic repair. Task final-adjudication failures remain bounded to three cycles. After `PASS`, Executor creates one scoped local commit; `git push` always requires explicit user authorization.
 
 ## Large repositories
 
-A validated baseline/context index is reusable. Routine tasks use Git delta plus task-specific routing rather than rescanning the complete repository. Full adversarial revalidation is reserved for material architecture changes, broad milestones, large merge/rebase events, major dependency upgrades, substantial imported code, materially stale evidence or explicit `/ai-audit`.
+Validated baseline/context/instruction indexes are reusable. Routine tasks use Git delta plus task-specific routing and test-impact evidence rather than rescanning the complete repository. Full adversarial revalidation remains reserved for materially stale evidence or broad repository changes.
 
 ## Release gate
 
@@ -268,7 +259,7 @@ A validated baseline/context index is reusable. Routine tasks use Git delta plus
 /ai-release
 ```
 
-Release review requires a current validated baseline, synchronized required documentation, explicit license decision, production package correctness, clean installation/startup evidence when applicable, required tests/build/static checks, secret safety, schema/data preservation and mandatory real integration validation.
+Release review requires a current validated baseline, synchronized documentation, explicit license decision, production package correctness, clean installation/startup evidence when applicable and fresh applicable Evidence-Driven Verification, including contract/dependency/generated/migration/non-functional/human-owner gates when authoritative project evidence requires them.
 
 Final release verdict:
 
@@ -291,7 +282,20 @@ macOS/Linux:
 ./scripts/verify.sh
 ```
 
-Verification checks all seven agents, all eleven commands, provider-qualified model IDs, governed Build/Plan behavior, requirement provenance, context routing, minimum-change gate, fresh evidence packets, resume/checkpoint markers, adaptive output efficiency, real-usage metrics policy, reviewer modes, documentation/license gates and `default_agent`.
+Verification checks all seven agents, all eleven commands, provider-qualified model IDs, governed Build/Plan behavior, requirement provenance, context/instruction routing, minimum-change gate, fresh evidence packets, resume/checkpoint markers, Evidence-Driven Verification, adaptive output efficiency, real-usage metrics policy, reviewer modes, documentation/license gates and `default_agent`.
+
+## Documentation
+
+- [Installation](docs/installation.md)
+- [Workflow](docs/workflow.md)
+- [Requirement provenance](docs/requirement-provenance.md)
+- [Context efficiency and resumable governance](docs/context-efficiency-resume.md)
+- [Evidence-Driven Verification](docs/evidence-driven-verification.md)
+- [Token efficiency and usage telemetry](docs/token-efficiency.md)
+- [Model configuration](docs/model-configuration.md)
+- [Project documentation governance](docs/project-documentation.md)
+- [Permissions](docs/permissions.md)
+- [Troubleshooting](docs/troubleshooting.md)
 
 ## Uninstall
 
@@ -306,18 +310,6 @@ or:
 ```
 
 Provider authentication, project `.ai/` state, project documentation and backups are left untouched.
-
-## Documentation
-
-- [Installation](docs/installation.md)
-- [Workflow](docs/workflow.md)
-- [Requirement provenance](docs/requirement-provenance.md)
-- [Context efficiency and resumable governance](docs/context-efficiency-resume.md)
-- [Token efficiency and usage telemetry](docs/token-efficiency.md)
-- [Model configuration](docs/model-configuration.md)
-- [Project documentation governance](docs/project-documentation.md)
-- [Permissions](docs/permissions.md)
-- [Troubleshooting](docs/troubleshooting.md)
 
 ## License
 
