@@ -67,8 +67,8 @@ Write-Utf8NoBom $Target (($Obj | ConvertTo-Json -Depth 20) + [Environment]::NewL
 
 & (Join-Path $PSScriptRoot 'verify.ps1') -ConfigDir $ConfigDir
 Write-Host 'Installed. Architect is default; Build is governed full workflow and Plan is governed planning-only.'
-Write-Host 'v2.0 Operational Assurance + Evidence-Driven Verification, context-efficient governance, safe resume, adaptive output efficiency and real usage metrics are active.'
-Write-Host 'Operational/evidence gates reuse approved project tooling and environments; governance never installs verification tools, provisions production infrastructure or broadens agent permissions automatically.'
+Write-Host 'v2.0 Operational Assurance is active with Evidence-Driven Verification, bounded read-only Explore/Scout discovery, governed skill routing, validated Governance Memory, dependency admission, pre-change safepoints, safe resume, adaptive output efficiency and real usage metrics.'
+Write-Host 'Governance reuses approved project tooling/environments, never installs verification tools merely for a gate, never silently admits new dependencies, never fabricates safepoints/memory, never provisions production infrastructure and never broadens agent permissions automatically.'
 Write-Host 'Use /ai-resume <TASK-ID> after an interrupted governed task.'
 Write-Host 'Use /ai-metrics [scope] to inspect recorded OpenCode usage without invented estimates.'
 Write-Host 'Use full provider/model IDs to select the exact subscription/provider path for each role.'
