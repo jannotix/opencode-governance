@@ -1,24 +1,12 @@
 # Context efficiency and resumable governance
 
-OpenCode Governance keeps durable project knowledge outside transient model context and reconstructs each agent handoff from canonical evidence.
+OpenCode Governance keeps durable project knowledge in `.ai/**` and reconstructs each task/agent handoff from canonical evidence instead of conversation history.
 
-## Goals
+No external memory, retrieval or orchestration package is required.
 
-- reduce repeated repository reads without reducing review coverage;
-- keep each agent context focused on the task and actual risk surface;
-- preserve reviewer independence with fresh role-specific evidence packets;
-- make interrupted tasks safely resumable from persisted evidence and Git state;
-- prefer the smallest correct, secure and maintainable change;
-- use bounded read-only parallel discovery only when it materially improves intake;
-- load specialist skills and validated governance memory only when relevant;
-- allow human steering without bypassing requirement provenance;
-- expose stable machine-readable task state for automation and future UI integrations.
+## Reusable indexes
 
-No external memory, loop, orchestration or retrieval package is required.
-
-## Reusable routing evidence
-
-A validated repository maintains:
+Validated repositories maintain:
 
 ```text
 .ai/CONTEXT_INDEX.md
@@ -26,62 +14,108 @@ A validated repository maintains:
 .ai/GOVERNANCE_MEMORY.md
 ```
 
-`CONTEXT_INDEX.md` is a compact routing map, not a source-code copy. It records material modules/paths, entry points, important callers/callees, dependency edges, data stores, trust boundaries, security-sensitive surfaces, canonical documentation, tests/validation capabilities and known risks.
+### `CONTEXT_INDEX.md`
 
-`INSTRUCTION_INDEX.md` records authoritative repository-local instructions plus indexed project/OpenCode skills. Skills are indexed by winning ID/source, scope/trigger, freshness and trust classification; their full bodies are not injected into every task.
+Compact routing map for material modules, entry points, dependency/call edges, data/trust boundaries, security-sensitive surfaces, canonical documentation, tests/validation capabilities and known risks.
 
-`GOVERNANCE_MEMORY.md` contains only Final Reviewer-validated reusable lessons with exact scope, evidence, `stale_when` and `ACTIVE | STALE | REVOKED`. Memory is advisory routing evidence and never overrides current requirements, authoritative scoped instructions or fresh primary evidence.
+It is a routing index, not a source-code copy.
 
-Routine tasks reuse validated routing evidence together with the current Git delta. Material architecture/instruction/skill changes or memory staleness invalidate only the affected routing evidence unless a broader baseline revalidation is justified.
+### `INSTRUCTION_INDEX.md`
 
-## Read-only discovery swarm
+Maps repository-local instructions and skills with scope, precedence/trust, freshness and conflicts.
 
-For materially multi-surface tasks, Architect/Build may use `READ_ONLY_DISCOVERY_SWARM` with a bounded 2–4 independent workers:
+Skill trust classes:
 
-- OpenCode `Explore` for read-only local codebase discovery;
-- OpenCode `Scout` for read-only external dependency/upstream/documentation research.
+```text
+PROJECT_AUTHORITATIVE
+PROJECT_ADVISORY
+WORKSPACE_ADVISORY
+EXTERNAL_UNTRUSTED
+```
 
-Writable `General` is intentionally not part of governance discovery.
+Skills never outrank canonical requirement provenance.
 
-Discovery workers:
+### `GOVERNANCE_MEMORY.md`
 
-- never edit source, project docs or `.ai/**`;
-- do not make product/project decisions;
-- do not receive sibling discovery conclusions;
-- return routing hypotheses/evidence references rather than authoritative conclusions.
+Stores only Final Reviewer-approved reusable lessons. Each active entry is scoped, evidence-backed and includes a `stale_when` condition.
 
-Architect verifies material claims against primary evidence before synthesizing them into `CONTEXT_MANIFEST.md`. Trivial/single-surface tasks do not use a swarm merely for parallelism.
+Statuses:
 
-## Governed skill routing
+```text
+ACTIVE
+STALE
+REVOKED
+```
 
-`GOVERNED_SKILL_ROUTING` loads only task-relevant skills indexed in `INSTRUCTION_INDEX.md` after checking:
-
-- winning ID/source;
-- scope/trigger;
-- freshness;
-- trust: `PROJECT_AUTHORITATIVE | PROJECT_ADVISORY | WORKSPACE_ADVISORY | EXTERNAL_UNTRUSTED`.
-
-A skill never outranks canonical user Requirement Provenance. Advisory/untrusted skills cannot silently authorize writes, dependency installation, security weakening, external side effects or deployment.
+Memory is advisory routing evidence, not a waiver or substitute for current primary evidence.
 
 ## Task context manifest
 
-Every governed task maintains `.ai/tasks/<TASK-ID>/CONTEXT_MANIFEST.md` with:
+Each task maintains:
+
+```text
+.ai/tasks/<TASK-ID>/CONTEXT_MANIFEST.md
+```
+
+The manifest records:
 
 - selected modules/files/components;
 - relevant callers/callees and dependency edges;
 - affected data flows/trust boundaries;
-- applicable instruction/skill sources;
+- applicable instruction and skill sources;
 - relevant active Governance Memory entries;
-- relevant tests and canonical documentation;
-- discovery-swarm evidence references when used;
-- exclusions and why they are safe to exclude;
-- evidence-triggered context expansions.
+- tests and canonical documentation;
+- explicit safe exclusions;
+- evidence-triggered context expansion.
 
-Agents begin with this bounded surface and expand only when primary evidence indicates wider dependency, regression, security, documentation or architectural impact.
+Routine tasks start from validated indexes plus current Git delta and expand only when primary evidence establishes wider impact.
+
+## Read-only discovery swarm
+
+For materially multi-surface tasks, Architect/Build may use bounded parallel discovery:
+
+```text
+READ_ONLY_DISCOVERY_SWARM
+```
+
+Supported governance workers:
+
+- `Explore` — local codebase discovery;
+- `Scout` — external dependency/upstream/documentation research.
+
+Default bound: 2–4 independent assignments.
+
+Rules:
+
+- workers remain read-only;
+- workers do not make product/project decisions;
+- sibling conclusions are not shared when independence matters;
+- summaries are routing hypotheses, not proof;
+- material claims are verified against primary evidence before entering `CONTEXT_MANIFEST.md` or a plan;
+- writable `General` is not used as a governance discovery worker.
+
+Trivial single-surface tasks do not use a swarm merely for parallelism.
+
+## Governed skill routing
+
+`GOVERNED_SKILL_ROUTING` loads only task-relevant indexed skills.
+
+Before use, verify:
+
+- winning skill ID/source;
+- applicable scope/trigger;
+- freshness;
+- trust classification.
+
+External/untrusted skill content cannot silently authorize writes, dependency installation, security weakening, network side effects, deployment or requirement changes.
 
 ## Fresh evidence packets
 
-Task handoffs use referential packets under `.ai/tasks/<TASK-ID>/evidence/`:
+Task handoffs use referential packets under:
+
+```text
+.ai/tasks/<TASK-ID>/evidence/
+```
 
 ```text
 EXECUTION_PACKET.md
@@ -90,34 +124,31 @@ REVIEW_ARCHITECTURE_PACKET.md
 FINAL_PACKET.md
 ```
 
-Packets identify exact task/repository target, requirement trail, plan, context manifest, selected instruction/skill/memory references, verification profile/evidence, changed/affected paths and expansion conditions. They reference canonical artifacts instead of duplicating their full contents.
+Packets identify the exact target and reference canonical artifacts rather than duplicating them.
 
-The two reviewer packets are independent and never contain sibling current-cycle review output. `FINAL_PACKET.md` is created only after both independent reviews complete and may reference both reports.
-
-Conversation history, discovery summaries, skill prose and Governance Memory are not authoritative task evidence.
+Reviewer packets are independent and never contain sibling current-cycle review output. `FINAL_PACKET.md` is created only after both independent reviews complete.
 
 ## Minimum necessary change
 
 Every implementation-ready plan includes `MINIMUM_CHANGE_ASSESSMENT` covering:
 
-- root cause or explicit evidence-backed hypothesis;
-- whether the requested capability already exists;
-- reusable project code/patterns;
-- standard-library/native-platform capability;
+- root cause or evidence-backed hypothesis;
+- existing project/native/stdlib capability;
 - already-installed dependency capability;
-- justification for any new dependency;
-- justification for any new abstraction/layer;
+- justification for any new dependency or abstraction;
 - why the proposed diff is the smallest correct, secure and maintainable solution.
 
-Minimalism never removes required validation at trust boundaries, security controls, data-loss protection, error handling, accessibility or an explicit approved requirement.
+Minimalism never removes required security, data-loss protection, trust-boundary validation, error handling, accessibility or approved behavior.
 
-For bug fixes, inspect relevant callers and prefer the shared root-cause fix when it is the correct smaller solution rather than patching only one reported symptom.
+## Checkpoint state
 
-## Checkpoint and resume
+Every active task maintains:
 
-Every active task maintains `.ai/tasks/<TASK-ID>/RUN_STATE.json`.
+```text
+.ai/tasks/<TASK-ID>/RUN_STATE.json
+```
 
-Canonical top-level fields are:
+Canonical top-level fields:
 
 ```json
 {
@@ -144,67 +175,64 @@ Canonical top-level fields are:
 }
 ```
 
-Use these field names consistently. Additional backward-compatible fields may be added when they carry evidence, but existing fields must not be silently renamed within an active task.
+`repository_head` alone is insufficient for a dirty worktree. Resume/review reuse must reconcile Git status/diff and the target recorded by the relevant packet/evidence.
 
-`repository_head` alone is not proof that an uncommitted worktree is unchanged. Before reusing execution/review evidence after interruption, compare current Git status/diff and the changed paths recorded in the relevant evidence packet. Any ambiguous target drift invalidates stale review evidence or blocks resume until reconciled.
+Checkpoints are written at phase boundaries, not after every tool call.
 
-Checkpoint updates occur at phase boundaries, not after every tool call.
+## Resume
 
-`/ai-resume <TASK-ID>` validates the checkpoint against Git state, canonical requirement provenance, baseline/index/memory freshness, selected skills, verification/operational evidence and unprocessed steering. It resumes from the last safe phase only when evidence still matches.
+```text
+/ai-resume <TASK-ID>
+```
 
-### v2 no-fabrication rules
+Resume reconstructs state from Git and persisted `.ai/**` evidence only.
 
-Resume never retroactively invents:
+It reconciles, when applicable:
 
-- `DEPENDENCY_ADMISSION_GATE = ADMIT` for a package already installed without authoritative admission evidence;
-- a `PRE_CHANGE_SAFEPOINT` after the risky mutation has already happened;
-- preview/user-flow/visual/recovery/tool/isolation evidence that was never captured;
-- prior `Explore`/`Scout` discovery completion;
-- skill use that is not recorded by current authoritative task evidence;
-- `MEMORY_DECISION: APPROVE` or a Governance Memory entry from conversation history/raw reviewer allegations.
+- canonical requirement provenance;
+- baseline/context/instruction freshness;
+- selected skills and active Governance Memory;
+- current Git target/worktree;
+- `VERIFICATION_PROFILE.md` and evidence freshness;
+- dependency admission and lockfile state;
+- `PRE_CHANGE_SAFEPOINT` and recovery inputs;
+- preview/runtime targets;
+- tool/MCP configuration and permissions;
+- safe-experiment isolation target;
+- review freeze and completed packets;
+- unprocessed `STEERING.md`.
 
-If a required historical fact cannot be reconstructed safely, resume routes to the earliest safe re-evaluation point or returns `BLOCKED` rather than guessing.
+Only dependent stale evidence/reviews are invalidated. Unrelated completed phases are preserved.
 
-### Dependency-specific invalidation
+Resume never fabricates historical:
 
-Resume invalidates only evidence that depends on changed surfaces. Examples:
+- dependency admission;
+- safepoints;
+- preview/user-flow/visual execution;
+- human approval;
+- Governance Memory approval.
 
-- changed source/docs/contracts → affected tests/contracts/reviews;
-- changed package identity/version/source or lockfile → dependency admission/delta and dependent validation;
-- changed safepoint/recovery assumptions → safepoint/recovery evidence;
-- changed selected skill source/version/trust → dependent plan/evidence;
-- a Governance Memory `stale_when` condition becoming true → only that memory entry becomes unusable;
-- changed preview/runtime target → preview/user-flow/visual evidence;
-- changed tool/MCP capability/permission → capability evidence;
-- changed isolation target → safe-experiment evidence.
+When safe reconstruction is impossible, return `BLOCKED` or require authoritative clarification/revalidation.
 
-Unrelated completed phases remain reusable.
+## Adoption across governance versions
 
-### Adoption for existing tasks
+Governance upgrades do not mass-edit existing project `.ai/**` state.
 
-Governance updates never fabricate historical v2 evidence for old tasks.
-
-For an older in-progress task, `/ai-resume` may create missing current-version routing/verification artifacts only from authoritative existing `.ai/**` evidence and current Git state. If phase, dependency admission, safepoint, reviewed target or requirement state cannot be reconstructed safely, return `BLOCKED` or require authoritative clarification/revalidation instead of guessing.
-
-Completed historical tasks do not need synthetic v2 artifacts or Governance Memory entries.
+In-progress tasks may acquire newer artifacts only from current authoritative evidence when resumed/replanned. Completed historical tasks are not retroactively rewritten.
 
 ## Governed steering
 
-An active task may contain `.ai/tasks/<TASK-ID>/STEERING.md`.
+Optional task steering lives in:
 
-Steering is authoritative user/project-owner input only when provenance is clear. Before acting on new material steering:
+```text
+.ai/tasks/<TASK-ID>/STEERING.md
+```
 
-1. record it chronologically in `CLARIFICATION_TRANSCRIPT.md`;
-2. determine whether it adds, narrows or explicitly supersedes a requirement;
-3. update `APPROVED_REQUIREMENTS.md` only when authorized by that input;
-4. re-evaluate the plan;
-5. return to `PLANNING` when the existing plan is no longer valid.
-
-Steering never silently mutates requirements after planning. Operational prioritization that does not change requirements may be recorded/applied without rewriting the plan.
+Material authoritative steering is appended to `CLARIFICATION_TRANSCRIPT.md`, reflected in `APPROVED_REQUIREMENTS.md` when authorized, and triggers replanning when it invalidates the current plan.
 
 ## Machine-readable result
 
-Task-oriented governance commands finish with:
+Task-oriented commands emit:
 
 ```text
 GOVERNANCE_RESULT
@@ -218,10 +246,6 @@ CHECKPOINT: <RUN_STATE path or NONE>
 EVIDENCE_STATUS: COMPLETE|PARTIAL|BLOCKED|N/A
 ```
 
-The block is intentionally small and stable for deterministic parsing.
-
 ## Optional task queue
 
-Large milestones may use `.ai/TASK_QUEUE.json`. The queue is optional and records task IDs, priority, dependencies and state. Governance may select the highest-priority eligible task whose dependencies are complete, but every selected task still runs through normal baseline, provenance, planning, execution and review gates.
-
-A queue never creates an unbounded autonomous loop. Baseline/task adjudication remain capped at three failed cycles and human decisions still block when required.
+Large milestones may use `.ai/TASK_QUEUE.json` for priority, dependencies and state. Queue selection never bypasses normal baseline, provenance, planning, execution, evidence or review gates and never creates an unbounded autonomous loop.
