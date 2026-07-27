@@ -30,7 +30,7 @@ function Write-Utf8NoBom([string]$Path, [string]$Text) {
 }
 
 @('architect.md','build.md','plan.md','executor.md','reviewer.md','reviewer-architecture.md','final-reviewer.md') | ForEach-Object { Backup-IfExists (Join-Path $ConfigDir "agents\$_") }
-@('ai-init.md','ai-audit.md','ai-docs.md','ai-plan.md','ai-execute.md','ai-review.md','ai-workflow.md','ai-status.md','ai-resume.md','ai-release.md') | ForEach-Object { Backup-IfExists (Join-Path $ConfigDir "commands\$_") }
+@('ai-init.md','ai-audit.md','ai-docs.md','ai-plan.md','ai-execute.md','ai-review.md','ai-workflow.md','ai-status.md','ai-resume.md','ai-metrics.md','ai-release.md') | ForEach-Object { Backup-IfExists (Join-Path $ConfigDir "commands\$_") }
 Backup-IfExists (Join-Path $ConfigDir 'opencode.jsonc')
 Backup-IfExists (Join-Path $ConfigDir 'opencode.json')
 
@@ -67,8 +67,9 @@ Write-Utf8NoBom $Target (($Obj | ConvertTo-Json -Depth 20) + [Environment]::NewL
 
 & (Join-Path $PSScriptRoot 'verify.ps1') -ConfigDir $ConfigDir
 Write-Host 'Installed. Architect is default; Build is governed full workflow and Plan is governed planning-only.'
-Write-Host 'v1.6 context routing, fresh evidence packets, checkpoint/resume, steering provenance and minimum-change gates are active.'
+Write-Host 'v1.7 context-efficient governance, safe resume, adaptive output efficiency and real usage metrics are active.'
 Write-Host 'Use /ai-resume <TASK-ID> after an interrupted governed task.'
+Write-Host 'Use /ai-metrics [scope] to inspect recorded OpenCode usage without invented estimates.'
 Write-Host 'Use full provider/model IDs to select the exact subscription/provider path for each role.'
 Write-Host 'Restart OpenCode Desktop/TUI before use.'
 Write-Host "Backup: $BackupDir"
