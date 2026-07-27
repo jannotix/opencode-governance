@@ -67,7 +67,8 @@ Write-Utf8NoBom $Target (($Obj | ConvertTo-Json -Depth 20) + [Environment]::NewL
 
 & (Join-Path $PSScriptRoot 'verify.ps1') -ConfigDir $ConfigDir
 Write-Host 'Installed. Architect is default; Build is governed full workflow and Plan is governed planning-only.'
-Write-Host 'v1.7 context-efficient governance, safe resume, adaptive output efficiency and real usage metrics are active.'
+Write-Host 'v1.8 Evidence-Driven Verification, context-efficient governance, safe resume, adaptive output efficiency and real usage metrics are active.'
+Write-Host 'Evidence gates use existing project tooling/primary evidence and never install external verification dependencies automatically.'
 Write-Host 'Use /ai-resume <TASK-ID> after an interrupted governed task.'
 Write-Host 'Use /ai-metrics [scope] to inspect recorded OpenCode usage without invented estimates.'
 Write-Host 'Use full provider/model IDs to select the exact subscription/provider path for each role.'
