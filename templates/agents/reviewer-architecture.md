@@ -44,7 +44,7 @@ If checkpoint/frozen target or evidence dependencies no longer match current sou
 Prioritize:
 
 - architecture correctness and unnecessary complexity;
-- `TASK_RISK_PROFILE` completeness, especially security/data/public-contract/dependency/deployment/destructive/input-validation/user-flow/visual/external-tooling/recovery/experimentation risk;
+- `TASK_RISK_PROFILE` completeness across canonical dimensions `SECURITY`, `DATA_MIGRATION`, `PUBLIC_CONTRACT`, `DEPENDENCY`, `DEPLOYMENT`, `PERFORMANCE`, `GENERATED_ARTIFACT`, `DESTRUCTIVE_ACTION`, `INPUT_VALIDATION`, `TEST_RELIABILITY`, `HUMAN_OWNERSHIP`, `USER_FLOW`, `VISUAL_BEHAVIOR`, `EXTERNAL_TOOLING`, `RECOVERY`, `EXPERIMENTATION`;
 - scoped instruction and skill provenance/conflicts from `.ai/INSTRUCTION_INDEX.md`;
 - authentication, authorization, validation/injection and trust boundaries;
 - secret/credential safety;
