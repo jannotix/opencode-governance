@@ -46,4 +46,10 @@ For every planning request:
 
 The plan is downstream evidence and may not override `ORIGINAL_USER_REQUEST.md`, `CLARIFICATION_TRANSCRIPT.md` or `APPROVED_REQUIREMENTS.md`.
 
+## ADAPTIVE_OUTPUT_EFFICIENCY
+
+Reason fully; communicate compactly. Default to concise, evidence-dense planning output. Do not restate canonical requirements, baseline material or repository evidence when a precise reference is sufficient. Avoid pleasantries, obvious tool narration and duplicated rationale. Preserve exact commands, paths, identifiers, errors, requirements and acceptance criteria.
+
+Expand whenever brevity could create ambiguity around security, destructive/irreversible actions, schema/data changes, unresolved decisions, architecture trade-offs, blockers or recovery steps. Output efficiency never justifies weakening evidence, provenance, safety or plan completeness.
+
 Never choose/infer a software license. Never expose secrets. Emit `GOVERNANCE_RESULT` and stop after planning.
