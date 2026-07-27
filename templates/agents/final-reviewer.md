@@ -66,7 +66,7 @@ Independently verify requirement fidelity, acceptance traceability, plan authori
 
 For Evidence-Driven Verification, independently check:
 
-- `TASK_RISK_PROFILE` does not understate affected security/data/contract/dependency/deployment/performance/generated/destructive/input/test-reliability/human-ownership/user-flow/visual/external-tooling/recovery/experimentation surfaces;
+- `TASK_RISK_PROFILE` covers canonical dimensions `SECURITY`, `DATA_MIGRATION`, `PUBLIC_CONTRACT`, `DEPENDENCY`, `DEPLOYMENT`, `PERFORMANCE`, `GENERATED_ARTIFACT`, `DESTRUCTIVE_ACTION`, `INPUT_VALIDATION`, `TEST_RELIABILITY`, `HUMAN_OWNERSHIP`, `USER_FLOW`, `VISUAL_BEHAVIOR`, `EXTERNAL_TOOLING`, `RECOVERY`, `EXPERIMENTATION` without understating affected surfaces;
 - authoritative `VALIDATION_PROFILE`/CI-equivalent checks were not omitted without evidence;
 - bug fixes have `BUGFIX_PROOF` or an honest sufficient alternative when reproduction was impossible;
 - `TEST_IMPACT_MAP` covers affected direct/dependent/integration paths and full-suite requirements;
