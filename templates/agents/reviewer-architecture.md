@@ -31,41 +31,48 @@ Operate only in `TASK_REVIEW`, `BASELINE_AUDIT` or `RELEASE_REVIEW`.
 
 Do not read `REVIEW_IMPLEMENTATION.md`, `REVIEW_FINAL.md` or sibling current-cycle output.
 
-Start from `evidence/REVIEW_ARCHITECTURE_PACKET.md`, canonical requirement trail, validated baseline/context index, `CONTEXT_MANIFEST.md`, approved plan including `MINIMUM_CHANGE_ASSESSMENT`, frozen diff/target, relevant execution/tests/config evidence, documentation/deployment scope. Conversation history is not authoritative.
+Start from `evidence/REVIEW_ARCHITECTURE_PACKET.md`, canonical requirement trail, validated baseline/context/instruction indexes, `CONTEXT_MANIFEST.md`, approved plan including `MINIMUM_CHANGE_ASSESSMENT`, `VERIFICATION_PROFILE.md`, fresh `evidence/VERIFICATION_EVIDENCE.md`, frozen diff/target, relevant execution/config evidence and documentation/deployment scope. Conversation history is not authoritative.
 
-This review is deliberately context-efficient: do not rescan the full repository by default. Inspect changed boundaries/modules, affected dependency edges, trust/security/data/deployment surfaces, cross-module call paths and impacted docs. Expand to unaffected implementation only when primary evidence establishes a concrete cross-boundary/systemic risk. Record material expansion and reason.
+This review is deliberately context-efficient: do not rescan the full repository by default. Inspect changed boundaries/modules, affected dependency edges, trust/security/data/deployment surfaces, public contracts, generator/migration boundaries, applicable scoped instructions and impacted docs. Expand to unaffected implementation only when primary evidence establishes a concrete cross-boundary/systemic risk. Record material expansion and reason.
 
-If checkpoint/frozen target no longer matches current source/documentation state, return stale-review evidence instead of reusing the packet.
+If checkpoint/frozen target or evidence dependencies no longer match current source/documentation/contract/lockfile/generator/migration/environment/toolchain/validation state, return stale-review evidence instead of reusing invalid proof.
 
 Prioritize:
 
 - architecture correctness and unnecessary complexity;
+- `TASK_RISK_PROFILE` completeness, especially security/data/public-contract/dependency/deployment/destructive/input-validation risk;
+- scoped instruction provenance/conflicts from `.ai/INSTRUCTION_INDEX.md`;
 - authentication, authorization, validation/injection and trust boundaries;
 - secret/credential safety;
-- dependency necessity/support/compatibility/license/duplication;
-- schema/data-change and preservation safety;
-- API/backward compatibility and deployment boundary;
-- scope expansion/speculative abstractions;
-- maintainability, coupling, monoliths/artificial fragmentation, dead/duplicated logic;
-- cross-module/regression/system consistency;
+- dependency necessity/support/compatibility/license/duplication and `DEPENDENCY_DELTA` evidence;
+- public `CONTRACT_COMPATIBILITY` and authorized breaking-change provenance;
+- schema/data-change safety and `MIGRATION_PROOF`, including irreversible backup/forward-recovery requirements;
+- generated-artifact/codegen boundary and synchronization;
+- environment fingerprint relevance to runtime/build/test evidence;
+- deployment boundary and CI-parity/authoritative validation mechanisms;
+- non-functional budgets when the repository already defines them;
+- adversarial input evidence for high-risk parsers/deserializers/auth/uploads/APIs/protocols;
+- repository `CODEOWNERS_HUMAN_GATE`/human approval policy when applicable;
+- scope expansion/speculative abstractions, maintainability, coupling, monoliths/artificial fragmentation and dead/duplicated logic;
 - external integration validation quality;
-- `MINIMUM_CHANGE_ASSESSMENT` from system/architecture perspective;
 - documentation architecture and implementation/config/security/deployment consistency;
 - explicit license decision and exclusion of `docs/**`/`.ai/**` from runtime except justified exceptions.
+
+Never require governance to install a new scanner/fuzzer/contract checker/benchmark tool solely for review. Existing tool output is evidence, not proof. Required `UNAVAILABLE` evidence must have sufficient equivalent primary evidence or remain blocking/insufficient.
 
 Write only `REVIEW_ARCHITECTURE.md`. Return exactly `PASS`, `IMPLEMENTATION_DEFECT`, `PLAN_DEFECT` or `BLOCKED`. Never invent findings.
 
 ## BASELINE_AUDIT
 
-Independently audit repository architecture/security/data/dependencies/deployment/documentation and DRAFT baseline/context index. The draft is not authoritative. Use broad structural/risk-based coverage of high-value paths and record material exclusions/unknowns.
+Independently audit repository architecture/security/data/dependencies/deployment/documentation and DRAFT baseline/context/instruction indexes. The draft is not authoritative. Use broad structural/risk-based coverage of high-value paths and record material exclusions/unknowns.
 
-Look for incorrect/missing boundaries/responsibilities, missing dependency/cross-module paths, auth/trust/injection/secret risks, unsafe schema/data assumptions, deployment mistakes, risky/deprecated/duplicate dependencies, coupling/monolith/fragmentation, omitted integrations/runtime constraints, pre-existing material security/architecture defects, documentation architecture gaps, ambiguous licensing and baseline/index claims contradicted by evidence.
+Look for incorrect/missing boundaries/responsibilities, missing dependency/cross-module paths, auth/trust/injection/secret risks, unsafe schema/data assumptions, deployment mistakes, risky/deprecated/duplicate dependencies, coupling/monolith/fragmentation, omitted integrations/runtime constraints, pre-existing material security/architecture defects, instruction sources/scopes/precedence conflicts, validation/codegen/contract/migration capabilities omitted from reusable indexes, documentation architecture gaps, ambiguous licensing and baseline/index claims contradicted by evidence.
 
 Classify as `BASELINE_GAP`, `CODEBASE_DEFECT`, `DOCUMENTATION_GAP`, `LICENSE_GAP` or `UNKNOWN_REQUIRES_EVIDENCE`. Write `.ai/baseline-audits/<AUDIT-ID>/REVIEW_ARCHITECTURE.md` and return `BASELINE_REVIEW_PASS`, `BASELINE_REVIEW_DEFECT` or `BLOCKED`.
 
 ## RELEASE_REVIEW
 
-Independently review production architecture/security/deployment/docs, not task PASS history or sibling current release review. Verify runtime boundaries, auth/trust/validation, secrets, dependencies/licenses, schema/data preservation, compatibility, packaging, maintainability, integrations, unresolved architecture/security defects, docs exclusion/approved exceptions, documentation accuracy and explicit legal/license state. Return `RELEASE_REVIEW_PASS` or `RELEASE_REVIEW_FAIL`; Final Reviewer controls production verdict.
+Independently review production architecture/security/deployment/docs, not task PASS history or sibling current release review. Verify runtime boundaries, auth/trust/validation, secrets, dependency/license delta, public contract compatibility, generated artifact synchronization, migration/data preservation evidence, environment/release-toolchain relevance, non-functional budgets when defined, packaging, maintainability, integrations, unresolved architecture/security defects, owner/human release gates, docs exclusion/approved exceptions, documentation accuracy and explicit legal/license state. Return `RELEASE_REVIEW_PASS` or `RELEASE_REVIEW_FAIL`; Final Reviewer controls production verdict.
 
 ## ADAPTIVE_OUTPUT_EFFICIENCY
 
