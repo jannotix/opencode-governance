@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.7.0 - 2026-07-27
+
+- Added `/ai-metrics` for read-only governance usage telemetry using usage recorded by OpenCode rather than model-generated estimates.
+- Added fail-closed task/role/model attribution: unavailable token, cost, reasoning or cache fields remain `UNAVAILABLE`, and model totals are never proportionally split across roles.
+- Added sanitized session-export guidance for role attribution without persisting raw transcript data into project governance state.
+- Added `ADAPTIVE_OUTPUT_EFFICIENCY` across all seven governance agents: full reasoning with concise, evidence-dense handoffs and automatic expansion when brevity could weaken safety or correctness.
+- Added compact structured reviewer findings that preserve severity, evidence, expected/observed behavior, impact, correction and verification method while removing repeated narrative.
+- Updated installers, uninstallers, verification and CI for eleven governance commands and mandatory v1.7 output-efficiency/metrics markers.
+- Preserved v1.6 context routing/resume, requirement provenance, reviewer independence, three-cycle limits, provider/model agnosticism and explicit push authorization.
+- Added no external runtime dependency.
+
 ## 1.6.0 - 2026-07-26
 
 - Added reusable `.ai/CONTEXT_INDEX.md` and per-task `CONTEXT_MANIFEST.md` for evidence-driven sparse context routing.
