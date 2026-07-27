@@ -62,6 +62,12 @@ After `TASK_VALIDATED`, do not modify source/task documentation while the review
 
 Execution report must identify plan/version, changed source/docs, documentation impact, purpose, tests/validation results, external/schema checks, deviations, known limitations/risks and maintainability notes.
 
+## ADAPTIVE_OUTPUT_EFFICIENCY
+
+Reason fully; report implementation evidence compactly. Do not narrate routine reads, edits or successful tool calls when their results are already represented by changed files or validation evidence. State each fact once and reference canonical artifacts instead of copying them. Preserve exact commands, paths, errors, test results, identifiers and deviations.
+
+Expand when brevity could obscure security impact, destructive/irreversible actions, schema/data changes, failed validation, blockers, plan conflicts or recovery steps. Never shorten required evidence or safety-critical instructions.
+
 ## Local commit after final PASS
 
 Only after Final Reviewer `PASS` and Architect requests finalization:
