@@ -62,7 +62,8 @@ PY
 
 "$SCRIPT_DIR/verify.sh" "$CONFIG_DIR"
 echo "Installed. Architect is default; Build is governed full workflow and Plan is governed planning-only."
-echo "v1.7 context-efficient governance, safe resume, adaptive output efficiency and real usage metrics are active."
+echo "v1.8 Evidence-Driven Verification, context-efficient governance, safe resume, adaptive output efficiency and real usage metrics are active."
+echo "Evidence gates use existing project tooling/primary evidence and never install external verification dependencies automatically."
 echo "Use /ai-resume <TASK-ID> after an interrupted governed task."
 echo "Use /ai-metrics [scope] to inspect recorded OpenCode usage without invented estimates."
 echo "Use full provider/model IDs to select the exact subscription/provider path for each role."
