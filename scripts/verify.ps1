@@ -21,8 +21,16 @@ if ($AgentText['build'] -notmatch '(?m)^\s+executor:\s+allow\s*$' -or $AgentText
 if ($AgentText['plan'] -notmatch '(?m)^\s+task:\s+deny\s*$') { throw 'Governed Plan must deny task delegation.' }
 foreach ($Name in @('architect','build','plan')) { if ($AgentText[$Name] -notmatch '(?m)^\s*question:\s+allow\s*$') { throw "$Name must explicitly allow the OpenCode question tool." } }
 
-foreach ($Marker in @('BASELINE_VALIDATED','DOCUMENTATION_SCOPE','DOCUMENTATION_IMPACT','LICENSE_DECISION_REQUIRED','CONTEXT_INDEX.md','CONTEXT_MANIFEST.md','RUN_STATE.json','MINIMUM_CHANGE_ASSESSMENT','STEERING.md')) { if ($AgentText['architect'] -notmatch [regex]::Escape($Marker)) { throw "Architect is missing v1.6 governance marker $Marker." } }
+foreach ($Marker in @('BASELINE_VALIDATED','DOCUMENTATION_SCOPE','DOCUMENTATION_IMPACT','LICENSE_DECISION_REQUIRED','CONTEXT_INDEX.md','INSTRUCTION_INDEX.md','CONTEXT_MANIFEST.md','RUN_STATE.json','MINIMUM_CHANGE_ASSESSMENT','STEERING.md')) { if ($AgentText['architect'] -notmatch [regex]::Escape($Marker)) { throw "Architect is missing governance marker $Marker." } }
 foreach ($Marker in @('ORIGINAL_USER_REQUEST.md','CLARIFICATION_TRANSCRIPT.md','APPROVED_REQUIREMENTS.md')) { if ($AgentText['architect'] -notmatch [regex]::Escape($Marker) -or $AgentText['final-reviewer'] -notmatch [regex]::Escape($Marker)) { throw "Missing canonical requirement artifact marker $Marker." } }
+
+$EvidenceMarkers = @('VERIFICATION_PROFILE.md','VERIFICATION_EVIDENCE.md','TASK_RISK_PROFILE','VALIDATION_PROFILE','BUGFIX_PROOF','TEST_IMPACT_MAP','CONTRACT_COMPATIBILITY','ENVIRONMENT_FINGERPRINT','DEPENDENCY_DELTA','GENERATED_ARTIFACT_GATE','MIGRATION_PROOF','NON_FUNCTIONAL_BUDGETS','FLAKINESS_EVIDENCE','ADVERSARIAL_INPUT_VALIDATION','CODEOWNERS_HUMAN_GATE','UNAVAILABLE')
+foreach ($Marker in $EvidenceMarkers) { if ($AgentText['architect'] -notmatch [regex]::Escape($Marker)) { throw "Architect is missing v1.8 evidence marker $Marker." } }
+foreach ($Name in @('build','plan','executor','reviewer','reviewer-architecture','final-reviewer')) {
+    foreach ($Marker in @('VERIFICATION_PROFILE','TASK_RISK_PROFILE')) { if ($AgentText[$Name] -notmatch [regex]::Escape($Marker)) { throw "$Name is missing v1.8 marker $Marker." } }
+}
+foreach ($Name in @('executor','reviewer','reviewer-architecture','final-reviewer')) { if ($AgentText[$Name] -notmatch 'VERIFICATION_EVIDENCE') { throw "$Name is missing verification evidence handling." } }
+
 foreach ($Marker in @('EXECUTION_PACKET.md','CONTEXT_MANIFEST.md','RUN_STATE.json','MINIMUM_CHANGE_ASSESSMENT')) { if ($AgentText['executor'] -notmatch [regex]::Escape($Marker)) { throw "Executor is missing $Marker." } }
 if ($AgentText['reviewer'] -notmatch 'REVIEW_IMPLEMENTATION_PACKET.md') { throw 'Implementation Reviewer is missing fresh evidence packet policy.' }
 if ($AgentText['reviewer-architecture'] -notmatch 'REVIEW_ARCHITECTURE_PACKET.md' -or $AgentText['reviewer-architecture'] -notmatch 'context-efficient') { throw 'Architecture Reviewer is missing targeted context policy.' }
@@ -38,14 +46,21 @@ foreach ($Name in $RequiredCommands) { $Path = Join-Path $ConfigDir "commands\$N
 
 $DocsCommand = Get-Content (Join-Path $ConfigDir 'commands\ai-docs.md') -Raw
 if ($DocsCommand -notmatch 'docs/INSTALLATION.md' -or $DocsCommand -notmatch 'docs/USER_MANUAL.md' -or $DocsCommand -notmatch 'docs/wiki/README.md') { throw '/ai-docs is missing required documentation coverage.' }
+$PlanCommand = Get-Content (Join-Path $ConfigDir 'commands\ai-plan.md') -Raw
 $WorkflowCommand = Get-Content (Join-Path $ConfigDir 'commands\ai-workflow.md') -Raw
+$ExecuteCommand = Get-Content (Join-Path $ConfigDir 'commands\ai-execute.md') -Raw
 $ReviewCommand = Get-Content (Join-Path $ConfigDir 'commands\ai-review.md') -Raw
+$StatusCommand = Get-Content (Join-Path $ConfigDir 'commands\ai-status.md') -Raw
 $ResumeCommand = Get-Content (Join-Path $ConfigDir 'commands\ai-resume.md') -Raw
+$ReleaseCommand = Get-Content (Join-Path $ConfigDir 'commands\ai-release.md') -Raw
 $MetricsCommand = Get-Content (Join-Path $ConfigDir 'commands\ai-metrics.md') -Raw
-foreach ($Marker in @('ORIGINAL_USER_REQUEST.md','CLARIFICATION_TRANSCRIPT.md','APPROVED_REQUIREMENTS.md','CONTEXT_MANIFEST.md','RUN_STATE.json','MINIMUM_CHANGE_ASSESSMENT')) { if ($WorkflowCommand -notmatch [regex]::Escape($Marker)) { throw "/ai-workflow is missing $Marker." } }
+foreach ($Marker in @('ORIGINAL_USER_REQUEST.md','CLARIFICATION_TRANSCRIPT.md','APPROVED_REQUIREMENTS.md','CONTEXT_MANIFEST.md','VERIFICATION_PROFILE.md','RUN_STATE.json','MINIMUM_CHANGE_ASSESSMENT')) { if ($WorkflowCommand -notmatch [regex]::Escape($Marker)) { throw "/ai-workflow is missing $Marker." } }
+foreach ($Marker in @('TASK_RISK_PROFILE','VALIDATION_PROFILE','BUGFIX_PROOF','TEST_IMPACT_MAP','CONTRACT_COMPATIBILITY','ENVIRONMENT_FINGERPRINT','DEPENDENCY_DELTA','GENERATED_ARTIFACT_GATE','MIGRATION_PROOF','NON_FUNCTIONAL_BUDGETS','FLAKINESS_EVIDENCE','ADVERSARIAL_INPUT_VALIDATION','CODEOWNERS_HUMAN_GATE')) { if ($PlanCommand -notmatch [regex]::Escape($Marker) -and $WorkflowCommand -notmatch [regex]::Escape($Marker)) { throw "Evidence-driven workflow is missing $Marker." } }
+foreach ($Text in @($ExecuteCommand,$ReviewCommand,$StatusCommand,$ResumeCommand,$ReleaseCommand)) { if ($Text -notmatch 'VERIFICATION_(PROFILE|EVIDENCE)') { throw 'A task/release command is missing v1.8 verification artifacts.' } }
 foreach ($Marker in @('REVIEW_IMPLEMENTATION_PACKET.md','REVIEW_ARCHITECTURE_PACKET.md','FINAL_PACKET.md')) { if ($ReviewCommand -notmatch [regex]::Escape($Marker)) { throw "/ai-review is missing $Marker." } }
-foreach ($Marker in @('RUN_STATE.json','STEERING.md','GOVERNANCE_RESULT')) { if ($ResumeCommand -notmatch [regex]::Escape($Marker)) { throw "/ai-resume is missing $Marker." } }
+foreach ($Marker in @('RUN_STATE.json','STEERING.md','GOVERNANCE_RESULT','ENVIRONMENT_FINGERPRINT','STALE')) { if ($ResumeCommand -notmatch [regex]::Escape($Marker)) { throw "/ai-resume is missing $Marker." } }
 foreach ($Marker in @('opencode stats','--models','opencode session list','opencode export','--sanitize','GOVERNANCE_METRICS','ESTIMATED_VALUES: NONE','UNAVAILABLE')) { if ($MetricsCommand -notmatch [regex]::Escape($Marker)) { throw "/ai-metrics is missing $Marker." } }
+if ($WorkflowCommand -notmatch 'EVIDENCE_STATUS' -or $StatusCommand -notmatch 'EVIDENCE_STATUS' -or $ResumeCommand -notmatch 'EVIDENCE_STATUS') { throw 'Machine-readable EVIDENCE_STATUS is missing.' }
 
 $JsoncPath = Join-Path $ConfigDir 'opencode.jsonc'; $JsonPath = Join-Path $ConfigDir 'opencode.json'
 $Target = if (Test-Path $JsoncPath) { $JsoncPath } elseif (Test-Path $JsonPath) { $JsonPath } else { $null }
