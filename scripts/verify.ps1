@@ -22,7 +22,7 @@ foreach ($Alias in @('build','plan')) {
 
 foreach ($Name in @('architect','build')) {
     foreach ($Worker in @('explore','scout')) {
-        if ($AgentText[$Name] -notmatch "(?m)^\s+$Worker:\s+allow\s*$") { throw "$Name must explicitly allow read-only discovery worker $Worker." }
+        if ($AgentText[$Name] -notmatch "(?m)^\s+${Worker}:\s+allow\s*$") { throw "$Name must explicitly allow read-only discovery worker $Worker." }
     }
     if ($AgentText[$Name] -match '(?m)^\s+general:\s+allow\s*$') { throw "$Name must not explicitly allow writable General as a governance discovery worker." }
 }
