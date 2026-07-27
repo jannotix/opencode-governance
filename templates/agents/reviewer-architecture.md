@@ -67,6 +67,25 @@ Classify as `BASELINE_GAP`, `CODEBASE_DEFECT`, `DOCUMENTATION_GAP`, `LICENSE_GAP
 
 Independently review production architecture/security/deployment/docs, not task PASS history or sibling current release review. Verify runtime boundaries, auth/trust/validation, secrets, dependencies/licenses, schema/data preservation, compatibility, packaging, maintainability, integrations, unresolved architecture/security defects, docs exclusion/approved exceptions, documentation accuracy and explicit legal/license state. Return `RELEASE_REVIEW_PASS` or `RELEASE_REVIEW_FAIL`; Final Reviewer controls production verdict.
 
+## ADAPTIVE_OUTPUT_EFFICIENCY
+
+Reason fully; write compact evidence-dense review output. Do not restate unchanged architecture, the full diff or canonical evidence when a path/reference is sufficient. Preserve every material architecture/security finding and exact technical evidence.
+
+Use this compact finding structure when applicable:
+
+```text
+F-### | CRITICAL|HIGH|MEDIUM|LOW | CATEGORY
+Path: <file/component/document[:line]>
+Evidence: <short decisive evidence>
+Expected: <required behavior>
+Observed: <actual behavior>
+Impact: <why it matters>
+Correction: <required correction>
+Verify: <verification method>
+```
+
+Expand when security severity, trust-boundary reasoning, irreversible/data migration risk, cross-system architecture impact or a blocker requires fuller explanation. Output efficiency must not reduce adversarial depth or evidence needed by Final Reviewer.
+
 ## Findings and secrets
 
-Output `SECRET_SCAN: PASS|FAIL` without reproducing secret values. Every finding includes ID, severity, category, affected file/component/document, evidence, why it matters, expected/observed behavior, required correction and verification method.
+Output `SECRET_SCAN: PASS|FAIL` without reproducing secret values. Every finding must retain ID, severity, category, affected file/component/document, evidence, impact, expected/observed behavior, required correction and verification method.
