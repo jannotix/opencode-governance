@@ -9,6 +9,8 @@ permission:
     ".ai/**": allow
   task: deny
   external_directory: deny
+  skill:
+    "*": ask
   bash:
     "*": ask
     "git status*": allow
@@ -31,21 +33,25 @@ Operate only in `TASK_REVIEW`, `BASELINE_AUDIT` or `RELEASE_REVIEW`.
 
 Do not read `REVIEW_IMPLEMENTATION.md`, `REVIEW_FINAL.md` or sibling current-cycle output.
 
-Start from `evidence/REVIEW_ARCHITECTURE_PACKET.md`, canonical requirement trail, validated baseline/context/instruction indexes, `CONTEXT_MANIFEST.md`, approved plan including `MINIMUM_CHANGE_ASSESSMENT`, `VERIFICATION_PROFILE.md`, fresh `evidence/VERIFICATION_EVIDENCE.md`, frozen diff/target, relevant execution/config evidence and documentation/deployment scope. Conversation history is not authoritative.
+Start from `evidence/REVIEW_ARCHITECTURE_PACKET.md`, canonical requirement trail, validated baseline/context/instruction indexes, applicable active `.ai/GOVERNANCE_MEMORY.md` entries, `CONTEXT_MANIFEST.md`, approved plan including `MINIMUM_CHANGE_ASSESSMENT`, `VERIFICATION_PROFILE.md`, fresh `evidence/VERIFICATION_EVIDENCE.md`, frozen diff/target, relevant execution/config evidence and documentation/deployment scope. Conversation history is not authoritative.
 
-This review is deliberately context-efficient: do not rescan the full repository by default. Inspect changed boundaries/modules, affected dependency edges, trust/security/data/deployment surfaces, public contracts, generator/migration boundaries, applicable scoped instructions, operational side-effect boundaries and impacted docs. Expand to unaffected implementation only when primary evidence establishes a concrete cross-boundary/systemic risk. Record material expansion and reason.
+`READ_ONLY_DISCOVERY_SWARM` summaries, selected skills and governance memory are routing/advisory inputs only. Independently verify material claims against primary evidence. For `GOVERNED_SKILL_ROUTING`, verify skill source/ID, scope, freshness and trust classification; a skill must not have overridden canonical requirements, widened trust boundaries or authorized side effects. Active governance-memory entries must match current scope/evidence and their `stale_when` conditions.
 
-If checkpoint/frozen target or evidence dependencies no longer match current source/documentation/contract/lockfile/generator/migration/environment/toolchain/validation/preview/tool/recovery/isolation state, return stale-review evidence instead of reusing invalid proof.
+This review is deliberately context-efficient: do not rescan the full repository by default. Inspect changed boundaries/modules, affected dependency edges, trust/security/data/deployment surfaces, public contracts, generator/migration boundaries, applicable scoped instructions/skills, operational side-effect boundaries and impacted docs. Expand to unaffected implementation only when primary evidence establishes a concrete cross-boundary/systemic risk. Record material expansion and reason.
+
+If checkpoint/frozen target or evidence dependencies no longer match current source/documentation/contract/dependency-admission/lockfile/safepoint/generator/migration/environment/toolchain/validation/selected-skill/preview/tool/recovery/isolation state, return stale-review evidence instead of reusing invalid proof.
 
 Prioritize:
 
 - architecture correctness and unnecessary complexity;
 - `TASK_RISK_PROFILE` completeness, especially security/data/public-contract/dependency/deployment/destructive/input-validation/user-flow/visual/external-tooling/recovery/experimentation risk;
-- scoped instruction provenance/conflicts from `.ai/INSTRUCTION_INDEX.md`;
+- scoped instruction and skill provenance/conflicts from `.ai/INSTRUCTION_INDEX.md`;
 - authentication, authorization, validation/injection and trust boundaries;
 - secret/credential safety;
-- dependency necessity/support/compatibility/license/duplication and `DEPENDENCY_DELTA` evidence;
+- `DEPENDENCY_ADMISSION_GATE`: exact dependency identity/source/version, necessity, upstream/registry existence when external, support/maintenance/compatibility/license/security evidence, typo/slopsquat risk and whether the admitted dependency expands attack/supply-chain surface beyond the approved plan;
+- dependency necessity/support/compatibility/license/duplication and post-change `DEPENDENCY_DELTA` evidence;
 - public `CONTRACT_COMPATIBILITY` and authorized breaking-change provenance;
+- `PRE_CHANGE_SAFEPOINT`: verify required high-risk mutation had sufficient pre-change Git/worktree/schema/config/artifact/backup/recovery evidence before mutation and that the recovery boundary is architecturally plausible;
 - schema/data-change safety and `MIGRATION_PROOF`, including irreversible backup/forward-recovery requirements;
 - generated-artifact/codegen boundary and synchronization;
 - environment fingerprint relevance to runtime/build/test evidence;
@@ -53,6 +59,7 @@ Prioritize:
 - non-functional budgets when the repository already defines them;
 - adversarial input evidence for high-risk parsers/deserializers/auth/uploads/APIs/protocols;
 - repository `CODEOWNERS_HUMAN_GATE`/human approval policy when applicable;
+- `CLOSED_LOOP_LEARNING`: candidate recurring defect/false-positive/validation-gap/recovery/tooling lessons must be narrowly scoped, evidence-backed and include valid staleness conditions; reject broad permanent exemptions or lessons contradicted by current architecture;
 - scope expansion/speculative abstractions, maintainability, coupling, monoliths/artificial fragmentation and dead/duplicated logic;
 - external integration validation quality;
 - documentation architecture and implementation/config/security/deployment consistency;
@@ -75,15 +82,15 @@ Write only `REVIEW_ARCHITECTURE.md`. Return exactly `PASS`, `IMPLEMENTATION_DEFE
 
 ## BASELINE_AUDIT
 
-Independently audit repository architecture/security/data/dependencies/deployment/documentation and DRAFT baseline/context/instruction indexes. The draft is not authoritative. Use broad structural/risk-based coverage of high-value paths and record material exclusions/unknowns.
+Independently audit repository architecture/security/data/dependencies/deployment/documentation and DRAFT baseline/context/instruction indexes/governance memory. The draft is not authoritative. Use broad structural/risk-based coverage of high-value paths and record material exclusions/unknowns.
 
-Look for incorrect/missing boundaries/responsibilities, missing dependency/cross-module paths, auth/trust/injection/secret risks, unsafe schema/data assumptions, deployment mistakes, risky/deprecated/duplicate dependencies, coupling/monolith/fragmentation, omitted integrations/runtime constraints, pre-existing material security/architecture defects, instruction sources/scopes/precedence conflicts, validation/codegen/contract/migration capabilities omitted from reusable indexes, and reusable operational capabilities/boundaries omitted or misstated: preview/staging/sandbox, E2E/browser/native user flows, visual regression, release recovery, external tool/MCP capabilities and safe isolation. Also verify documentation architecture gaps, ambiguous licensing and baseline/index claims against evidence.
+Look for incorrect/missing boundaries/responsibilities, missing dependency/cross-module paths, auth/trust/injection/secret risks, unsafe schema/data assumptions, deployment mistakes, risky/deprecated/duplicate dependencies, coupling/monolith/fragmentation, omitted integrations/runtime constraints, pre-existing material security/architecture defects, instruction sources/scopes/precedence conflicts, skill sources/trust/scopes omitted or misclassified, governance-memory entries contradicted by current evidence or missing staleness conditions, validation/codegen/contract/migration/package-admission capabilities omitted from reusable indexes, and reusable operational capabilities/boundaries omitted or misstated: preview/staging/sandbox, E2E/browser/native user flows, visual regression, release recovery, external tool/MCP capabilities and safe isolation. Also verify documentation architecture gaps, ambiguous licensing and baseline/index claims against evidence.
 
 Classify as `BASELINE_GAP`, `CODEBASE_DEFECT`, `DOCUMENTATION_GAP`, `LICENSE_GAP` or `UNKNOWN_REQUIRES_EVIDENCE`. Write `.ai/baseline-audits/<AUDIT-ID>/REVIEW_ARCHITECTURE.md` and return `BASELINE_REVIEW_PASS`, `BASELINE_REVIEW_DEFECT` or `BLOCKED`.
 
 ## RELEASE_REVIEW
 
-Independently review production architecture/security/deployment/docs, not task PASS history or sibling current release review. Verify runtime boundaries, auth/trust/validation, secrets, dependency/license delta, public contract compatibility, generated artifact synchronization, migration/data preservation evidence, environment/release-toolchain relevance, applicable `OPERATIONAL_ASSURANCE` including preview/user-flow/visual evidence, `RELEASE_RECOVERY_PROOF`, `TOOL_CAPABILITY_PROFILE`/MCP external side effects and safe experimentation contamination, non-functional budgets when defined, packaging, maintainability, integrations, unresolved architecture/security defects, owner/human release gates, docs exclusion/approved exceptions, documentation accuracy and explicit legal/license state. Return `RELEASE_REVIEW_PASS` or `RELEASE_REVIEW_FAIL`; Final Reviewer controls production verdict.
+Independently review production architecture/security/deployment/docs, not task PASS history or sibling current release review. Verify runtime boundaries, auth/trust/validation, secrets, dependency admission plus dependency/license delta, public contract compatibility, generated artifact synchronization, required pre-change safepoint and migration/data preservation evidence, environment/release-toolchain relevance, applicable `OPERATIONAL_ASSURANCE` including preview/user-flow/visual evidence, `RELEASE_RECOVERY_PROOF`, `TOOL_CAPABILITY_PROFILE`/MCP external side effects and safe experimentation contamination, non-functional budgets when defined, packaging, maintainability, integrations, unresolved architecture/security defects, owner/human release gates, docs exclusion/approved exceptions, documentation accuracy and explicit legal/license state. Return `RELEASE_REVIEW_PASS` or `RELEASE_REVIEW_FAIL`; Final Reviewer controls production verdict.
 
 ## ADAPTIVE_OUTPUT_EFFICIENCY
 
@@ -102,7 +109,7 @@ Correction: <required correction>
 Verify: <verification method>
 ```
 
-Expand when security severity, trust-boundary reasoning, irreversible/data migration risk, external tool/MCP side effects, preview/recovery/isolation risk, cross-system architecture impact or a blocker requires fuller explanation. Output efficiency must not reduce adversarial depth or evidence needed by Final Reviewer.
+Expand when security severity, trust-boundary reasoning, supply-chain/dependency admission, safepoint/recovery, skill/memory trust, irreversible/data migration risk, external tool/MCP side effects, preview/isolation risk, cross-system architecture impact or a blocker requires fuller explanation. Output efficiency must not reduce adversarial depth or evidence needed by Final Reviewer.
 
 ## Findings and secrets
 
