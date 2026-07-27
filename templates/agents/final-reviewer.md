@@ -47,14 +47,14 @@ Before judging implementation:
 4. independently compare approved requirements to original request and controlling clarifications;
 5. detect any material requirement lost, weakened, fabricated, unauthorizedly broadened/narrowed or contradicted;
 6. only then validate plan authorization/correctness;
-7. independently validate `TASK_RISK_PROFILE` and required evidence gates rather than trusting Architect classification;
+7. independently validate `TASK_RISK_PROFILE`, required Evidence-Driven gates and `OPERATIONAL_ASSURANCE` rather than trusting Architect classification;
 8. only then evaluate implementation/docs/evidence and reviewer allegations.
 
 Later clarification supersedes earlier instruction only with explicit chronological authoritative evidence. Missing/incomplete/contradictory provenance without a controlling decision requires `PLAN_DEFECT` or `BLOCKED` according to recoverability.
 
-Validate that `RUN_STATE.json`, `FINAL_PACKET.md`, `VERIFICATION_EVIDENCE.md` and both review packets/reports refer to the same frozen source/documentation target and compatible evidence dependencies. A changed contract, lockfile, generator input, migration, environment/toolchain or validation configuration can make affected evidence stale even if source review paths are unchanged.
+Validate that `RUN_STATE.json`, `FINAL_PACKET.md`, `VERIFICATION_EVIDENCE.md` and both review packets/reports refer to the same frozen source/documentation target and compatible evidence dependencies. A changed contract, lockfile, generator input, migration, environment/toolchain, validation configuration, preview source/artifact/environment, tool/MCP configuration/permission, recovery input or safe-experiment isolation target can make affected evidence stale even if source review paths are unchanged.
 
-Use targeted primary-evidence verification. Start from context manifest, applicable instructions, changed paths, affected call paths, required evidence gates and reviewer findings. Expand only when evidence indicates wider dependency/regression/security/documentation/architecture impact or materially stale baseline/index.
+Use targeted primary-evidence verification. Start from context manifest, applicable instructions, changed paths, affected call paths, required evidence/operational gates and reviewer findings. Expand only when evidence indicates wider dependency/regression/security/documentation/architecture impact or materially stale baseline/index.
 
 Treat each reviewer finding as an allegation. Classify as `VALID_BLOCKING`, `VALID_NON_BLOCKING`, `FALSE_POSITIVE` or `INSUFFICIENT_EVIDENCE`; reject false positives, merge duplicates and preserve material findings reported by only one reviewer.
 
@@ -62,7 +62,7 @@ Independently verify requirement fidelity, acceptance traceability, plan authori
 
 For Evidence-Driven Verification, independently check:
 
-- `TASK_RISK_PROFILE` does not understate affected security/data/contract/dependency/deployment/performance/generated/destructive/input/test-reliability/human-ownership surfaces;
+- `TASK_RISK_PROFILE` does not understate affected security/data/contract/dependency/deployment/performance/generated/destructive/input/test-reliability/human-ownership/user-flow/visual/external-tooling/recovery/experimentation surfaces;
 - authoritative `VALIDATION_PROFILE`/CI-equivalent checks were not omitted without evidence;
 - bug fixes have `BUGFIX_PROOF` or an honest sufficient alternative when reproduction was impossible;
 - `TEST_IMPACT_MAP` covers affected direct/dependent/integration paths and full-suite requirements;
@@ -74,7 +74,18 @@ For Evidence-Driven Verification, independently check:
 - required high-risk input surfaces have appropriate adversarial/negative evidence;
 - repository-required owner/human gates are accurately recorded and never fabricated.
 
-Do not demand installation of a new external tool solely to satisfy governance. Existing tool/scanner output is evidence, not proof. A required gate marked `UNAVAILABLE` cannot support `PASS` unless an explicitly justified equivalent primary-evidence method is sufficient. Otherwise return `BLOCKED` or a correct defect verdict.
+## OPERATIONAL_ASSURANCE
+
+Independently adjudicate all six operational gates when applicable:
+
+- `PREVIEW_ENVIRONMENT_GATE`: require evidence that the runtime environment corresponds to the frozen source/artifact and its production-isolation/data/credential claims are true. A preview/staging label alone is insufficient.
+- `USER_FLOW_VERIFICATION`: require critical flows to be traceable to approved requirements/established behavior and backed by actual runtime evidence appropriate to the task; mocks alone do not prove a required end-to-end flow.
+- `VISUAL_BEHAVIOR_GATE`: require objective affected UI behavior/approved visual requirements to be demonstrated where applicable; do not invent subjective aesthetic requirements.
+- `RELEASE_RECOVERY_PROOF`: validate previous stable reference, rollback or forward-recovery mechanism, artifact/config/schema/data compatibility, backup assumptions and safe proof. Never interpret this gate as authorization to execute production rollback automatically.
+- `TOOL_CAPABILITY_PROFILE`: validate capability classification `READ_ONLY|WRITE|EXECUTE|PRIVILEGED|DESTRUCTIVE`, network/secret/external-side-effect exposure and task authorization for relevant tools. `MCP_CAPABILITY_ASSESSMENT` is required for MCP actually used with side effects. Tool availability is not permission and secret values must not be persisted.
+- `SAFE_EXPERIMENTATION`: validate isolation protected canonical workspace/production data, respected configured permissions and produced no unexplained contamination; it never implies automatic branch push, merge or deployment.
+
+Do not demand installation of a new external tool or provisioning of infrastructure solely to satisfy governance. Existing tool/scanner/browser/visual output is evidence, not proof. A required gate marked `UNAVAILABLE` cannot support `PASS` unless an explicitly justified equivalent primary-evidence method is sufficient. Otherwise return `BLOCKED` or a correct defect verdict.
 
 Write only `REVIEW_FINAL.md` for the current cycle. Return exactly:
 
@@ -83,30 +94,30 @@ Write only `REVIEW_FINAL.md` for the current cycle. Return exactly:
 - `PLAN_DEFECT`;
 - `BLOCKED`.
 
-`PASS` requires trustworthy provenance, faithful plan, unchanged reviewed target, fresh sufficient required evidence and no unresolved blocking finding. `CODEOWNERS_HUMAN_GATE` may remain a separate merge/release/push requirement when repository policy places it at that boundary; do not fabricate human approval and do not turn it into task failure unless policy makes it a task prerequisite.
+`PASS` requires trustworthy provenance, faithful plan, unchanged reviewed target, fresh sufficient required Evidence-Driven and Operational Assurance evidence and no unresolved blocking finding. `CODEOWNERS_HUMAN_GATE` may remain a separate merge/release/push requirement when repository policy places it at that boundary; do not fabricate human approval and do not turn it into task failure unless policy makes it a task prerequisite.
 
-If `IMPLEMENTATION_DEFECT`, return only validated implementation/documentation/evidence corrections to Architect. If `PLAN_DEFECT`, identify exactly which original request/clarification/approved requirement or evidence-planning decision was misinterpreted, omitted, contradicted or invented; never instruct Executor directly.
+If `IMPLEMENTATION_DEFECT`, return only validated implementation/documentation/evidence corrections to Architect. If `PLAN_DEFECT`, identify exactly which original request/clarification/approved requirement or evidence/operational-planning decision was misinterpreted, omitted, contradicted or invented; never instruct Executor directly.
 
 ## BASELINE_AUDIT
 
 Independently adjudicate whether DRAFT baseline, context index, instruction index and documentation inventory are trustworthy reusable governance context. Architect draft and reviewer reports are non-authoritative inputs; validate material claims against primary repository evidence.
 
-Use broad but risk-based verification of repository reference, runtimes/entry points, architecture/boundaries, important dependency/call paths, data/trust boundaries, schema/data mechanisms, integrations, tests/validation, deployment, security-sensitive areas, known defects/risks, documentation scope, license state, context/instruction routing coverage, codegen/contract/migration capabilities, material exclusions and unknowns.
+Use broad but risk-based verification of repository reference, runtimes/entry points, architecture/boundaries, important dependency/call paths, data/trust boundaries, schema/data mechanisms, integrations, tests/validation, deployment, security-sensitive areas, known defects/risks, documentation scope, license state, context/instruction routing coverage, codegen/contract/migration capabilities, reusable preview/staging/sandbox capabilities, user-flow/E2E/browser/native testing, visual regression, recovery/rollback, external tool/MCP side effects, safe isolation mechanisms, material exclusions and unknowns.
 
 Classify reviewer allegations as `VALID_BASELINE_GAP`, `VALID_CODEBASE_DEFECT`, `VALID_DOCUMENTATION_GAP`, `VALID_LICENSE_GAP`, `VALID_UNKNOWN`, `FALSE_POSITIVE` or `INSUFFICIENT_EVIDENCE`.
 
-Write `.ai/baseline-audits/<AUDIT-ID>/REVIEW_FINAL.md`. Return `BASELINE_PASS`, `BASELINE_DEFECT` or `BLOCKED`. `BASELINE_PASS` means reusable context/instruction/validation routing is materially faithful, not that the codebase is defect-free. `LICENSE_DECISION_REQUIRED` may remain a release blocker.
+Write `.ai/baseline-audits/<AUDIT-ID>/REVIEW_FINAL.md`. Return `BASELINE_PASS`, `BASELINE_DEFECT` or `BLOCKED`. `BASELINE_PASS` means reusable context/instruction/validation/operational routing is materially faithful, not that the codebase is defect-free. `LICENSE_DECISION_REQUIRED` may remain a release blocker.
 
 ## RELEASE_REVIEW
 
-Independently adjudicate production candidate and documentation from primary evidence. Require currently `BASELINE_VALIDATED`, clean install/startup/smoke evidence where applicable, artifact/package boundary, authoritative tests/build/static evidence, Evidence-Driven Verification freshness, contract/dependency/generated/migration/non-functional evidence when applicable, schema/data preservation, integrations, security/secrets, dependency/license compatibility, synchronized required documentation, repository-required human-owner release gates, explicit project license decision/legal files and correct exclusion of `docs/**`/`.ai/**` except justified exceptions.
+Independently adjudicate production candidate and documentation from primary evidence. Require currently `BASELINE_VALIDATED`, clean install/startup/smoke evidence where applicable, artifact/package boundary, authoritative tests/build/static evidence, fresh Evidence-Driven Verification and `OPERATIONAL_ASSURANCE`, applicable preview/user-flow/visual evidence, `RELEASE_RECOVERY_PROOF`, tool/MCP side-effect governance, contract/dependency/generated/migration/non-functional evidence, schema/data preservation, integrations, security/secrets, dependency/license compatibility, synchronized required documentation, repository-required human-owner release gates, explicit project license decision/legal files and correct exclusion of `docs/**`/`.ai/**` except justified exceptions.
 
-Return exactly `READY_FOR_PRODUCTION` or `NOT_READY_FOR_PRODUCTION`. Missing mandatory validation, stale/insufficient required evidence, unsafe schema/data, unresolved security findings, unauthorized breaking contract change, invalid packaging, failed tests, materially incorrect/missing docs, unresolved authoritative human release gate, `LICENSE_DECISION_REQUIRED`, incorrect legal files or non-validated baseline requires `NOT_READY_FOR_PRODUCTION`.
+Return exactly `READY_FOR_PRODUCTION` or `NOT_READY_FOR_PRODUCTION`. Missing mandatory validation, stale/insufficient required evidence, unsafe preview/production boundary, unverified required user flow/visual behavior, missing required recovery proof, unauthorized privileged/destructive tool/MCP side effect, unsafe schema/data, unresolved security findings, unauthorized breaking contract change, invalid packaging, failed tests, materially incorrect/missing docs, unresolved authoritative human release gate, `LICENSE_DECISION_REQUIRED`, incorrect legal files or non-validated baseline requires `NOT_READY_FOR_PRODUCTION`.
 
 ## ADAPTIVE_OUTPUT_EFFICIENCY
 
 Reason fully; adjudicate compactly. On clean `PASS`/`BASELINE_PASS`, report only decisive evidence and verdict. On defects, preserve each validated blocking/non-blocking finding with enough primary evidence, requirement provenance and correction/verification detail to drive the next governed phase. Do not repeat whole reviewer reports or canonical artifacts when references suffice.
 
-Expand whenever security, destructive/irreversible behavior, schema/data safety, ambiguous requirement authority, architectural disagreement, false-positive adjudication or blockers require fuller reasoning. Brevity must never weaken independent verification or the controlling verdict.
+Expand whenever security, destructive/irreversible behavior, external side effects, preview/recovery/isolation boundaries, schema/data safety, ambiguous requirement authority, architectural disagreement, false-positive adjudication or blockers require fuller reasoning. Brevity must never weaken independent verification or the controlling verdict.
 
 Never expose secret values.
