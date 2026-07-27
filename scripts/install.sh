@@ -25,7 +25,7 @@ done
 mkdir -p "$CONFIG_DIR/agents" "$CONFIG_DIR/commands" "$BACKUP_DIR"
 backup_if_exists() { local p="$1"; [[ ! -f "$p" ]] || cp "$p" "$BACKUP_DIR/$(basename "$p")"; }
 for file in architect.md build.md plan.md executor.md reviewer.md reviewer-architecture.md final-reviewer.md; do backup_if_exists "$CONFIG_DIR/agents/$file"; done
-for file in ai-init.md ai-audit.md ai-docs.md ai-plan.md ai-execute.md ai-review.md ai-workflow.md ai-status.md ai-resume.md ai-release.md; do backup_if_exists "$CONFIG_DIR/commands/$file"; done
+for file in ai-init.md ai-audit.md ai-docs.md ai-plan.md ai-execute.md ai-review.md ai-workflow.md ai-status.md ai-resume.md ai-metrics.md ai-release.md; do backup_if_exists "$CONFIG_DIR/commands/$file"; done
 backup_if_exists "$CONFIG_DIR/opencode.jsonc"; backup_if_exists "$CONFIG_DIR/opencode.json"
 
 render() {
@@ -62,8 +62,9 @@ PY
 
 "$SCRIPT_DIR/verify.sh" "$CONFIG_DIR"
 echo "Installed. Architect is default; Build is governed full workflow and Plan is governed planning-only."
-echo "v1.6 context routing, fresh evidence packets, checkpoint/resume, steering provenance and minimum-change gates are active."
+echo "v1.7 context-efficient governance, safe resume, adaptive output efficiency and real usage metrics are active."
 echo "Use /ai-resume <TASK-ID> after an interrupted governed task."
+echo "Use /ai-metrics [scope] to inspect recorded OpenCode usage without invented estimates."
 echo "Use full provider/model IDs to select the exact subscription/provider path for each role."
 echo "Restart OpenCode Desktop/TUI before use."
 echo "Backup: $BACKUP_DIR"
