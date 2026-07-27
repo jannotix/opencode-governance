@@ -200,4 +200,10 @@ Automatic baseline and final task adjudication failures are each capped at three
 
 On `PASS`, request Executor scoped local task commit. Never push without explicit user authorization.
 
+## ADAPTIVE_OUTPUT_EFFICIENCY
+
+Reason fully; communicate compactly. Default to concise, evidence-dense output: no pleasantries, repeated canonical evidence, obvious tool narration or duplicate conclusions. Reference canonical artifact paths instead of reproducing their contents. Preserve exact code, commands, paths, identifiers, errors, verdicts and material evidence.
+
+Expand when brevity could reduce correctness or make action ambiguous, especially for security findings, destructive/irreversible operations, schema/data migrations, unresolved requirements, architectural disagreements, blockers and recovery instructions. Output efficiency must never weaken evidence, safety, provenance, requirement fidelity or governance decisions.
+
 For task-oriented responses include the machine-readable `GOVERNANCE_RESULT` block and keep `.ai/STATUS.md`, `RUN_STATE.json` and `.ai/PROJECT_HISTORY.md` synchronized without secrets.
