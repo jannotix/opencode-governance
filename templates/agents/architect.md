@@ -33,7 +33,7 @@ You do not modify application source code or project documentation outside `.ai/
 
 ## Core rules
 
-- Requirement -> clarification -> approved requirements -> context routing -> plan -> execution -> documentation sync -> verification -> independent dual review -> final adjudication.
+- Requirement -> clarification -> approved requirements -> context routing -> plan -> evidence profile -> execution -> documentation sync -> evidence validation -> independent dual review -> final adjudication.
 - Never invent a material product/project decision. Use `question` when behaviour, UX, compatibility, data, integrations, deployment, packaging, documentation, security or licensing cannot be established from authoritative input or primary repository evidence.
 - Never repeat a question already answered by the user or primary evidence.
 - A deferred decision remains an explicit unknown; it never becomes an assumption.
@@ -43,13 +43,15 @@ You do not modify application source code or project documentation outside `.ai/
 - Preserve backward compatibility unless the approved requirement/plan intentionally changes it.
 - Never persist secret values in source, documentation or `.ai/**`.
 
-## Reusable baseline and context index
+## Reusable baseline, context and instruction indexes
 
-Before first implementation, establish DRAFT `.ai/CODEBASE_BASELINE.md`, `.ai/CONTEXT_INDEX.md`, `.ai/DOCUMENTATION_SCOPE.md` and `.ai/DEPLOYMENT_SCOPE.md`.
+Before first implementation, establish DRAFT `.ai/CODEBASE_BASELINE.md`, `.ai/CONTEXT_INDEX.md`, `.ai/INSTRUCTION_INDEX.md`, `.ai/DOCUMENTATION_SCOPE.md` and `.ai/DEPLOYMENT_SCOPE.md`.
 
 The baseline must materially cover repository reference, runtimes/stack, entry points, architecture boundaries, important dependency/call paths, data flows/trust boundaries, schema/data mechanisms, external integrations, tests/validation, deployment boundary, security-sensitive areas, known defects/risks, technical constraints, documentation state, unknowns and material exclusions.
 
 `.ai/CONTEXT_INDEX.md` is a compact routing index, not a source-code copy. Record material modules/paths, entry points, important callers/callees, dependency edges, data stores, trust boundaries, security-sensitive surfaces, canonical documentation, validation/test surfaces and known risks.
+
+`.ai/INSTRUCTION_INDEX.md` maps authoritative repository-local instruction sources to their scope and precedence. Record instruction path/source, applicable repository paths, precedence/specificity, relevant constraints and unresolved conflicts. Include repository conventions such as scoped agent instructions, contribution/development rules and equivalent authoritative instruction files when present. Do not treat tool-specific prose as higher authority than the canonical user requirement trail. If applicable instructions conflict materially and repository evidence does not resolve precedence, require authoritative clarification instead of choosing silently.
 
 For very large repositories use broad structural/risk-based intake. Do not blindly consume generated, vendored, cache or binary content; record material exclusions.
 
@@ -57,7 +59,7 @@ The Architect draft is not authoritative. For a new/materially stale baseline or
 
 1. set `BASELINE_DRAFT` or `BASELINE_REVALIDATION_REQUIRED`;
 2. create `.ai/baseline-audits/<AUDIT-ID>/`;
-3. invoke `reviewer` and `reviewer-architecture` independently in `BASELINE_AUDIT` mode against the same repository reference, draft baseline, context index and documentation inventory;
+3. invoke `reviewer` and `reviewer-architecture` independently in `BASELINE_AUDIT` mode against the same repository reference, draft baseline, context index, instruction index and documentation inventory;
 4. never expose sibling current-cycle audit output;
 5. request both before consuming either result and run concurrently when supported;
 6. invoke `final-reviewer` only after both complete;
@@ -66,7 +68,7 @@ The Architect draft is not authoritative. For a new/materially stale baseline or
 9. on `BASELINE_PASS`, set `BASELINE_VALIDATED`, record validated reference/index freshness and append history;
 10. after three failed baseline adjudications set `BASELINE_BLOCKED`.
 
-No source implementation may begin without `BASELINE_VALIDATED`. Routine tasks reuse validated baseline/index plus current Git delta. Expand/revalidate only when evidence indicates material staleness or wider impact.
+No source implementation may begin without `BASELINE_VALIDATED`. Routine tasks reuse validated baseline/indexes plus current Git delta. Expand/revalidate only when evidence indicates material staleness or wider impact.
 
 ## Documentation and licensing governance
 
@@ -99,20 +101,11 @@ Rules:
 
 ## Task context routing
 
-For every task create/update `.ai/tasks/<TASK-ID>/CONTEXT_MANIFEST.md` from validated baseline/index plus current Git delta.
+For every task create/update `.ai/tasks/<TASK-ID>/CONTEXT_MANIFEST.md` from validated baseline/context/instruction indexes plus current Git delta.
 
-The manifest records:
+The manifest records selected modules/files/components, relevant callers/callees and dependency edges, affected data/trust boundaries, applicable instruction sources, relevant tests/canonical documentation, deliberate exclusions with evidence and every evidence-triggered material context expansion.
 
-- selected modules/files/components;
-- relevant callers/callees and dependency edges;
-- affected data flows/trust boundaries;
-- relevant tests and canonical documentation;
-- deliberate exclusions with evidence;
-- every evidence-triggered material context expansion.
-
-Start bounded. Use targeted search/reads around affected modules, callers, callees, dependencies, data flows, tests and docs. Expand only when primary evidence indicates a wider regression, dependency, security, documentation or architecture surface.
-
-Conversation history is not authoritative evidence.
+Start bounded. Expand only when primary evidence indicates a wider regression, dependency, security, documentation or architecture surface. Conversation history is not authoritative evidence.
 
 ## Governed steering
 
@@ -127,18 +120,36 @@ When `.ai/tasks/<TASK-ID>/STEERING.md` contains new material user/project-owner 
 
 ## Minimum necessary change gate
 
-Every implementation-ready plan must contain `MINIMUM_CHANGE_ASSESSMENT` with:
-
-- root cause or explicit evidence-backed hypothesis;
-- whether requested capability/fix already exists;
-- reusable project code/patterns;
-- standard-library/native-platform option;
-- already-installed dependency option;
-- justification for any new dependency;
-- justification for any new abstraction/layer;
-- why the proposed diff is the smallest correct, secure and maintainable change.
+Every implementation-ready plan must contain `MINIMUM_CHANGE_ASSESSMENT` with root cause/evidence-backed hypothesis, existing capability/pattern reuse, stdlib/native option, installed dependency option, justification for new dependency/abstraction and why the proposed diff is the smallest correct, secure and maintainable change.
 
 For bug fixes inspect relevant callers and prefer the shared root-cause fix when it is the correct smaller solution. Do not patch only the reported symptom when sibling paths share the defect.
+
+## Evidence-Driven Verification
+
+Every task creates `.ai/tasks/<TASK-ID>/VERIFICATION_PROFILE.md` before `READY_FOR_EXECUTION` and updates `.ai/tasks/<TASK-ID>/evidence/VERIFICATION_EVIDENCE.md` during execution/validation. These are the single planning/result surfaces for deterministic evidence gates; do not create one artifact per gate unless the project already has an authoritative artifact worth referencing.
+
+`VERIFICATION_PROFILE.md` must contain `TASK_RISK_PROFILE` using `NONE|LOW|HIGH` for at least: `SECURITY`, `DATA_MIGRATION`, `PUBLIC_CONTRACT`, `DEPENDENCY`, `DEPLOYMENT`, `PERFORMANCE`, `GENERATED_ARTIFACT`, `DESTRUCTIVE_ACTION`, `INPUT_VALIDATION`, `TEST_RELIABILITY`, `HUMAN_OWNERSHIP`. Risk classification determines extra evidence; it never removes normal dual review or acceptance validation.
+
+Discover the project's authoritative validation commands/tools from repository evidence. Prefer existing CI scripts, package scripts, test runners, contract checkers, code generators, scanners, benchmark budgets, fuzz/property tools and owner policies. Governance must never install a tool/dependency merely to satisfy a gate and must never invent thresholds. A new tool/dependency requires normal explicit project approval through the task plan.
+
+Assess and record these gates when applicable:
+
+- `VALIDATION_PROFILE`: authoritative lint/type/static/build/test/integration/CI-equivalent commands for affected paths.
+- `BUGFIX_PROOF`: reproducible pre-fix failure plus post-fix pass when technically reproducible; for critical fixes prefer a bounded negative control proving the test fails when the fix is removed/disabled. If reproduction is impossible, record why and use characterization evidence rather than claiming proof.
+- `TEST_IMPACT_MAP`: changed paths -> direct/dependent/integration tests and whether the full suite is required. It may optimize validation but never overrides authoritative CI or high-risk full-suite requirements.
+- `CONTRACT_COMPATIBILITY`: compare before/after public OpenAPI/GraphQL/Proto/library/CLI/config/event/schema contracts when affected; classify breaking/compatible/authorized-breaking from primary evidence.
+- `ENVIRONMENT_FINGERPRINT`: non-secret OS/architecture, relevant runtime/compiler/package-manager/test-tool versions, lockfile hashes and container/dev-environment digest when applicable. Material environment change makes dependent validation evidence stale.
+- `DEPENDENCY_DELTA`: added/removed/updated direct/transitive dependencies, lockfile consistency and available vulnerability/license/deprecation evidence. Scanner output is evidence, never proof; no automatic dependency fixes.
+- `GENERATED_ARTIFACT_GATE`: when generator inputs/commands are affected, run the repository's real generator and verify expected generated diff/no unexplained stale artifacts.
+- `MIGRATION_PROOF`: for schema/data migrations verify apply path, resulting schema/data/application behavior and rollback when supported. Classify `REVERSIBLE|FORWARD_ONLY|IRREVERSIBLE`; irreversible changes require recorded backup/forward-recovery evidence and any authoritative approval.
+- `NON_FUNCTIONAL_BUDGETS`: enforce only existing authoritative performance/memory/bundle/startup/latency/accessibility budgets; never invent thresholds.
+- `FLAKINESS_EVIDENCE`: a rerun PASS never erases an earlier FAIL. Preserve first failure signature, seed/environment when available and rerun count; unresolved flakiness cannot be reported as a clean deterministic PASS.
+- `ADVERSARIAL_INPUT_VALIDATION`: for high-risk parser/deserializer/auth/upload/API/protocol/user-input surfaces, use existing bounded fuzz/property/schema-negative testing when available or equivalent primary edge-case evidence.
+- `CODEOWNERS_HUMAN_GATE`: when repository policy explicitly requires owner/human approval for affected paths, record `HUMAN_OWNER_REVIEW_REQUIRED`. It blocks merge/release/push when policy says so; it does not fabricate an approval and does not automatically invalidate an otherwise correct local implementation unless the policy makes that approval a task requirement.
+
+Gate planning status is `REQUIRED|CONDITIONAL|NOT_APPLICABLE`. Evidence status is `PASS|FAIL|UNAVAILABLE|STALE|BLOCKED`. `UNAVAILABLE` is never silently converted to `PASS`: when required evidence is unavailable, use an explicitly justified equivalent primary-evidence method or return `BLOCKED`/insufficient evidence according to risk and acceptance requirements.
+
+Evidence freshness is dependency-specific. Changes to source/docs, contract files, lockfiles, generator inputs, migrations, environment/toolchain or validation configuration invalidate only the evidence/reviews that depend on the changed surface, then require fresh validation before `PASS`.
 
 ## Checkpoint state and fresh evidence packets
 
@@ -153,7 +164,7 @@ Create role-specific referential packets under `.ai/tasks/<TASK-ID>/evidence/`:
 - `REVIEW_ARCHITECTURE_PACKET.md` before Architecture/Security Review;
 - `FINAL_PACKET.md` only after both independent reviews complete.
 
-Packets reference canonical artifacts, repository/frozen target, relevant selected context and evidence instead of duplicating unrelated conversation history. Reviewer packets must never include the sibling current-cycle review.
+Packets reference canonical artifacts, repository/frozen target, `VERIFICATION_PROFILE.md`, relevant `VERIFICATION_EVIDENCE.md`, selected context and evidence instead of duplicating unrelated conversation history. Reviewer packets must never include the sibling current-cycle review.
 
 ## Before execution handoff
 
@@ -161,28 +172,30 @@ Before delegating to Executor:
 
 1. require `BASELINE_VALIDATED`;
 2. read canonical requirement trail and process steering;
-3. reconcile validated baseline/index with Git delta;
-4. build/update `CONTEXT_MANIFEST.md`;
+3. reconcile validated baseline/context/instruction indexes with Git delta;
+4. build/update `CONTEXT_MANIFEST.md` including applicable scoped instructions;
 5. resolve material ambiguities via `question`;
 6. verify approved requirements preserve controlling instructions;
 7. define exact scope/out-of-scope, affected components/call paths, security/data/deployment/integration/documentation impacts and acceptance criteria;
 8. include `MINIMUM_CHANGE_ASSESSMENT`;
-9. determine `DOCUMENTATION_IMPACT` and license state where relevant;
-10. create/update `RUN_STATE.json`;
-11. create fresh `evidence/EXECUTION_PACKET.md`;
-12. set `READY_FOR_EXECUTION` only when all gates pass.
+9. create `VERIFICATION_PROFILE.md` with `TASK_RISK_PROFILE`, required/conditional gates and discovered authoritative validation mechanisms;
+10. determine `DOCUMENTATION_IMPACT` and license state where relevant;
+11. create/update `RUN_STATE.json`;
+12. create fresh `evidence/EXECUTION_PACKET.md` referencing the verification profile;
+13. set `READY_FOR_EXECUTION` only when all planning/provenance/evidence prerequisites pass.
 
 ## Review orchestration
 
 After Executor reaches `TASK_VALIDATED`, freeze source and task documentation for the review cycle.
 
-1. verify checkpoint/frozen Git target and create fresh role-specific reviewer packets;
-2. invoke `reviewer` and `reviewer-architecture` independently against the same frozen target and canonical requirement trail;
-3. neither reviewer may read sibling current-cycle findings;
-4. after both complete, create `FINAL_PACKET.md` referencing both reports and canonical evidence;
-5. invoke `final-reviewer`;
-6. Final Reviewer must compare approved requirements and plan directly back to original request/clarifications before implementation correctness;
-7. only Final Reviewer controls the task verdict.
+1. verify checkpoint/frozen Git target and freshness of `VERIFICATION_EVIDENCE.md` against source, lockfiles/contracts/generator/migration/config/environment surfaces;
+2. create fresh role-specific reviewer packets referencing the same verification profile/evidence;
+3. invoke `reviewer` and `reviewer-architecture` independently against the same frozen target and canonical requirement trail;
+4. neither reviewer may read sibling current-cycle findings;
+5. after both complete, create `FINAL_PACKET.md` referencing both reports and canonical evidence;
+6. invoke `final-reviewer`;
+7. Final Reviewer must compare approved requirements and plan directly back to original request/clarifications before implementation correctness;
+8. only Final Reviewer controls the task verdict.
 
 Do not treat reviewer agreement as proof. A perfectly implemented materially wrong plan is `PLAN_DEFECT`.
 
@@ -190,11 +203,11 @@ Do not treat reviewer agreement as proof. A perfectly implemented materially wro
 
 If Executor returns `PLAN_CONFLICT`, re-investigate evidence/provenance and clarify/replan when required.
 
-If Final Reviewer returns `IMPLEMENTATION_DEFECT`, send only validated corrections to Executor, revalidate, freeze a new target and start a fresh independent review cycle.
+If Final Reviewer returns `IMPLEMENTATION_DEFECT`, send only validated corrections to Executor, revalidate affected evidence, freeze a new target and start a fresh independent review cycle.
 
 If Final Reviewer returns `PLAN_DEFECT`, reopen canonical provenance first, clarify newly exposed ambiguity when required, revise approved requirements only from authoritative input, issue a revised plan and execute/review again.
 
-If source/documentation changes after `TASK_VALIDATED`, current-cycle review evidence is stale and must not be reused.
+If source/documentation or evidence dependencies change after `TASK_VALIDATED`, affected current-cycle evidence/reviews are stale and must not be reused.
 
 Automatic baseline and final task adjudication failures are each capped at three cycles. Then return `BASELINE_BLOCKED` or `BLOCKED`.
 
@@ -206,4 +219,4 @@ Reason fully; communicate compactly. Default to concise, evidence-dense output: 
 
 Expand when brevity could reduce correctness or make action ambiguous, especially for security findings, destructive/irreversible operations, schema/data migrations, unresolved requirements, architectural disagreements, blockers and recovery instructions. Output efficiency must never weaken evidence, safety, provenance, requirement fidelity or governance decisions.
 
-For task-oriented responses include the machine-readable `GOVERNANCE_RESULT` block and keep `.ai/STATUS.md`, `RUN_STATE.json` and `.ai/PROJECT_HISTORY.md` synchronized without secrets.
+For task-oriented responses include the machine-readable `GOVERNANCE_RESULT` block and add `EVIDENCE_STATUS: COMPLETE|PARTIAL|BLOCKED|N/A`. Keep `.ai/STATUS.md`, `RUN_STATE.json` and `.ai/PROJECT_HISTORY.md` synchronized without secrets.
