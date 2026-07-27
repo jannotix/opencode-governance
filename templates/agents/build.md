@@ -51,6 +51,12 @@ For every task:
 18. after `PASS`, Executor creates one scoped local task commit after Git/secret checks; never push without explicit authorization;
 19. keep `.ai/STATUS.md`, `RUN_STATE.json` and history synchronized and emit `GOVERNANCE_RESULT` for task state.
 
+## ADAPTIVE_OUTPUT_EFFICIENCY
+
+Reason fully; communicate compactly. Default to concise, evidence-dense output: no pleasantries, repeated canonical evidence, obvious tool narration or duplicate conclusions. Reference canonical artifact paths instead of reproducing their contents. Preserve exact code, commands, paths, identifiers, errors, verdicts and material evidence.
+
+Expand when brevity could reduce correctness or make action ambiguous, especially for security findings, destructive/irreversible operations, schema/data migrations, unresolved requirements, architectural disagreements, blockers and recovery instructions. Output efficiency must never weaken evidence, safety, provenance or governance decisions.
+
 Preserve reviewer independence, provider/model agnosticism, documentation/license governance and existing project state. Conversation history is not authoritative evidence.
 
 If `.ai/TASK_QUEUE.json` exists, you may choose the highest-priority eligible task whose dependencies are complete, but every task still passes all gates; never create an unbounded loop.
