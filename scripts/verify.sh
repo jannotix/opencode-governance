@@ -18,8 +18,12 @@ for rule in '    executor: allow' '    reviewer: allow' '    reviewer-architectu
 grep -Fqx '  task: deny' "$CONFIG_DIR/agents/plan.md" || { echo 'Plan must deny task delegation' >&2; exit 1; }
 for name in architect build plan; do grep -Fqx '  question: allow' "$CONFIG_DIR/agents/$name.md" || { echo "$name must allow question" >&2; exit 1; }; done
 
-for marker in BASELINE_VALIDATED DOCUMENTATION_SCOPE DOCUMENTATION_IMPACT LICENSE_DECISION_REQUIRED CONTEXT_INDEX.md CONTEXT_MANIFEST.md RUN_STATE.json MINIMUM_CHANGE_ASSESSMENT STEERING.md; do grep -Fq "$marker" "$CONFIG_DIR/agents/architect.md" || { echo "Architect missing $marker" >&2; exit 1; }; done
+for marker in BASELINE_VALIDATED DOCUMENTATION_SCOPE DOCUMENTATION_IMPACT LICENSE_DECISION_REQUIRED CONTEXT_INDEX.md INSTRUCTION_INDEX.md CONTEXT_MANIFEST.md RUN_STATE.json MINIMUM_CHANGE_ASSESSMENT STEERING.md; do grep -Fq "$marker" "$CONFIG_DIR/agents/architect.md" || { echo "Architect missing $marker" >&2; exit 1; }; done
 for marker in ORIGINAL_USER_REQUEST.md CLARIFICATION_TRANSCRIPT.md APPROVED_REQUIREMENTS.md; do grep -Fq "$marker" "$CONFIG_DIR/agents/architect.md" && grep -Fq "$marker" "$CONFIG_DIR/agents/final-reviewer.md" || { echo "Requirement provenance missing $marker" >&2; exit 1; }; done
+for marker in VERIFICATION_PROFILE.md VERIFICATION_EVIDENCE.md TASK_RISK_PROFILE VALIDATION_PROFILE BUGFIX_PROOF TEST_IMPACT_MAP CONTRACT_COMPATIBILITY ENVIRONMENT_FINGERPRINT DEPENDENCY_DELTA GENERATED_ARTIFACT_GATE MIGRATION_PROOF NON_FUNCTIONAL_BUDGETS FLAKINESS_EVIDENCE ADVERSARIAL_INPUT_VALIDATION CODEOWNERS_HUMAN_GATE UNAVAILABLE; do grep -Fq "$marker" "$CONFIG_DIR/agents/architect.md" || { echo "Architect missing v1.8 evidence marker $marker" >&2; exit 1; }; done
+for name in build plan executor reviewer reviewer-architecture final-reviewer; do for marker in VERIFICATION_PROFILE TASK_RISK_PROFILE; do grep -Fq "$marker" "$CONFIG_DIR/agents/$name.md" || { echo "$name missing $marker" >&2; exit 1; }; done; done
+for name in executor reviewer reviewer-architecture final-reviewer; do grep -Fq 'VERIFICATION_EVIDENCE' "$CONFIG_DIR/agents/$name.md" || { echo "$name missing VERIFICATION_EVIDENCE" >&2; exit 1; }; done
+
 for marker in EXECUTION_PACKET.md CONTEXT_MANIFEST.md RUN_STATE.json MINIMUM_CHANGE_ASSESSMENT; do grep -Fq "$marker" "$CONFIG_DIR/agents/executor.md" || { echo "Executor missing $marker" >&2; exit 1; }; done
 grep -Fq 'REVIEW_IMPLEMENTATION_PACKET.md' "$CONFIG_DIR/agents/reviewer.md" || { echo 'Implementation Reviewer packet policy missing' >&2; exit 1; }
 grep -Fq 'REVIEW_ARCHITECTURE_PACKET.md' "$CONFIG_DIR/agents/reviewer-architecture.md" && grep -Fqi 'context-efficient' "$CONFIG_DIR/agents/reviewer-architecture.md" || { echo 'Architecture Reviewer context policy missing' >&2; exit 1; }
@@ -30,10 +34,13 @@ for mode in TASK_REVIEW BASELINE_AUDIT RELEASE_REVIEW; do grep -Fq "$mode" "$CON
 for marker in BASELINE_PASS BASELINE_DEFECT LICENSE_DECISION_REQUIRED; do grep -Fq "$marker" "$CONFIG_DIR/agents/final-reviewer.md" || { echo "Final Reviewer missing $marker" >&2; exit 1; }; done
 
 for marker in docs/INSTALLATION.md docs/USER_MANUAL.md docs/wiki/README.md; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-docs.md" || { echo "/ai-docs missing $marker" >&2; exit 1; }; done
-for marker in ORIGINAL_USER_REQUEST.md CLARIFICATION_TRANSCRIPT.md APPROVED_REQUIREMENTS.md CONTEXT_MANIFEST.md RUN_STATE.json MINIMUM_CHANGE_ASSESSMENT; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-workflow.md" || { echo "/ai-workflow missing $marker" >&2; exit 1; }; done
+for marker in ORIGINAL_USER_REQUEST.md CLARIFICATION_TRANSCRIPT.md APPROVED_REQUIREMENTS.md CONTEXT_MANIFEST.md VERIFICATION_PROFILE.md RUN_STATE.json MINIMUM_CHANGE_ASSESSMENT; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-workflow.md" || { echo "/ai-workflow missing $marker" >&2; exit 1; }; done
+for marker in TASK_RISK_PROFILE VALIDATION_PROFILE BUGFIX_PROOF TEST_IMPACT_MAP CONTRACT_COMPATIBILITY ENVIRONMENT_FINGERPRINT DEPENDENCY_DELTA GENERATED_ARTIFACT_GATE MIGRATION_PROOF NON_FUNCTIONAL_BUDGETS FLAKINESS_EVIDENCE ADVERSARIAL_INPUT_VALIDATION CODEOWNERS_HUMAN_GATE; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-plan.md" || grep -Fq "$marker" "$CONFIG_DIR/commands/ai-workflow.md" || { echo "Evidence workflow missing $marker" >&2; exit 1; }; done
+for file in ai-execute ai-review ai-status ai-resume ai-release; do grep -Eq 'VERIFICATION_(PROFILE|EVIDENCE)' "$CONFIG_DIR/commands/$file.md" || { echo "/$file missing v1.8 verification artifacts" >&2; exit 1; }; done
 for marker in REVIEW_IMPLEMENTATION_PACKET.md REVIEW_ARCHITECTURE_PACKET.md FINAL_PACKET.md; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-review.md" || { echo "/ai-review missing $marker" >&2; exit 1; }; done
-for marker in RUN_STATE.json STEERING.md GOVERNANCE_RESULT; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-resume.md" || { echo "/ai-resume missing $marker" >&2; exit 1; }; done
+for marker in RUN_STATE.json STEERING.md GOVERNANCE_RESULT ENVIRONMENT_FINGERPRINT STALE; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-resume.md" || { echo "/ai-resume missing $marker" >&2; exit 1; }; done
 for marker in 'opencode stats' '--models' 'opencode session list' 'opencode export' '--sanitize' GOVERNANCE_METRICS 'ESTIMATED_VALUES: NONE' UNAVAILABLE; do grep -Fq -- "$marker" "$CONFIG_DIR/commands/ai-metrics.md" || { echo "/ai-metrics missing $marker" >&2; exit 1; }; done
+for file in ai-workflow ai-status ai-resume; do grep -Fq 'EVIDENCE_STATUS' "$CONFIG_DIR/commands/$file.md" || { echo "/$file missing EVIDENCE_STATUS" >&2; exit 1; }; done
 
 python3 - "$CONFIG_DIR" <<'PY'
 import json,pathlib,re,sys
