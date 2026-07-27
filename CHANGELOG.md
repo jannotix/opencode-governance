@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.1 - 2026-07-27
+
+- Fixed the v2.0.0 template/verifier contract mismatch for the canonical `EXTERNAL_TOOLING` risk dimension in Executor, Implementation Reviewer, Architecture/Security Reviewer and Final Reviewer.
+- Kept `scripts/verify.ps1` and `scripts/verify.sh` strict; the fix makes the agent contracts explicit instead of weakening verification.
+- Consolidated public documentation so README and workflow remain concise while context/resume, Evidence-Driven Verification, Operational Assurance and permissions each have a single clear responsibility.
+- Added the OpenCode community-project non-affiliation notice to README.
+- Simplified GitHub Actions by removing assertions already enforced by the canonical verifiers and added direct shell/PowerShell syntax validation.
+- No provider/model routing, authentication, command/agent count, governance semantics or mandatory dependency requirements changed.
+
 ## 2.0.0 - 2026-07-27
 
 - Added **Operational Assurance** as the v2 governance layer, extending Evidence-Driven Verification from code/test evidence to realistic runtime behavior, recovery and external side-effect boundaries without adding a new governance agent, slash command or mandatory runtime dependency.
