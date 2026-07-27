@@ -10,6 +10,14 @@
 
 The global OpenCode configuration is shared by Desktop, TUI and CLI. Architect, governed Build and governed Plan explicitly allow OpenCode's `question` tool for material clarification.
 
+OpenCode v2 governance also uses native capabilities when available:
+
+- built-in read-only `Explore` and `Scout` subagents for bounded discovery;
+- native `skill` loading for governed task-relevant skills;
+- normal OpenCode/MCP permissions for external tools.
+
+No extra runtime dependency is required by OpenCode Governance for these features.
+
 ## Windows
 
 ```powershell
@@ -31,8 +39,10 @@ The installer:
 4. renders five governance roles plus governed Build and Plan using the Architect model;
 5. installs all eleven governance commands, including `/ai-resume` and `/ai-metrics`;
 6. sets `architect` as `default_agent` while preserving unrelated configuration;
-7. verifies provider-qualified models, Build/Plan behavior, baseline/provenance/documentation gates, context/instruction routing, Evidence-Driven Verification, evidence packets, minimum-change/resume markers, adaptive output efficiency, usage telemetry and reviewer modes;
-8. runs `opencode debug config` when OpenCode is available.
+7. renders Architect/Build with bounded access to read-only `Explore`/`Scout`; writable `General` is not enabled as a governance discovery worker;
+8. renders governed agents with skill loading subject to approval and governance trust/scope rules;
+9. verifies provider-qualified models, Build/Plan behavior, baseline/provenance/documentation gates, context/instruction/skill/memory routing, Evidence-Driven Verification, Operational Assurance, dependency admission, pre-change safepoints, evidence packets, minimum-change/resume markers, adaptive output efficiency, usage telemetry and reviewer modes;
+10. runs `opencode debug config` when OpenCode is available.
 
 Configured roles:
 
@@ -42,7 +52,7 @@ Configured roles:
 - Architecture/Security Reviewer;
 - Final Reviewer.
 
-Build and Plan always use the configured Architect model/variant. The same model may be reused across roles. No provider/model ID or verification tool is hardcoded in the repository.
+Build and Plan always use the configured Architect model/variant. The same model may be reused across roles. No provider/model ID, package scanner, browser framework, preview platform or verification tool is hardcoded in the repository.
 
 ## First project use
 
@@ -56,6 +66,7 @@ Initial governance creates/reuses:
 .ai/CODEBASE_BASELINE.md
 .ai/CONTEXT_INDEX.md
 .ai/INSTRUCTION_INDEX.md
+.ai/GOVERNANCE_MEMORY.md
 .ai/DEPLOYMENT_SCOPE.md
 .ai/DOCUMENTATION_SCOPE.md
 .ai/PROJECT_HISTORY.md
@@ -64,15 +75,17 @@ Initial governance creates/reuses:
 .ai/tasks/
 ```
 
-The draft baseline/context/instruction indexes must pass independent Implementation + Architecture/Security baseline audits and Final Reviewer adjudication before becoming `BASELINE_VALIDATED`. No application-source implementation is allowed before that state.
+The draft baseline/context/instruction-skill indexes/governance memory must pass independent Implementation + Architecture/Security baseline audits and Final Reviewer adjudication before becoming `BASELINE_VALIDATED`. No application-source implementation is allowed before that state.
 
-Existing repositories are not mass-rescanned during governance installation. Existing `.ai/` state and project documentation are preserved. v1.8 task evidence is created lazily when the next governed task requires it; completed historical tasks are not rewritten.
+`GOVERNANCE_MEMORY.md` starts empty when no validated reusable lesson exists. Installation/init never fabricates historical memory from prior conversations.
+
+Existing repositories are not mass-rescanned during governance installation. Existing `.ai/` state and project documentation are preserved. New v2 capabilities are adopted lazily when a governed task or explicit audit needs them; completed historical tasks are not rewritten.
 
 For projects without a coherent documentation convention, `.ai/DOCUMENTATION_SCOPE.md` normally uses top-level `docs/` outside the production/runtime boundary. Governance never invents license terms; unresolved explicit license state becomes `LICENSE_DECISION_REQUIRED`.
 
 ## Governed task artifacts
 
-New v1.8 governed tasks create/update:
+New governed tasks create/update:
 
 ```text
 .ai/tasks/<TASK-ID>/
@@ -93,11 +106,31 @@ New v1.8 governed tasks create/update:
 
 `MINIMUM_CHANGE_ASSESSMENT` remains part of the implementation-ready plan rather than a duplicate standalone artifact.
 
-`VERIFICATION_PROFILE.md` contains `TASK_RISK_PROFILE`, the discovered authoritative validation/CI profile and required/conditional Evidence-Driven Verification gates. `VERIFICATION_EVIDENCE.md` stores actual compact evidence/results and freshness.
+`VERIFICATION_PROFILE.md` contains `TASK_RISK_PROFILE`, authoritative validation/CI profile, Evidence-Driven gates and Operational Assurance. `VERIFICATION_EVIDENCE.md` stores actual compact evidence/results and freshness.
 
-Governance does not install external scanners, fuzzers, contract checkers, mutation tools, benchmark tools or generators automatically. It uses project tooling already available/approved and primary evidence. Required unavailable evidence is never silently treated as PASS.
+No extra artifact is created for each new v2 feature:
 
-See [Evidence-Driven Verification](evidence-driven-verification.md).
+- discovery results are routed through `CONTEXT_MANIFEST.md`;
+- skills remain indexed in `INSTRUCTION_INDEX.md`;
+- dependency admission, safepoint, closed-loop and Operational Assurance live in `VERIFICATION_PROFILE.md`/`VERIFICATION_EVIDENCE.md`;
+- only validated reusable learning is persisted in `GOVERNANCE_MEMORY.md`.
+
+## Native discovery and skills
+
+Architect/Build may use a bounded 2–4 worker `READ_ONLY_DISCOVERY_SWARM` only for materially multi-surface tasks:
+
+- `Explore` — local codebase discovery;
+- `Scout` — external dependency/upstream/documentation research.
+
+The governance templates do not enable writable `General` as a discovery worker.
+
+`GOVERNED_SKILL_ROUTING` does not load every available skill. Skills are selected by task relevance and checked for source/ID, scope/trigger, freshness and trust before use. Skill loading is permission-gated and skill content never outranks canonical requirements.
+
+## No automatic verification dependencies
+
+Governance does not install external scanners, fuzzers, contract checkers, mutation tools, benchmark tools, browser frameworks, visual-regression tools, preview platforms or package-firewall products automatically. It uses project tooling already available/approved and primary evidence.
+
+A new direct dependency proposed by the implementation itself still requires `DEPENDENCY_ADMISSION_GATE = ADMIT` before installation.
 
 ## Resume
 
@@ -107,7 +140,7 @@ If a governed task is interrupted:
 /ai-resume <TASK-ID>
 ```
 
-Resume validates Git/checkpoint/provenance/context/instruction/evidence consistency. It also reconciles source/contracts/lockfiles/generator inputs/migrations/environment/toolchain/validation configuration and invalidates only dependent stale evidence/reviews. It does not reconstruct state from conversation memory.
+Resume validates Git/checkpoint/provenance/context/instruction/skill/memory/evidence consistency and invalidates only dependent stale evidence/reviews. It never fabricates historical dependency admission, pre-change safepoints, Operational Assurance execution or Governance Memory decisions.
 
 ## Usage telemetry
 
