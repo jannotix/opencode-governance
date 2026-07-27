@@ -25,7 +25,10 @@ jobs:
             | ./scripts/install.sh
           ./scripts/verify.sh "$CONFIG_DIR"
           test -s "$CONFIG_DIR/commands/ai-resume.md"
+          test -s "$CONFIG_DIR/commands/ai-metrics.md"
           grep -Fq 'RUN_STATE.json' "$CONFIG_DIR/commands/ai-resume.md"
+          grep -Fq 'GOVERNANCE_METRICS' "$CONFIG_DIR/commands/ai-metrics.md"
+          grep -Fq 'ADAPTIVE_OUTPUT_EFFICIENCY' "$CONFIG_DIR/agents/architect.md"
           grep -Fq 'CONTEXT_MANIFEST.md' "$CONFIG_DIR/agents/architect.md"
           grep -Fq 'FINAL_PACKET.md' "$CONFIG_DIR/agents/final-reviewer.md"
 
@@ -59,3 +62,5 @@ jobs:
           '{"$schema":"https://opencode.ai/config.json","default_agent":"architect"}' | Set-Content -Encoding utf8 (Join-Path $config 'opencode.json')
           ./scripts/verify.ps1 -ConfigDir $config
           if (-not (Test-Path (Join-Path $config 'commands/ai-resume.md'))) { throw 'ai-resume missing' }
+          if (-not (Test-Path (Join-Path $config 'commands/ai-metrics.md'))) { throw 'ai-metrics missing' }
+          if ((Get-Content (Join-Path $config 'agents/architect.md') -Raw) -notmatch 'ADAPTIVE_OUTPUT_EFFICIENCY') { throw 'adaptive output policy missing' }
