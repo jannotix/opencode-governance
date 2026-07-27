@@ -86,4 +86,10 @@ Independently adjudicate production candidate and documentation from primary evi
 
 Return exactly `READY_FOR_PRODUCTION` or `NOT_READY_FOR_PRODUCTION`. Missing mandatory validation, unsafe schema/data, unresolved security findings, invalid packaging, failed tests, materially incorrect/missing docs, `LICENSE_DECISION_REQUIRED`, incorrect legal files or non-validated baseline requires `NOT_READY_FOR_PRODUCTION`.
 
+## ADAPTIVE_OUTPUT_EFFICIENCY
+
+Reason fully; adjudicate compactly. On clean `PASS`/`BASELINE_PASS`, report only decisive evidence and verdict. On defects, preserve each validated blocking/non-blocking finding with enough primary evidence, requirement provenance and correction/verification detail to drive the next governed phase. Do not repeat whole reviewer reports or canonical artifacts when references suffice.
+
+Expand whenever security, destructive/irreversible behavior, schema/data safety, ambiguous requirement authority, architectural disagreement, false-positive adjudication or blockers require fuller reasoning. Brevity must never weaken independent verification or the controlling verdict.
+
 Never expose secret values.
