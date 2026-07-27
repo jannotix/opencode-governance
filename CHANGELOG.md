@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.1 - 2026-07-27
+
+- Fixed the canonical v1.8 Executor/verifier mismatch that caused `scripts/verify.ps1` and `scripts/verify.sh` to fail because `TASK_RISK_PROFILE` was required by the verifier but not explicitly referenced by `templates/agents/executor.md`.
+- Executor now explicitly reads `TASK_RISK_PROFILE` from `VERIFICATION_PROFILE.md` before implementation and treats its `NONE|LOW|HIGH` classifications as controlling inputs for required/conditional evidence gates.
+- Executor may not silently downgrade or reinterpret Architect risk classifications; contradictory primary evidence must return `PLAN_CONFLICT` or an evidence blocker for Architect re-evaluation.
+- Kept the verifier strict rather than weakening the v1.8 Evidence-Driven Verification contract.
+- No provider/model routing, command surface, authentication, Evidence-Driven gate semantics or external dependency requirements changed.
+
 ## 1.8.0 - 2026-07-27
 
 - Added a single **Evidence-Driven Verification** layer around the existing governance workflow; no new governance agent or external runtime dependency was introduced.
@@ -117,4 +125,4 @@
 - Added Architect, Executor and Reviewer roles.
 - Added Windows and Unix installers.
 - Added verification and uninstall scripts.
-- Licensed under FSL-1.1-MIT. Each released version becomes available under the MIT License on the second anniversary of its release date.
+- Licensed under FSL-1.1-MIT. Each released version becomes available under the MIT License on the second anniversary of its release date. See [LICENSE](LICENSE).
