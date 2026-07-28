@@ -1,62 +1,27 @@
 ---
-description: Initialize and adversarially validate project-local governance state
+description: Initialize and adversarially validate project governance state
 agent: architect
 subtask: false
 ---
 
-Initialize governance for the current repository without modifying application source code or project documentation.
+Initialize `.ai/CODEBASE_BASELINE.md`, `.ai/CONTEXT_INDEX.md`, `.ai/INSTRUCTION_INDEX.md`, `.ai/GOVERNANCE_MEMORY.md`, documentation/deployment scope, history/status, tasks and baseline audits without source/doc edits.
 
-Create project-local governance artifacts if missing:
+Create only missing product files:
+- `.ai/product/PRODUCT_VISION.md`
+- `.ai/product/USER_AND_ROLE_MODEL.md`
+- `.ai/product/DOMAIN_AND_PROCESS_MODEL.md`
+- `.ai/product/PRODUCT_COMPLETENESS_MATRIX.md`
+- `.ai/product/PRODUCT_BLUEPRINT.md`
+- `.ai/product/PRODUCT_DECISIONS.md`
 
-- `.ai/CODEBASE_BASELINE.md`
-- `.ai/CONTEXT_INDEX.md`
-- `.ai/INSTRUCTION_INDEX.md`
-- `.ai/GOVERNANCE_MEMORY.md`
-- `.ai/DEPLOYMENT_SCOPE.md`
-- `.ai/DOCUMENTATION_SCOPE.md`
-- `.ai/PROJECT_HISTORY.md`
-- `.ai/STATUS.md`
-- `.ai/tasks/`
-- `.ai/baseline-audits/`
+For v2 state use `PRODUCT_MIGRATION_DRAFT`: preserve history; reconstruct only evidence-backed facts; mark unsupported content unknown; never convert assumptions to approvals; never rewrite task provenance; append migration evidence; extend legacy `RUN_STATE.json`. Do not force deep discovery solely because a project predates v3.
 
-Do not overwrite valid existing project state. Initialize `GOVERNANCE_MEMORY.md` empty when no validated reusable lesson exists; never invent historical memory.
+Discover read-only `Explore`/`Scout`, skills, validation and `OPERATIONAL_ASSURANCE` capabilities. Run independent baseline audit and Final Reviewer adjudication, maximum three failures. Never create task-specific evidence during init.
 
-Build a DRAFT baseline from broad structural and risk-based reverse engineering: repository reference, stack/runtimes, entry points, architecture, important dependency/call paths, data flows/trust boundaries, schema/data mechanisms, integrations, validation capabilities, public contracts, dependency/package-admission mechanisms, generated-artifact mechanisms, migration mechanisms, deployment, security-sensitive areas, known defects/risks, documentation state, technical constraints, unknowns and material exclusions. Do not waste context blindly reading generated/vendor/cache/binary artifacts.
+## Initialization contract
 
-Discover reusable governed-discovery/skill capabilities from repository/OpenCode evidence when present:
+Initialization is read-only outside `.ai/**`. Build a DRAFT baseline and reusable routing indexes from primary repository evidence: repository reference, stack/runtimes, entry points, architecture, important dependency/call paths, data/trust boundaries, schema/migrations, public contracts, integrations, validation, deployment, security-sensitive areas, known defects/risks, documentation, instructions/skills, dependency admission and operational capabilities. Record unknowns and exclusions; do not blindly consume generated/vendor/cache/binary content.
 
-- OpenCode/project skill definitions and winning IDs/sources, descriptions, scope/triggers and freshness without loading all skill bodies;
-- classify indexed skills `PROJECT_AUTHORITATIVE|PROJECT_ADVISORY|WORKSPACE_ADVISORY|EXTERNAL_UNTRUSTED`; skills never outrank canonical user requirements;
-- record that built-in `Explore` is read-only local-code discovery and `Scout` is read-only external dependency/upstream/documentation discovery when available; do not invoke a discovery swarm merely to initialize governance;
-- never enable/use writable `General` as a governance discovery worker.
+Run `BASELINE_DUAL_AUDIT`: request both independent reviewers before consuming either report, keep sibling reports isolated and let Final Reviewer alone return `BASELINE_PASS|BASELINE_DEFECT|BLOCKED`. Apply only validated `.ai/**` corrections, maximum three failed cycles. No source implementation begins before `BASELINE_VALIDATED`.
 
-Discover reusable Operational Assurance capabilities from repository/configuration evidence when present:
-
-- existing local preview, ephemeral, staging, sandbox or test-environment mechanisms and their documented production boundaries;
-- existing browser/E2E/native/manual-reproducible user-flow mechanisms;
-- existing screenshot/visual-regression/responsive-state mechanisms;
-- documented release rollback, forward-recovery, previous-artifact, backup/restore and recovery mechanisms;
-- configured external tools/MCP surfaces and their documented capabilities/side effects, without reading or persisting secret values;
-- existing project-local sandbox/container/worktree/temporary-isolation mechanisms suitable for safe experimentation.
-
-Capability discovery during `/ai-init` is read-only. Do not provision environments, invoke privileged/destructive external tools or MCP actions, execute user flows merely for discovery, create worktrees/clones/containers, deploy, rollback, push, merge, install dependencies, or use production data/credentials.
-
-Create/update `.ai/CONTEXT_INDEX.md` as a compact routing index of material modules/paths, entry points, important callers/callees, dependency edges, data stores, trust boundaries, security-sensitive surfaces, canonical documentation, tests/validation capabilities and known risks. It is an index, not a copy of source code.
-
-Create/update `.ai/INSTRUCTION_INDEX.md` from authoritative repository-local instruction/contribution/development files and discovered skills. Record instruction source path, scope/applicable paths, precedence/specificity, material constraints and unresolved conflicts. For skills record ID/source, description, scope/trigger, trust classification and freshness. Tool/skill-specific instructions never silently override the canonical user requirement trail. Material unresolved conflicts require authoritative clarification rather than invented precedence.
-
-Create/update `.ai/GOVERNANCE_MEMORY.md` only with already-authoritative validated historical entries if such evidence exists. Each entry requires stable ID, type, scope, source task/release/incident, evidence references, learned rule, `stale_when`, status `ACTIVE|STALE|REVOKED` and last validation reference. Memory is advisory routing evidence and never overrides current requirements or primary evidence.
-
-Create/update `.ai/DOCUMENTATION_SCOPE.md` and `.ai/DEPLOYMENT_SCOPE.md`. Preserve coherent existing documentation conventions. For distributable applications, normally record overview/readme, step-by-step installation, user manual, wiki/index, changelog and explicit licensing documentation as required when applicable. Never choose/infer a license; record `LICENSE_DECISION_REQUIRED` when unresolved.
-
-Use `question` for material product/project decisions not established by evidence. Do not repeat answered questions.
-
-Set `BASELINE_DRAFT`, create `.ai/baseline-audits/<AUDIT-ID>/`, and request independent `reviewer` and `reviewer-architecture` `BASELINE_AUDIT` reports against the same repository reference and draft baseline/context/instruction indexes/governance memory/documentation scope. Neither reviewer may see the sibling report. Then invoke `final-reviewer` in `BASELINE_AUDIT` mode.
-
-Only Final Reviewer controls `BASELINE_PASS`, `BASELINE_DEFECT` or `BLOCKED`. Apply only validated `.ai/` corrections after `BASELINE_DEFECT`. Maximum three baseline adjudication cycles; then `BASELINE_BLOCKED`.
-
-On `BASELINE_PASS`, set `BASELINE_VALIDATED`, record the validated repository reference, baseline/context/instruction-index/governance-memory freshness and append evidence to `.ai/PROJECT_HISTORY.md`.
-
-Initialize `PROJECT_HISTORY.md` as append-only. Never store secret values.
-
-Do not build per-task `VERIFICATION_PROFILE.md`, `VERIFICATION_EVIDENCE.md`, `READ_ONLY_DISCOVERY_SWARM`, `DEPENDENCY_ADMISSION_GATE`, `PRE_CHANGE_SAFEPOINT` or `OPERATIONAL_ASSURANCE` results during initialization. Task-specific evidence is created lazily. Do not rebuild/re-audit a valid baseline merely because `/ai-init` is run again. Use `/ai-audit` for explicit/material revalidation.
+Product migration never fabricates history or approval. Existing v2 tasks remain resumable; product gaps unrelated to a small active task may remain explicit without forcing a full product interview. `NO_AUTOMATIC_EXTERNAL_ACTION` applies.

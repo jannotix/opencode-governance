@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.0.0 - 2026-07-28
+
+- Added adaptive product discovery with `LIGHT|STANDARD|DEEP` depth for every governed request.
+- Added `/ai-discover` for explicit discovery, refresh and audit workflows.
+- Added the six-file `.ai/product/` definition, decision and completeness layer.
+- Added governed domain research, constructive challenge, guided decisions and safe user override.
+- Added independent `DISCOVERY_REVIEW` and Final Reviewer discovery adjudication.
+- Added vertical milestone and required-capability traceability without reducing complete-product requests to a default MVP.
+- Added separate `PRODUCT_COMPLETENESS_VERDICT` and `RELEASE_VERDICT`.
+- Added backward-compatible lazy migration from v2 project state without rewriting history or fabricating requirements.
+- Preserved seven agents, single-writer execution, reviewer independence, provider/model agnosticism, Evidence-Driven Verification, Operational Assurance, explicit external-action authorization and no new mandatory runtime dependency.
+
 ## 2.0.1 - 2026-07-27
 
 - Fixed the v2.0.0 template/verifier contract mismatch for the canonical `EXTERNAL_TOOLING` risk dimension in Executor, Implementation Reviewer, Architecture/Security Reviewer and Final Reviewer.

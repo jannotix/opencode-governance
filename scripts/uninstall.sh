@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 CONFIG_DIR="${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}"
-rm -f "$CONFIG_DIR/agents/architect.md" "$CONFIG_DIR/agents/build.md" "$CONFIG_DIR/agents/plan.md" "$CONFIG_DIR/agents/executor.md" "$CONFIG_DIR/agents/reviewer.md" "$CONFIG_DIR/agents/reviewer-architecture.md" "$CONFIG_DIR/agents/final-reviewer.md"
-rm -f "$CONFIG_DIR/commands/ai-init.md" "$CONFIG_DIR/commands/ai-audit.md" "$CONFIG_DIR/commands/ai-docs.md" "$CONFIG_DIR/commands/ai-plan.md" "$CONFIG_DIR/commands/ai-execute.md" "$CONFIG_DIR/commands/ai-review.md" "$CONFIG_DIR/commands/ai-workflow.md" "$CONFIG_DIR/commands/ai-status.md" "$CONFIG_DIR/commands/ai-resume.md" "$CONFIG_DIR/commands/ai-metrics.md" "$CONFIG_DIR/commands/ai-release.md"
-echo "Governance agents, governed Build/Plan overrides and commands removed. Existing provider authentication, project .ai state, project documentation and backups were left untouched."
-echo "Review default_agent in your OpenCode config if you want to change it from architect."
+for file in architect build plan executor reviewer reviewer-architecture final-reviewer; do rm -f "$CONFIG_DIR/agents/$file.md"; done
+for file in ai-init ai-audit ai-docs ai-discover ai-plan ai-execute ai-review ai-workflow ai-status ai-resume ai-metrics ai-release; do rm -f "$CONFIG_DIR/commands/$file.md"; done
+echo "Removed OpenCode Governance managed agents and commands. Provider authentication, config, project .ai state, project documentation, backups and unrelated files were preserved."

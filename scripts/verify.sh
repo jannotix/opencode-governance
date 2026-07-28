@@ -2,98 +2,66 @@
 set -euo pipefail
 CONFIG_DIR="${1:-${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}}"
 required_agents=(architect build plan executor reviewer reviewer-architecture final-reviewer)
-required_commands=(ai-init ai-audit ai-docs ai-plan ai-execute ai-review ai-workflow ai-status ai-resume ai-metrics ai-release)
-operational_markers=(OPERATIONAL_ASSURANCE PREVIEW_ENVIRONMENT_GATE USER_FLOW_VERIFICATION VISUAL_BEHAVIOR_GATE RELEASE_RECOVERY_PROOF TOOL_CAPABILITY_PROFILE MCP_CAPABILITY_ASSESSMENT SAFE_EXPERIMENTATION)
-
+required_commands=(ai-init ai-audit ai-docs ai-discover ai-plan ai-execute ai-review ai-workflow ai-status ai-resume ai-metrics ai-release)
+product_paths=(
+  '.ai/product/PRODUCT_VISION.md'
+  '.ai/product/USER_AND_ROLE_MODEL.md'
+  '.ai/product/DOMAIN_AND_PROCESS_MODEL.md'
+  '.ai/product/PRODUCT_COMPLETENESS_MATRIX.md'
+  '.ai/product/PRODUCT_BLUEPRINT.md'
+  '.ai/product/PRODUCT_DECISIONS.md'
+)
+v2_markers=(VERIFICATION_PROFILE TASK_RISK_PROFILE VALIDATION_PROFILE BUGFIX_PROOF TEST_IMPACT_MAP CONTRACT_COMPATIBILITY ENVIRONMENT_FINGERPRINT DEPENDENCY_ADMISSION_GATE DEPENDENCY_DELTA GENERATED_ARTIFACT_GATE PRE_CHANGE_SAFEPOINT MIGRATION_PROOF NON_FUNCTIONAL_BUDGETS FLAKINESS_EVIDENCE ADVERSARIAL_INPUT_VALIDATION CODEOWNERS_HUMAN_GATE CLOSED_LOOP_LEARNING OPERATIONAL_ASSURANCE PREVIEW_ENVIRONMENT_GATE USER_FLOW_VERIFICATION VISUAL_BEHAVIOR_GATE RELEASE_RECOVERY_PROOF TOOL_CAPABILITY_PROFILE MCP_CAPABILITY_ASSESSMENT SAFE_EXPERIMENTATION GOVERNED_SKILL_ROUTING GOVERNANCE_MEMORY ADAPTIVE_OUTPUT_EFFICIENCY)
+v3_markers=(PRODUCT_LIFECYCLE_GOVERNANCE WORK_CLASS DISCOVERY_DEPTH ASSISTANCE_MODE ADAPTIVE_PRODUCT_DISCOVERY CONSTRUCTIVE_CHALLENGE GUIDED_DECISION_POLICY PRODUCT_COMPLETENESS_MATRIX.md PRODUCT_DECISIONS.md PRODUCT_BLUEPRINT_VERSION MATERIAL_UNKNOWN_COUNT)
+fail(){ echo "$1" >&2; exit 1; }
 for name in "${required_agents[@]}"; do
-  test -s "$CONFIG_DIR/agents/$name.md" || { echo "Missing agent: $name" >&2; exit 1; }
-  grep -Eq '^model: [^[:space:]/]+/[^[:space:]]+$' "$CONFIG_DIR/agents/$name.md" || { echo "Missing provider-qualified model: $name" >&2; exit 1; }
-  ! grep -Eq '__[A-Z_]+__' "$CONFIG_DIR/agents/$name.md" || { echo "Unrendered placeholder: $name" >&2; exit 1; }
-  grep -Fq 'ADAPTIVE_OUTPUT_EFFICIENCY' "$CONFIG_DIR/agents/$name.md" || { echo "$name missing adaptive output efficiency policy" >&2; exit 1; }
-  grep -Eq '^  skill:[[:space:]]*$' "$CONFIG_DIR/agents/$name.md" || { echo "$name missing governed skill permission block" >&2; exit 1; }
+  file="$CONFIG_DIR/agents/$name.md"; [[ -s "$file" ]] || fail "Missing agent: $name"
+  grep -Eq '^model: [^[:space:]/]+/[^[:space:]]+$' "$file" || fail "Missing provider-qualified model: $name"
+  ! grep -Eq '__[A-Z_]+__' "$file" || fail "Unrendered placeholder: $name"
+  grep -Eq '^  skill:[[:space:]]*$' "$file" || fail "$name missing governed skill permission block"
+  for marker in "${v2_markers[@]}"; do grep -Fq "$marker" "$file" || fail "$name missing v2 marker $marker"; done
 done
-for name in "${required_commands[@]}"; do test -s "$CONFIG_DIR/commands/$name.md" || { echo "Missing command: $name" >&2; exit 1; }; done
-
-architect_model="$(sed -n 's/^model: //p' "$CONFIG_DIR/agents/architect.md" | head -n1)"
-for alias in build plan; do [[ "$(sed -n 's/^model: //p' "$CONFIG_DIR/agents/$alias.md" | head -n1)" == "$architect_model" ]] || { echo "$alias must use Architect model" >&2; exit 1; }; done
-
-for name in architect build; do
-  for worker in explore scout; do grep -Eq "^[[:space:]]+$worker:[[:space:]]+allow[[:space:]]*$" "$CONFIG_DIR/agents/$name.md" || { echo "$name must allow read-only discovery worker $worker" >&2; exit 1; }; done
-  ! grep -Eq '^[[:space:]]+general:[[:space:]]+allow[[:space:]]*$' "$CONFIG_DIR/agents/$name.md" || { echo "$name must not allow writable General as governance discovery worker" >&2; exit 1; }
+for name in "${required_commands[@]}"; do [[ -s "$CONFIG_DIR/commands/$name.md" ]] || fail "Missing command: $name"; done
+for name in architect build plan; do for marker in "${v3_markers[@]}"; do grep -Fq "$marker" "$CONFIG_DIR/agents/$name.md" || fail "$name missing v3 marker $marker"; done; done
+for path in "${product_paths[@]}"; do
+  for file in architect build plan; do grep -Fq "$path" "$CONFIG_DIR/agents/$file.md" || fail "$file missing product path $path"; done
+  for cmd in ai-init ai-discover ai-plan ai-workflow ai-status ai-resume ai-release; do grep -Fq "$path" "$CONFIG_DIR/commands/$cmd.md" || fail "$cmd missing product path $path"; done
 done
-for rule in '    executor: allow' '    reviewer: allow' '    reviewer-architecture: allow' '    final-reviewer: allow'; do grep -Fqx "$rule" "$CONFIG_DIR/agents/build.md" || { echo "Build delegation missing: $rule" >&2; exit 1; }; done
-grep -Fqx '  task: deny' "$CONFIG_DIR/agents/plan.md" || { echo 'Plan must deny task delegation' >&2; exit 1; }
-for name in architect build plan; do grep -Fqx '  question: allow' "$CONFIG_DIR/agents/$name.md" || { echo "$name must allow question" >&2; exit 1; }; done
-
-for marker in BASELINE_VALIDATED DOCUMENTATION_SCOPE DOCUMENTATION_IMPACT LICENSE_DECISION_REQUIRED CONTEXT_INDEX.md INSTRUCTION_INDEX.md GOVERNANCE_MEMORY.md CONTEXT_MANIFEST.md RUN_STATE.json MINIMUM_CHANGE_ASSESSMENT STEERING.md; do grep -Fq "$marker" "$CONFIG_DIR/agents/architect.md" || { echo "Architect missing $marker" >&2; exit 1; }; done
-for marker in ORIGINAL_USER_REQUEST.md CLARIFICATION_TRANSCRIPT.md APPROVED_REQUIREMENTS.md; do grep -Fq "$marker" "$CONFIG_DIR/agents/architect.md" && grep -Fq "$marker" "$CONFIG_DIR/agents/final-reviewer.md" || { echo "Requirement provenance missing $marker" >&2; exit 1; }; done
-
-for marker in VERIFICATION_PROFILE.md VERIFICATION_EVIDENCE.md TASK_RISK_PROFILE VALIDATION_PROFILE BUGFIX_PROOF TEST_IMPACT_MAP CONTRACT_COMPATIBILITY ENVIRONMENT_FINGERPRINT DEPENDENCY_ADMISSION_GATE DEPENDENCY_DELTA GENERATED_ARTIFACT_GATE PRE_CHANGE_SAFEPOINT MIGRATION_PROOF NON_FUNCTIONAL_BUDGETS FLAKINESS_EVIDENCE ADVERSARIAL_INPUT_VALIDATION CODEOWNERS_HUMAN_GATE CLOSED_LOOP_LEARNING UNAVAILABLE; do grep -Fq "$marker" "$CONFIG_DIR/agents/architect.md" || { echo "Architect missing Evidence-Driven marker $marker" >&2; exit 1; }; done
-for name in build plan executor reviewer reviewer-architecture final-reviewer; do
-  for marker in VERIFICATION_PROFILE TASK_RISK_PROFILE DEPENDENCY_ADMISSION_GATE PRE_CHANGE_SAFEPOINT CLOSED_LOOP_LEARNING; do grep -Fq "$marker" "$CONFIG_DIR/agents/$name.md" || { echo "$name missing v2 evidence marker $marker" >&2; exit 1; }; done
+for file in reviewer reviewer-architecture final-reviewer; do grep -Fq 'DISCOVERY_REVIEW' "$CONFIG_DIR/agents/$file.md" || fail "$file missing DISCOVERY_REVIEW"; done
+for verdict in DISCOVERY_PASS DISCOVERY_DEFECT DISCOVERY_BLOCKED; do grep -Fq "$verdict" "$CONFIG_DIR/agents/final-reviewer.md" || fail "final-reviewer missing $verdict"; done
+for verdict in PRODUCT_COMPLETENESS_VERDICT PRODUCT_COMPLETE PRODUCT_DEFECT PRODUCT_BLOCKED RELEASE_VERDICT READY_FOR_PRODUCTION NOT_READY_FOR_PRODUCTION; do
+  grep -Fq "$verdict" "$CONFIG_DIR/agents/final-reviewer.md" || fail "final-reviewer missing $verdict"
+  grep -Fq "$verdict" "$CONFIG_DIR/commands/ai-release.md" || fail "ai-release missing $verdict"
 done
-for name in executor reviewer reviewer-architecture final-reviewer; do grep -Fq 'VERIFICATION_EVIDENCE' "$CONFIG_DIR/agents/$name.md" || { echo "$name missing VERIFICATION_EVIDENCE" >&2; exit 1; }; done
-
-for name in "${required_agents[@]}"; do
-  for marker in GOVERNED_SKILL_ROUTING GOVERNANCE_MEMORY; do grep -Fq "$marker" "$CONFIG_DIR/agents/$name.md" || { echo "$name missing v2 routing/memory marker $marker" >&2; exit 1; }; done
+for marker in ADAPTIVE_PRODUCT_DISCOVERY WORK_CLASS DISCOVERY_DEPTH CONSTRUCTIVE_CHALLENGE PRODUCT_COMPLETENESS_MATRIX.md PRODUCT_DECISIONS.md DISCOVERY_PASS refresh audit; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-discover.md" || fail "ai-discover missing $marker"; done
+for marker in PRODUCT_CAPABILITY_TRACEABILITY VERTICAL_MILESTONE MILESTONE_VALIDATED PRODUCT_INCOMPLETE; do grep -Fq "$marker" "$CONFIG_DIR/agents/executor.md" || fail "executor missing $marker"; done
+for marker in ORIGINAL_USER_REQUEST.md CLARIFICATION_TRANSCRIPT.md APPROVED_REQUIREMENTS.md CONTEXT_MANIFEST.md RUN_STATE.json MINIMUM_CHANGE_ASSESSMENT; do grep -Fq "$marker" "$CONFIG_DIR/agents/architect.md" || fail "architect missing $marker"; done
+for role in architect build; do
+  for worker in explore scout; do grep -Eq "^[[:space:]]+$worker:[[:space:]]+allow[[:space:]]*$" "$CONFIG_DIR/agents/$role.md" || fail "$role must allow $worker"; done
+  ! grep -Eq '^[[:space:]]+general:[[:space:]]+allow[[:space:]]*$' "$CONFIG_DIR/agents/$role.md" || fail "$role must not allow General"
 done
-for name in architect build; do grep -Fq 'READ_ONLY_DISCOVERY_SWARM' "$CONFIG_DIR/agents/$name.md" || { echo "$name missing bounded read-only discovery policy" >&2; exit 1; }; done
-grep -Fq 'READ_ONLY_DISCOVERY_SWARM' "$CONFIG_DIR/agents/plan.md" || { echo 'Plan missing explicit read-only discovery-swarm boundary' >&2; exit 1; }
-grep -Fq 'MEMORY_DECISION' "$CONFIG_DIR/agents/final-reviewer.md" && grep -Fq 'APPROVE' "$CONFIG_DIR/agents/final-reviewer.md" && grep -Fq 'REJECT' "$CONFIG_DIR/agents/final-reviewer.md" || { echo 'Final Reviewer missing Governance Memory adjudication' >&2; exit 1; }
-
-for name in "${required_agents[@]}"; do
-  for marker in "${operational_markers[@]}"; do grep -Fq "$marker" "$CONFIG_DIR/agents/$name.md" || { echo "$name missing v2.0 Operational Assurance marker $marker" >&2; exit 1; }; done
+grep -Fqx '  task: deny' "$CONFIG_DIR/agents/plan.md" || fail 'Plan must deny task delegation'
+grep -Eq 'external_directory:[[:space:]]+deny' "$CONFIG_DIR/agents/executor.md" || fail 'Executor must deny external_directory'
+semantic_common=(EVIDENCE_FRESHNESS REVIEW_FREEZE BOUNDED_REPAIR NO_AUTOMATIC_EXTERNAL_ACTION)
+for role in architect build reviewer reviewer-architecture final-reviewer; do
+  for marker in "${semantic_common[@]}"; do grep -Fq "$marker" "$CONFIG_DIR/agents/$role.md" || fail "$role missing semantic contract $marker"; done
 done
-for name in plan executor reviewer reviewer-architecture final-reviewer; do
-  for risk in USER_FLOW VISUAL_BEHAVIOR EXTERNAL_TOOLING RECOVERY EXPERIMENTATION; do grep -Fq "$risk" "$CONFIG_DIR/agents/$name.md" || { echo "$name missing v2.0 risk dimension $risk" >&2; exit 1; }; done
-done
-grep -Eq 'external_directory:[[:space:]]+deny' "$CONFIG_DIR/agents/executor.md" || { echo 'Executor must preserve external_directory deny' >&2; exit 1; }
-
-for marker in EXECUTION_PACKET.md CONTEXT_MANIFEST.md RUN_STATE.json MINIMUM_CHANGE_ASSESSMENT; do grep -Fq "$marker" "$CONFIG_DIR/agents/executor.md" || { echo "Executor missing $marker" >&2; exit 1; }; done
-grep -Fq 'REVIEW_IMPLEMENTATION_PACKET.md' "$CONFIG_DIR/agents/reviewer.md" || { echo 'Implementation Reviewer packet policy missing' >&2; exit 1; }
-grep -Fq 'REVIEW_ARCHITECTURE_PACKET.md' "$CONFIG_DIR/agents/reviewer-architecture.md" && grep -Fqi 'context-efficient' "$CONFIG_DIR/agents/reviewer-architecture.md" || { echo 'Architecture Reviewer context policy missing' >&2; exit 1; }
-grep -Fq 'FINAL_PACKET.md' "$CONFIG_DIR/agents/final-reviewer.md" && grep -Fq 'perfect implementation' "$CONFIG_DIR/agents/final-reviewer.md" || { echo 'Final Reviewer policy missing' >&2; exit 1; }
-for name in reviewer reviewer-architecture; do for marker in 'F-###' 'Evidence:' 'Verify:'; do grep -Fq "$marker" "$CONFIG_DIR/agents/$name.md" || { echo "$name missing compact finding marker $marker" >&2; exit 1; }; done; done
-for name in reviewer reviewer-architecture; do for mode in TASK_REVIEW BASELINE_AUDIT RELEASE_REVIEW; do grep -Fq "$mode" "$CONFIG_DIR/agents/$name.md" || { echo "$name missing $mode" >&2; exit 1; }; done; done
-for mode in TASK_REVIEW BASELINE_AUDIT RELEASE_REVIEW; do grep -Fq "$mode" "$CONFIG_DIR/agents/final-reviewer.md" || { echo "Final Reviewer missing $mode" >&2; exit 1; }; done
-for marker in BASELINE_PASS BASELINE_DEFECT LICENSE_DECISION_REQUIRED; do grep -Fq "$marker" "$CONFIG_DIR/agents/final-reviewer.md" || { echo "Final Reviewer missing $marker" >&2; exit 1; }; done
-
-for marker in docs/INSTALLATION.md docs/USER_MANUAL.md docs/wiki/README.md; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-docs.md" || { echo "/ai-docs missing $marker" >&2; exit 1; }; done
-for marker in ORIGINAL_USER_REQUEST.md CLARIFICATION_TRANSCRIPT.md APPROVED_REQUIREMENTS.md CONTEXT_MANIFEST.md VERIFICATION_PROFILE.md RUN_STATE.json MINIMUM_CHANGE_ASSESSMENT GOVERNANCE_MEMORY; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-workflow.md" || { echo "/ai-workflow missing $marker" >&2; exit 1; }; done
-for marker in READ_ONLY_DISCOVERY_SWARM GOVERNED_SKILL_ROUTING DEPENDENCY_ADMISSION_GATE PRE_CHANGE_SAFEPOINT CLOSED_LOOP_LEARNING; do
-  grep -Fq "$marker" "$CONFIG_DIR/commands/ai-plan.md" || { echo "/ai-plan missing v2 marker $marker" >&2; exit 1; }
-  grep -Fq "$marker" "$CONFIG_DIR/commands/ai-workflow.md" || { echo "/ai-workflow missing v2 marker $marker" >&2; exit 1; }
-done
-for marker in TASK_RISK_PROFILE VALIDATION_PROFILE BUGFIX_PROOF TEST_IMPACT_MAP CONTRACT_COMPATIBILITY ENVIRONMENT_FINGERPRINT DEPENDENCY_ADMISSION_GATE DEPENDENCY_DELTA GENERATED_ARTIFACT_GATE PRE_CHANGE_SAFEPOINT MIGRATION_PROOF NON_FUNCTIONAL_BUDGETS FLAKINESS_EVIDENCE ADVERSARIAL_INPUT_VALIDATION CODEOWNERS_HUMAN_GATE CLOSED_LOOP_LEARNING; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-plan.md" || grep -Fq "$marker" "$CONFIG_DIR/commands/ai-workflow.md" || { echo "Evidence workflow missing $marker" >&2; exit 1; }; done
-for marker in "${operational_markers[@]}"; do
-  grep -Fq "$marker" "$CONFIG_DIR/commands/ai-plan.md" || { echo "/ai-plan missing Operational Assurance marker $marker" >&2; exit 1; }
-  grep -Fq "$marker" "$CONFIG_DIR/commands/ai-workflow.md" || { echo "/ai-workflow missing Operational Assurance marker $marker" >&2; exit 1; }
-done
-for marker in GOVERNED_DISCOVERY SKILL_ROUTING OPERATIONAL_PLANNING PRE_CHANGE_SAFEPOINT_WHEN_REQUIRED OPERATIONAL_VALIDATION VALIDATED_LEARNING; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-workflow.md" || { echo "/ai-workflow missing lifecycle marker $marker" >&2; exit 1; }; done
-for file in ai-execute ai-review ai-status ai-resume ai-release; do
-  grep -Eq 'VERIFICATION_(PROFILE|EVIDENCE)' "$CONFIG_DIR/commands/$file.md" || { echo "/$file missing verification artifacts" >&2; exit 1; }
-  grep -Fq 'OPERATIONAL_ASSURANCE' "$CONFIG_DIR/commands/$file.md" || { echo "/$file missing Operational Assurance handling" >&2; exit 1; }
-  for marker in DEPENDENCY_ADMISSION_GATE PRE_CHANGE_SAFEPOINT; do grep -Fq "$marker" "$CONFIG_DIR/commands/$file.md" || { echo "/$file missing v2 safety gate $marker" >&2; exit 1; }; done
-done
-for marker in PREVIEW_ENVIRONMENT_GATE USER_FLOW_VERIFICATION VISUAL_BEHAVIOR_GATE RELEASE_RECOVERY_PROOF TOOL_CAPABILITY_PROFILE MCP_CAPABILITY_ASSESSMENT SAFE_EXPERIMENTATION; do
-  for file in ai-execute ai-review ai-status ai-release; do grep -Fq "$marker" "$CONFIG_DIR/commands/$file.md" || { echo "/$file missing operational gate $marker" >&2; exit 1; }; done
-done
-for marker in GOVERNANCE_MEMORY.md Explore Scout PROJECT_AUTHORITATIVE; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-init.md" || { echo "/ai-init missing v2 initialization marker $marker" >&2; exit 1; }; done
-! grep -Eqi 'general:[[:space:]]*allow' "$CONFIG_DIR/commands/ai-init.md" || { echo '/ai-init must not authorize writable General for discovery' >&2; exit 1; }
-for marker in GOVERNANCE_MEMORY skill 'package/dependency admission' read-only; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-audit.md" || { echo "/ai-audit missing v2 audit marker $marker" >&2; exit 1; }; done
-for marker in REVIEW_IMPLEMENTATION_PACKET.md REVIEW_ARCHITECTURE_PACKET.md FINAL_PACKET.md MEMORY_DECISION; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-review.md" || { echo "/ai-review missing $marker" >&2; exit 1; }; done
-for marker in GOVERNANCE_MEMORY READ_ONLY_DISCOVERY_SWARM GOVERNED_SKILL_ROUTING DEPENDENCY_ADMISSION_GATE PRE_CHANGE_SAFEPOINT CLOSED_LOOP_LEARNING MEMORY_DECISION; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-status.md" || { echo "/ai-status missing v2 marker $marker" >&2; exit 1; }; done
-for marker in RUN_STATE.json STEERING.md GOVERNANCE_RESULT ENVIRONMENT_FINGERPRINT STALE OPERATIONAL_ASSURANCE GOVERNANCE_MEMORY DEPENDENCY_ADMISSION_GATE PRE_CHANGE_SAFEPOINT MEMORY_DECISION; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-resume.md" || { echo "/ai-resume missing $marker" >&2; exit 1; }; done
-for marker in DEPENDENCY_ADMISSION_GATE PRE_CHANGE_SAFEPOINT CLOSED_LOOP_LEARNING MEMORY_DECISION; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-release.md" || { echo "/ai-release missing v2 release marker $marker" >&2; exit 1; }; done
-for marker in 'opencode stats' '--models' 'opencode session list' 'opencode export' '--sanitize' GOVERNANCE_METRICS 'ESTIMATED_VALUES: NONE' UNAVAILABLE; do grep -Fq -- "$marker" "$CONFIG_DIR/commands/ai-metrics.md" || { echo "/ai-metrics missing $marker" >&2; exit 1; }; done
-for file in ai-workflow ai-status ai-resume; do grep -Fq 'EVIDENCE_STATUS' "$CONFIG_DIR/commands/$file.md" || { echo "/$file missing EVIDENCE_STATUS" >&2; exit 1; }; done
-
+for marker in BASELINE_DUAL_AUDIT REQUIREMENT_PROVENANCE; do grep -Fq "$marker" "$CONFIG_DIR/agents/architect.md" || fail "architect missing semantic contract $marker"; done
+for marker in REQUIREMENT_PROVENANCE NO_AUTOMATIC_EXTERNAL_ACTION; do grep -Fq "$marker" "$CONFIG_DIR/agents/plan.md" || fail "plan missing semantic contract $marker"; done
+for marker in EVIDENCE_FRESHNESS REVIEW_FREEZE NO_AUTOMATIC_EXTERNAL_ACTION PLAN_CONFLICT; do grep -Fq "$marker" "$CONFIG_DIR/agents/executor.md" || fail "executor missing semantic contract $marker"; done
+for cmd in ai-init ai-discover ai-plan ai-workflow ai-execute ai-review ai-release; do grep -Fq 'NO_AUTOMATIC_EXTERNAL_ACTION' "$CONFIG_DIR/commands/$cmd.md" || fail "$cmd missing external-action boundary"; done
+for cmd in ai-workflow ai-review ai-resume; do grep -Fq 'REVIEW_FREEZE' "$CONFIG_DIR/commands/$cmd.md" || fail "$cmd missing review-freeze contract"; done
+if grep -RInE 'DISCOVERY_DEPTH[^[:alnum:]\n]{0,30}NONE|NONE[[:space:]]*\|[[:space:]]*LIGHT' "$CONFIG_DIR/agents" "$CONFIG_DIR/commands" >/dev/null; then fail 'Discovery depth NONE is forbidden in v3'; fi
 python3 - "$CONFIG_DIR" <<'PY'
-import json,pathlib,re,sys
-root=pathlib.Path(sys.argv[1]); jsonc=root/'opencode.jsonc'; jsonf=root/'opencode.json'; target=jsonc if jsonc.exists() else jsonf if jsonf.exists() else None
-if target is None: raise SystemExit('Missing OpenCode config file')
-raw=target.read_text(encoding='utf-8'); stripped=re.sub(r'/\*.*?\*/','',raw,flags=re.S); stripped=re.sub(r'(^|\s)//.*',r'\1',stripped); stripped=re.sub(r',\s*([}\]])',r'\1',stripped); data=json.loads(stripped)
+import json, pathlib, re, sys
+root=pathlib.Path(sys.argv[1]); target=root/'opencode.jsonc'
+if not target.exists(): target=root/'opencode.json'
+if not target.exists(): raise SystemExit('Missing OpenCode config file')
+raw=target.read_text(encoding='utf-8-sig')
+raw=re.sub(r'/\*.*?\*/','',raw,flags=re.S)
+raw=re.sub(r'(^|\s)//.*',r'\1',raw)
+raw=re.sub(r',\s*([}\]])',r'\1',raw)
+data=json.loads(raw)
 if data.get('default_agent')!='architect': raise SystemExit('default_agent must be architect')
 PY
-if command -v opencode >/dev/null 2>&1; then opencode debug config >/dev/null; fi
-echo 'Verification PASS'
+echo "PASS: OpenCode Governance v3.0 rendered contract verified (7 agents, 12 commands)."

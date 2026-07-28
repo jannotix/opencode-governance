@@ -1,69 +1,80 @@
 name: Verify governance
-
 on:
   push:
   pull_request:
-
 jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          show-progress: false
       - name: Validate shell scripts
-        shell: bash
         run: bash -n scripts/install.sh scripts/verify.sh scripts/uninstall.sh
-      - name: Render and verify configuration
+      - name: Render verify and uninstall
         shell: bash
         run: |
           set -euo pipefail
-          CONFIG_DIR="$RUNNER_TEMP/opencode"
-          export OPENCODE_CONFIG_DIR="$CONFIG_DIR"
-          mkdir -p "$CONFIG_DIR"
-          printf '%s\n' \
-            'test/architect' 'max' \
-            'test/executor' '' \
-            'test/reviewer' 'thinking' \
-            'test/architecture' 'high' \
-            'test/final' 'thinking' \
-            | ./scripts/install.sh
-
+          export OPENCODE_CONFIG_DIR="$RUNNER_TEMP/opencode"
+          mkdir -p "$OPENCODE_CONFIG_DIR/agents" "$OPENCODE_CONFIG_DIR/commands" "$RUNNER_TEMP/project/.ai"
+          printf 'user\n' > "$OPENCODE_CONFIG_DIR/agents/unrelated-user-agent.md"
+          printf 'user\n' > "$OPENCODE_CONFIG_DIR/commands/unrelated-user-command.md"
+          printf 'state\n' > "$RUNNER_TEMP/project/.ai/STATUS.md"
+          printf '%s\n' 'test/architect' 'max' 'test/executor' '' 'test/reviewer' 'thinking' 'test/architecture' 'high' 'test/final' 'thinking' | ./scripts/install.sh
+          ./scripts/verify.sh "$OPENCODE_CONFIG_DIR"
+          test "$(find "$OPENCODE_CONFIG_DIR/agents" -maxdepth 1 -type f -name '*.md' ! -name 'unrelated-user-agent.md' | wc -l)" -eq 7
+          test "$(find "$OPENCODE_CONFIG_DIR/commands" -maxdepth 1 -type f -name '*.md' ! -name 'unrelated-user-command.md' | wc -l)" -eq 12
+          ./scripts/uninstall.sh
+          test -f "$OPENCODE_CONFIG_DIR/agents/unrelated-user-agent.md"
+          test -f "$OPENCODE_CONFIG_DIR/commands/unrelated-user-command.md"
+          test -f "$RUNNER_TEMP/project/.ai/STATUS.md"
   windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          show-progress: false
       - name: Validate PowerShell scripts
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          foreach ($path in 'scripts/install.ps1','scripts/verify.ps1','scripts/uninstall.ps1') {
-            $tokens = $null
-            $errors = $null
-            [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errors) | Out-Null
-            if ($errors.Count -gt 0) { throw "$path parse failed: $($errors -join '; ')" }
+          $ErrorActionPreference='Stop'
+          foreach($path in 'scripts/install.ps1','scripts/verify.ps1','scripts/uninstall.ps1'){
+            $tokens=$null;$errors=$null
+            [System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$errors)|Out-Null
+            if($errors.Count -gt 0){throw "$path parse failed: $($errors -join '; ')"}
           }
-      - name: Render and verify configuration
+      - name: Install rendered configuration
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          $config = Join-Path $env:RUNNER_TEMP 'opencode'
-          New-Item -ItemType Directory -Force -Path (Join-Path $config 'agents'), (Join-Path $config 'commands') | Out-Null
-
-          function Render($source, $destination, $modelToken, $model, $variantToken, $variant) {
-            $text = Get-Content $source -Raw
-            $text = $text.Replace($modelToken, $model)
-            $variantLine = if ([string]::IsNullOrWhiteSpace($variant)) { '' } else { "variant: $variant" }
-            $text = $text.Replace($variantToken, $variantLine)
-            [System.IO.File]::WriteAllText($destination, $text, (New-Object System.Text.UTF8Encoding($false)))
-          }
-
-          Render 'templates/agents/architect.md' (Join-Path $config 'agents/architect.md') '__ARCHITECT_MODEL__' 'test/architect' '__ARCHITECT_VARIANT_LINE__' 'max'
-          Render 'templates/agents/build.md' (Join-Path $config 'agents/build.md') '__ARCHITECT_MODEL__' 'test/architect' '__ARCHITECT_VARIANT_LINE__' 'max'
-          Render 'templates/agents/plan.md' (Join-Path $config 'agents/plan.md') '__ARCHITECT_MODEL__' 'test/architect' '__ARCHITECT_VARIANT_LINE__' 'max'
-          Render 'templates/agents/executor.md' (Join-Path $config 'agents/executor.md') '__EXECUTOR_MODEL__' 'test/executor' '__EXECUTOR_VARIANT_LINE__' ''
-          Render 'templates/agents/reviewer.md' (Join-Path $config 'agents/reviewer.md') '__REVIEWER_IMPLEMENTATION_MODEL__' 'test/reviewer' '__REVIEWER_IMPLEMENTATION_VARIANT_LINE__' 'thinking'
-          Render 'templates/agents/reviewer-architecture.md' (Join-Path $config 'agents/reviewer-architecture.md') '__REVIEWER_ARCHITECTURE_MODEL__' 'test/architecture' '__REVIEWER_ARCHITECTURE_VARIANT_LINE__' 'high'
-          Render 'templates/agents/final-reviewer.md' (Join-Path $config 'agents/final-reviewer.md') '__FINAL_REVIEWER_MODEL__' 'test/final' '__FINAL_REVIEWER_VARIANT_LINE__' 'thinking'
-          Copy-Item 'templates/commands/*.md' (Join-Path $config 'commands')
-          '{"$schema":"https://opencode.ai/config.json","default_agent":"architect"}' | Set-Content -Encoding utf8 (Join-Path $config 'opencode.json')
-
+          $ErrorActionPreference='Stop'
+          $config=Join-Path $env:RUNNER_TEMP 'opencode'
+          New-Item -ItemType Directory -Force -Path (Join-Path $config 'agents'),(Join-Path $config 'commands')|Out-Null
+          'user'|Set-Content (Join-Path $config 'agents/unrelated-user-agent.md')
+          'user'|Set-Content (Join-Path $config 'commands/unrelated-user-command.md')
+          ./scripts/install.ps1 -ConfigDir $config -NonInteractive `
+            -ArchitectModel 'test/architect' -ArchitectVariant 'max' `
+            -ExecutorModel 'test/executor' `
+            -ReviewerImplementationModel 'test/reviewer' -ReviewerImplementationVariant 'thinking' `
+            -ReviewerArchitectureModel 'test/architecture' -ReviewerArchitectureVariant 'high' `
+            -FinalReviewerModel 'test/final' -FinalReviewerVariant 'thinking'
+      - name: Verify rendered contract
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $config=Join-Path $env:RUNNER_TEMP 'opencode'
           ./scripts/verify.ps1 -ConfigDir $config
+      - name: Verify managed counts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $config=Join-Path $env:RUNNER_TEMP 'opencode'
+          if((Get-ChildItem (Join-Path $config 'agents') -Filter '*.md'|Where-Object Name -ne 'unrelated-user-agent.md').Count -ne 7){throw 'Expected 7 managed agents'}
+          if((Get-ChildItem (Join-Path $config 'commands') -Filter '*.md'|Where-Object Name -ne 'unrelated-user-command.md').Count -ne 12){throw 'Expected 12 managed commands'}
+      - name: Uninstall preserves unrelated files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $config=Join-Path $env:RUNNER_TEMP 'opencode'
+          ./scripts/uninstall.ps1 -ConfigDir $config
+          if(-not(Test-Path (Join-Path $config 'agents/unrelated-user-agent.md'))){throw 'Unrelated agent removed'}
+          if(-not(Test-Path (Join-Path $config 'commands/unrelated-user-command.md'))){throw 'Unrelated command removed'}
