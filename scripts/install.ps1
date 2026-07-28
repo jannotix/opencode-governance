@@ -9,7 +9,8 @@ param(
     [string]$ReviewerArchitectureModel,
     [string]$ReviewerArchitectureVariant,
     [string]$FinalReviewerModel,
-    [string]$FinalReviewerVariant
+    [string]$FinalReviewerVariant,
+    [switch]$NonInteractive
 )
 
 $ErrorActionPreference = 'Stop'
@@ -26,16 +27,28 @@ $RootDir = Split-Path -Parent $PSScriptRoot
 $Stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $BackupDir = Join-Path $ConfigDir "backups\opencode-governance-$Stamp"
 
-if (-not $ArchitectModel) { $ArchitectModel = Read-Host 'Architect model ID (provider/model)' }
-if (-not $PSBoundParameters.ContainsKey('ArchitectVariant')) { $ArchitectVariant = Read-Host 'Architect variant/reasoning (optional)' }
-if (-not $ExecutorModel) { $ExecutorModel = Read-Host 'Executor model ID (provider/model)' }
-if (-not $PSBoundParameters.ContainsKey('ExecutorVariant')) { $ExecutorVariant = Read-Host 'Executor variant/reasoning (optional)' }
-if (-not $ReviewerImplementationModel) { $ReviewerImplementationModel = Read-Host 'Implementation Reviewer model ID (provider/model)' }
-if (-not $PSBoundParameters.ContainsKey('ReviewerImplementationVariant')) { $ReviewerImplementationVariant = Read-Host 'Implementation Reviewer variant/reasoning (optional)' }
-if (-not $ReviewerArchitectureModel) { $ReviewerArchitectureModel = Read-Host 'Architecture/Security Reviewer model ID (provider/model)' }
-if (-not $PSBoundParameters.ContainsKey('ReviewerArchitectureVariant')) { $ReviewerArchitectureVariant = Read-Host 'Architecture/Security Reviewer variant/reasoning (optional)' }
-if (-not $FinalReviewerModel) { $FinalReviewerModel = Read-Host 'Final Reviewer/Judge model ID (provider/model)' }
-if (-not $PSBoundParameters.ContainsKey('FinalReviewerVariant')) { $FinalReviewerVariant = Read-Host 'Final Reviewer/Judge variant/reasoning (optional)' }
+function Resolve-ModelInput([string]$Value, [string]$Prompt, [string]$ParameterName) {
+    if (-not [string]::IsNullOrWhiteSpace($Value)) { return $Value }
+    if ($NonInteractive) { throw "$ParameterName is required in non-interactive mode." }
+    return Read-Host $Prompt
+}
+
+function Resolve-VariantInput([string]$Value, [string]$Prompt, [bool]$WasBound) {
+    if ($WasBound) { return $Value }
+    if ($NonInteractive) { return '' }
+    return Read-Host $Prompt
+}
+
+$ArchitectModel = Resolve-ModelInput $ArchitectModel 'Architect model ID (provider/model)' 'ArchitectModel'
+$ArchitectVariant = Resolve-VariantInput $ArchitectVariant 'Architect variant/reasoning (optional)' ($PSBoundParameters.ContainsKey('ArchitectVariant'))
+$ExecutorModel = Resolve-ModelInput $ExecutorModel 'Executor model ID (provider/model)' 'ExecutorModel'
+$ExecutorVariant = Resolve-VariantInput $ExecutorVariant 'Executor variant/reasoning (optional)' ($PSBoundParameters.ContainsKey('ExecutorVariant'))
+$ReviewerImplementationModel = Resolve-ModelInput $ReviewerImplementationModel 'Implementation Reviewer model ID (provider/model)' 'ReviewerImplementationModel'
+$ReviewerImplementationVariant = Resolve-VariantInput $ReviewerImplementationVariant 'Implementation Reviewer variant/reasoning (optional)' ($PSBoundParameters.ContainsKey('ReviewerImplementationVariant'))
+$ReviewerArchitectureModel = Resolve-ModelInput $ReviewerArchitectureModel 'Architecture/Security Reviewer model ID (provider/model)' 'ReviewerArchitectureModel'
+$ReviewerArchitectureVariant = Resolve-VariantInput $ReviewerArchitectureVariant 'Architecture/Security Reviewer variant/reasoning (optional)' ($PSBoundParameters.ContainsKey('ReviewerArchitectureVariant'))
+$FinalReviewerModel = Resolve-ModelInput $FinalReviewerModel 'Final Reviewer/Judge model ID (provider/model)' 'FinalReviewerModel'
+$FinalReviewerVariant = Resolve-VariantInput $FinalReviewerVariant 'Final Reviewer/Judge variant/reasoning (optional)' ($PSBoundParameters.ContainsKey('FinalReviewerVariant'))
 
 $RequiredModels = @(
     $ArchitectModel,

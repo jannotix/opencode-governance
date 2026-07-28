@@ -7,6 +7,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          show-progress: false
       - name: Validate shell scripts
         run: bash -n scripts/install.sh scripts/verify.sh scripts/uninstall.sh
       - name: Render verify and uninstall
@@ -30,6 +32,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          show-progress: false
       - name: Validate PowerShell scripts
         shell: pwsh
         run: |
@@ -47,9 +51,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path (Join-Path $config 'agents'),(Join-Path $config 'commands')|Out-Null
           'user'|Set-Content (Join-Path $config 'agents/unrelated-user-agent.md')
           'user'|Set-Content (Join-Path $config 'commands/unrelated-user-command.md')
-          ./scripts/install.ps1 -ConfigDir $config `
+          ./scripts/install.ps1 -ConfigDir $config -NonInteractive `
             -ArchitectModel 'test/architect' -ArchitectVariant 'max' `
-            -ExecutorModel 'test/executor' -ExecutorVariant ([string]::Empty) `
+            -ExecutorModel 'test/executor' `
             -ReviewerImplementationModel 'test/reviewer' -ReviewerImplementationVariant 'thinking' `
             -ReviewerArchitectureModel 'test/architecture' -ReviewerArchitectureVariant 'high' `
             -FinalReviewerModel 'test/final' -FinalReviewerVariant 'thinking'
