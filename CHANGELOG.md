@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0.1 - 2026-07-28
+
+- Removed the redundant `docs/installation.md` file and made the README installation section canonical.
+- Narrowed `docs/workflow.md` to lifecycle and state-transition semantics instead of repeating command and role documentation.
+- Added CI repository-hygiene checks for stale documentation references and tracked temporary, log or diagnostic files.
+- Preserved all executable verification scripts, seven-agent/twelve-command contracts, provider/model agnosticism and public Git history.
+- No governance behavior, model routing, permissions, runtime dependency or external-action policy changed.
+
 ## 3.0.0 - 2026-07-28
 
 - Added adaptive product discovery with `LIGHT|STANDARD|DEEP` depth for every governed request.
