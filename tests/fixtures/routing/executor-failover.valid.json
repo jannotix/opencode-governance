@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "settings": {
+    "enabled_roles": ["architect", "executor", "reviewer", "reviewer-architecture", "final-reviewer"],
+    "eligible_failures": ["PROVIDER_UNAVAILABLE", "RATE_LIMIT", "PLAN_QUOTA_EXHAUSTED", "MODEL_RETIRED", "MODEL_TEMPORARILY_UNAVAILABLE", "BOUNDED_TIMEOUT"],
+    "default_cooldown_seconds": 300,
+    "allow_degraded_independence": false
+  },
+  "roles": {
+    "architect": {
+      "primary": {"model": "test/architect-primary", "variant": "thinking", "variant_policy": "explicit", "model_family": "architect-family", "only_on": []},
+      "fallbacks": [{"model": "test/architect-fallback", "variant": "thinking", "variant_policy": "explicit", "model_family": "architect-family", "priority": 1, "only_on": []}]
+    },
+    "executor": {
+      "primary": {"model": "test/mimo-primary", "variant": "thinking", "variant_policy": "explicit", "model_family": "mimo-v2.5", "only_on": [], "work_classes": []},
+      "fallbacks": [
+        {"model": "test/mimo-alt", "variant": "thinking", "variant_policy": "explicit", "model_family": "mimo-v2.5", "priority": 1, "only_on": [], "work_classes": []},
+        {"model": "test/qwen-plus", "variant": "high", "variant_policy": "highest_supported", "model_family": "qwen3.7", "priority": 2, "only_on": [], "work_classes": ["PATCH", "BOUNDED_FEATURE"]},
+        {"model": "test/qwen-max", "variant": "max", "variant_policy": "highest_supported", "model_family": "qwen3.7", "priority": 3, "only_on": [], "work_classes": ["MAJOR_FEATURE", "EXISTING_PRODUCT_EVOLUTION", "NEW_PRODUCT", "HIGH_RISK_CHANGE"]}
+      ]
+    },
+    "reviewer": {
+      "primary": {"model": "test/reviewer-primary", "variant": "max", "variant_policy": "explicit", "model_family": "reviewer-family", "only_on": []},
+      "fallbacks": [{"model": "test/reviewer-alt", "variant": "max", "variant_policy": "explicit", "model_family": "reviewer-family", "priority": 1, "only_on": []}]
+    },
+    "reviewer-architecture": {
+      "primary": {"model": "test/architecture-primary", "variant": "max", "variant_policy": "explicit", "model_family": "architecture-family", "only_on": []},
+      "fallbacks": [{"model": "test/architecture-alt", "variant": "max", "variant_policy": "explicit", "model_family": "architecture-family", "priority": 1, "only_on": []}]
+    },
+    "final-reviewer": {
+      "primary": {"model": "test/final-primary", "variant": "max", "variant_policy": "explicit", "model_family": "final-family", "only_on": []},
+      "fallbacks": [{"model": "test/final-alt", "variant": "high", "variant_policy": "highest_supported", "model_family": "final-other", "priority": 1, "only_on": []}]
+    }
+  }
+}
