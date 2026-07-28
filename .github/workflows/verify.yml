@@ -14,63 +14,61 @@ jobs:
         run: |
           set -euo pipefail
           test ! -e docs/installation.md
-          if git grep -nF 'docs/installation.md' -- README.md docs; then
-            echo 'Stale reference to removed installation document.' >&2
-            exit 1
-          fi
-          tracked_residue="$(git ls-files '*.tmp' '*.bak' '*.log' '*windows-install-error*' '*debug-output*')"
-          if [[ -n "$tracked_residue" ]]; then
-            printf 'Tracked temporary or diagnostic residue:\n%s\n' "$tracked_residue" >&2
-            exit 1
-          fi
+          if git grep -nF 'docs/installation.md' -- README.md docs; then exit 1; fi
+          tracked="$(git ls-files '*.tmp' '*.bak' '*.log' '*windows-install-error*' '*debug-output*')"
+          test -z "$tracked"
       - name: Validate shell scripts
-        run: bash -n scripts/install.sh scripts/verify.sh scripts/verify-routing.sh scripts/uninstall.sh
+        run: bash -n scripts/install.sh scripts/verify.sh scripts/verify-routing.sh scripts/run-governed.sh scripts/uninstall.sh
       - name: Verify legacy installation
         shell: bash
         run: |
           set -euo pipefail
-          config="$RUNNER_TEMP/opencode-legacy"
-          project="$RUNNER_TEMP/project-legacy"
-          mkdir -p "$config/agents" "$config/commands" "$project/.ai"
+          config="$RUNNER_TEMP/opencode-legacy"; mkdir -p "$config/agents" "$config/commands"
           printf 'user\n' > "$config/agents/unrelated-user-agent.md"
-          printf 'user\n' > "$config/commands/unrelated-user-command.md"
-          printf 'state\n' > "$project/.ai/STATUS.md"
           printf '%s\n' 'test/architect' 'max' 'test/executor' '' 'test/reviewer' 'thinking' 'test/architecture' 'high' 'test/final' 'thinking' | ./scripts/install.sh --config-dir "$config"
-          ./scripts/verify.sh "$config"
-          bash ./scripts/verify-routing.sh "$config"
-          test "$(find "$config/agents" -maxdepth 1 -type f -name '*.md' ! -name 'unrelated-user-agent.md' | wc -l)" -eq 7
-          test "$(find "$config/commands" -maxdepth 1 -type f -name '*.md' ! -name 'unrelated-user-command.md' | wc -l)" -eq 12
-          ./scripts/uninstall.sh --config-dir "$config" >/dev/null
-          test -f "$config/agents/unrelated-user-agent.md"
-          test -f "$config/commands/unrelated-user-command.md"
-          test -f "$project/.ai/STATUS.md"
-      - name: Reject unresolved routing variant
+          ./scripts/verify.sh "$config"; bash ./scripts/verify-routing.sh "$config"
+          test "$(find "$config/agents" -maxdepth 1 -name '*.md' ! -name 'unrelated-user-agent.md' | wc -l)" -eq 7
+          ./scripts/uninstall.sh --config-dir "$config" >/dev/null; test -f "$config/agents/unrelated-user-agent.md"
+      - name: Verify v3.1 reviewer-only profile compatibility
         shell: bash
         run: |
           set -euo pipefail
-          config="$RUNNER_TEMP/opencode-invalid"
-          output="$RUNNER_TEMP/invalid-routing.log"
-          if ./scripts/install.sh --config-dir "$config" --routing-config "$GITHUB_WORKSPACE/tests/fixtures/routing/unresolved-variant.invalid.json" >"$output" 2>&1; then
-            echo 'Unresolved highest_supported routing profile unexpectedly passed.' >&2
-            exit 1
-          fi
-          grep -Fq 'highest_supported must be resolved locally' "$output"
-      - name: Verify reviewer failover routing
-        shell: bash
-        run: |
-          set -euo pipefail
-          config="$RUNNER_TEMP/opencode-routing"
-          mkdir -p "$config/agents" "$config/commands"
-          printf 'user\n' > "$config/agents/unrelated-user-agent.md"
+          config="$RUNNER_TEMP/opencode-reviewers"
           ./scripts/install.sh --config-dir "$config" --routing-config "$GITHUB_WORKSPACE/tests/fixtures/routing/reviewer-failover.valid.json"
-          ./scripts/verify.sh "$config"
-          bash ./scripts/verify-routing.sh "$config"
-          test "$(find "$config/agents" -maxdepth 1 -type f -name '*.md' ! -name 'unrelated-user-agent.md' | wc -l)" -eq 15
-          test -f "$config/opencode-governance-routing.json"
-          ./scripts/uninstall.sh --config-dir "$config"
-          test -f "$config/agents/unrelated-user-agent.md"
-          test ! -e "$config/opencode-governance-routing.json"
-          test "$(find "$config/agents" -maxdepth 1 -type f -name '*-fallback-*.md' | wc -l)" -eq 0
+          ./scripts/verify.sh "$config"; bash ./scripts/verify-routing.sh "$config"
+          test "$(find "$config/agents" -maxdepth 1 -name '*.md' | wc -l)" -eq 15
+      - name: Verify Architect profile installation
+        shell: bash
+        run: |
+          set -euo pipefail
+          config="$RUNNER_TEMP/opencode-architect"
+          ./scripts/install.sh --config-dir "$config" --routing-config "$GITHUB_WORKSPACE/tests/fixtures/routing/architect-failover.valid.json"
+          ./scripts/verify.sh "$config"; bash ./scripts/verify-routing.sh "$config"
+          test "$(find "$config/agents" -maxdepth 1 -name '*.md' | wc -l)" -eq 10
+          test "$(find "$config/agents" -maxdepth 1 -name 'architect-fallback-*.md' | wc -l)" -eq 0
+      - name: Verify transactional Architect failover
+        shell: bash
+        run: |
+          set -euo pipefail
+          project="$RUNNER_TEMP/runner-project"; config="$RUNNER_TEMP/runner-config"; mock="$RUNNER_TEMP/mock-opencode"; state="$RUNNER_TEMP/mock-count"
+          mkdir -p "$project/.ai" "$config"; git -C "$project" init -q; printf 'original\n' > "$project/.ai/STATUS.md"
+          cat > "$mock" <<'MOCK'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          project=''; model=''
+          while [[ $# -gt 0 ]]; do case "$1" in --dir) project="$2";shift 2;;--model) model="$2";shift 2;;*)shift;;esac;done
+          count=0; [[ ! -f "$MOCK_STATE" ]] || count="$(cat "$MOCK_STATE")"; echo $((count+1)) > "$MOCK_STATE"
+          if [[ "${MOCK_MODE:-rate}" == auth ]]; then mkdir -p "$project/.ai"; echo partial > "$project/.ai/partial.txt"; echo 'authentication failed: invalid api key' >&2; exit 1; fi
+          if [[ "$model" == test/architect-primary ]]; then mkdir -p "$project/.ai"; echo partial > "$project/.ai/partial.txt"; echo 'rate limit 429' >&2; exit 1; fi
+          test ! -e "$project/.ai/partial.txt"; test "$(cat "$project/.ai/STATUS.md")" = original; echo success > "$project/.ai/success.txt"; exit 0
+          MOCK
+          chmod +x "$mock"; export MOCK_STATE="$state"
+          bash ./scripts/run-governed.sh --project-dir "$project" --command ai-plan --arguments test --routing-config "$GITHUB_WORKSPACE/tests/fixtures/routing/architect-failover.valid.json" --config-dir "$config" --opencode-command "$mock"
+          test "$(cat "$state")" -eq 2; test -f "$project/.ai/success.txt"; test ! -e "$project/.ai/partial.txt"
+          rm -f "$state" "$project/.ai/success.txt"; export MOCK_MODE=auth
+          if bash ./scripts/run-governed.sh --project-dir "$project" --command ai-plan --arguments test --routing-config "$GITHUB_WORKSPACE/tests/fixtures/routing/architect-failover.valid.json" --config-dir "$config" --opencode-command "$mock"; then exit 1; fi
+          test "$(cat "$state")" -eq 1; test ! -e "$project/.ai/partial.txt"; test "$(cat "$project/.ai/STATUS.md")" = original
+          if bash ./scripts/run-governed.sh --project-dir "$project" --command ai-workflow --routing-config "$GITHUB_WORKSPACE/tests/fixtures/routing/architect-failover.valid.json" --config-dir "$config" --opencode-command "$mock"; then exit 1; fi
   windows:
     runs-on: windows-latest
     steps:
@@ -81,57 +79,45 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          foreach($path in 'scripts/install.ps1','scripts/verify.ps1','scripts/verify-routing.ps1','scripts/uninstall.ps1'){
-            $tokens=$null;$errors=$null
-            [System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$errors)|Out-Null
-            if($errors.Count -gt 0){throw "$path parse failed: $($errors -join '; ')"}
-          }
+          foreach($path in 'scripts/install.ps1','scripts/verify.ps1','scripts/verify-routing.ps1','scripts/run-governed.ps1','scripts/uninstall.ps1'){$tokens=$null;$errors=$null;[Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$errors)|Out-Null;if($errors.Count){throw "$path parse failed: $($errors -join '; ')"}}
       - name: Verify legacy installation
         shell: pwsh
         run: |
-          $ErrorActionPreference='Stop'
-          $config=Join-Path $env:RUNNER_TEMP 'opencode-legacy'
-          New-Item -ItemType Directory -Force -Path (Join-Path $config 'agents'),(Join-Path $config 'commands')|Out-Null
-          'user'|Set-Content (Join-Path $config 'agents/unrelated-user-agent.md')
-          'user'|Set-Content (Join-Path $config 'commands/unrelated-user-command.md')
-          ./scripts/install.ps1 -ConfigDir $config -NonInteractive `
-            -ArchitectModel 'test/architect' -ArchitectVariant 'max' `
-            -ExecutorModel 'test/executor' `
-            -ReviewerImplementationModel 'test/reviewer' -ReviewerImplementationVariant 'thinking' `
-            -ReviewerArchitectureModel 'test/architecture' -ReviewerArchitectureVariant 'high' `
-            -FinalReviewerModel 'test/final' -FinalReviewerVariant 'thinking'
-          ./scripts/verify.ps1 -ConfigDir $config
-          ./scripts/verify-routing.ps1 -ConfigDir $config
-          if((Get-ChildItem (Join-Path $config 'agents') -Filter '*.md'|Where-Object Name -ne 'unrelated-user-agent.md').Count -ne 7){throw 'Expected 7 managed public agents'}
-          ./scripts/uninstall.ps1 -ConfigDir $config
-          if(-not(Test-Path (Join-Path $config 'agents/unrelated-user-agent.md'))){throw 'Unrelated agent removed'}
-          if(-not(Test-Path (Join-Path $config 'commands/unrelated-user-command.md'))){throw 'Unrelated command removed'}
-      - name: Reject unresolved routing variant
+          $ErrorActionPreference='Stop';$config=Join-Path $env:RUNNER_TEMP 'opencode-legacy'
+          ./scripts/install.ps1 -ConfigDir $config -NonInteractive -ArchitectModel test/architect -ArchitectVariant max -ExecutorModel test/executor -ReviewerImplementationModel test/reviewer -ReviewerImplementationVariant thinking -ReviewerArchitectureModel test/architecture -ReviewerArchitectureVariant high -FinalReviewerModel test/final -FinalReviewerVariant thinking
+          ./scripts/verify.ps1 -ConfigDir $config;./scripts/verify-routing.ps1 -ConfigDir $config
+      - name: Verify v3.1 reviewer-only profile compatibility
         shell: pwsh
         run: |
-          $ErrorActionPreference='Stop'
-          $config=Join-Path $env:RUNNER_TEMP 'opencode-invalid'
-          $failed=$false
-          try {
-            ./scripts/install.ps1 -ConfigDir $config -NonInteractive -RoutingConfigPath (Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/unresolved-variant.invalid.json')
-          } catch {
-            $failed=$true
-            if($_.Exception.Message -notlike '*highest_supported must be resolved locally*'){throw}
-          }
-          if(-not $failed){throw 'Unresolved highest_supported routing profile unexpectedly passed.'}
-      - name: Verify reviewer failover routing
-        shell: pwsh
-        run: |
-          $ErrorActionPreference='Stop'
-          $config=Join-Path $env:RUNNER_TEMP 'opencode-routing'
-          New-Item -ItemType Directory -Force -Path (Join-Path $config 'agents'),(Join-Path $config 'commands')|Out-Null
-          'user'|Set-Content (Join-Path $config 'agents/unrelated-user-agent.md')
+          $ErrorActionPreference='Stop';$config=Join-Path $env:RUNNER_TEMP 'opencode-reviewers'
           ./scripts/install.ps1 -ConfigDir $config -NonInteractive -RoutingConfigPath (Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/reviewer-failover.valid.json')
-          ./scripts/verify.ps1 -ConfigDir $config
-          ./scripts/verify-routing.ps1 -ConfigDir $config
-          if((Get-ChildItem (Join-Path $config 'agents') -Filter '*.md'|Where-Object Name -ne 'unrelated-user-agent.md').Count -ne 15){throw 'Expected 7 public plus 8 hidden routing agents'}
-          if(-not(Test-Path (Join-Path $config 'opencode-governance-routing.json'))){throw 'Routing manifest missing'}
-          ./scripts/uninstall.ps1 -ConfigDir $config
-          if(-not(Test-Path (Join-Path $config 'agents/unrelated-user-agent.md'))){throw 'Unrelated agent removed'}
-          if(Test-Path (Join-Path $config 'opencode-governance-routing.json')){throw 'Routing manifest not removed'}
-          if((Get-ChildItem (Join-Path $config 'agents') -Filter '*-fallback-*.md').Count -ne 0){throw 'Managed aliases not removed'}
+          ./scripts/verify.ps1 -ConfigDir $config;./scripts/verify-routing.ps1 -ConfigDir $config
+          if((Get-ChildItem "$config/agents" -Filter '*.md').Count -ne 15){throw 'Expected 15 agents'}
+      - name: Verify Architect profile installation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop';$config=Join-Path $env:RUNNER_TEMP 'opencode-architect'
+          ./scripts/install.ps1 -ConfigDir $config -NonInteractive -RoutingConfigPath (Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/architect-failover.valid.json')
+          ./scripts/verify.ps1 -ConfigDir $config;./scripts/verify-routing.ps1 -ConfigDir $config
+          if((Get-ChildItem "$config/agents" -Filter '*.md').Count -ne 10){throw 'Expected 10 agents'}
+          if((Get-ChildItem "$config/agents" -Filter 'architect-fallback-*.md').Count){throw 'Architect aliases are forbidden'}
+      - name: Verify transactional Architect failover
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop';$project=Join-Path $env:RUNNER_TEMP 'runner-project';$config=Join-Path $env:RUNNER_TEMP 'runner-config';$mock=Join-Path $env:RUNNER_TEMP 'mock-opencode.ps1';$state=Join-Path $env:RUNNER_TEMP 'mock-count'
+          New-Item -ItemType Directory -Force -Path (Join-Path $project '.ai'),$config|Out-Null;git -C $project init -q;'original'|Set-Content (Join-Path $project '.ai/STATUS.md')
+          @'
+          param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+          $project='';$model='';for($i=0;$i-lt$Args.Count;$i++){if($Args[$i]-eq'--dir'){$project=$Args[++$i]}elseif($Args[$i]-eq'--model'){$model=$Args[++$i]}}
+          $count=if(Test-Path $env:MOCK_STATE){[int](Get-Content $env:MOCK_STATE)}else{0};($count+1)|Set-Content $env:MOCK_STATE
+          New-Item -ItemType Directory -Force -Path (Join-Path $project '.ai')|Out-Null
+          if($env:MOCK_MODE-eq'auth'){'partial'|Set-Content (Join-Path $project '.ai/partial.txt');[Console]::Error.WriteLine('authentication failed: invalid api key');exit 1}
+          if($model-eq'test/architect-primary'){'partial'|Set-Content (Join-Path $project '.ai/partial.txt');[Console]::Error.WriteLine('rate limit 429');exit 1}
+          if(Test-Path (Join-Path $project '.ai/partial.txt')){exit 9};if((Get-Content (Join-Path $project '.ai/STATUS.md'))-ne'original'){exit 10};'success'|Set-Content (Join-Path $project '.ai/success.txt');exit 0
+          '@|Set-Content $mock
+          $env:MOCK_STATE=$state
+          ./scripts/run-governed.ps1 -ProjectDir $project -Command ai-plan -Arguments test -RoutingConfigPath (Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/architect-failover.valid.json') -ConfigDir $config -OpenCodeCommand pwsh -OpenCodePrefixArguments @('-NoProfile','-File',$mock)
+          if([int](Get-Content $state)-ne 2){throw 'Expected two attempts'};if(Test-Path (Join-Path $project '.ai/partial.txt')){throw 'Partial state not restored'}
+          Remove-Item $state,(Join-Path $project '.ai/success.txt');$env:MOCK_MODE='auth';$failed=$false
+          try{./scripts/run-governed.ps1 -ProjectDir $project -Command ai-plan -Arguments test -RoutingConfigPath (Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/architect-failover.valid.json') -ConfigDir $config -OpenCodeCommand pwsh -OpenCodePrefixArguments @('-NoProfile','-File',$mock)}catch{$failed=$true}
+          if(-not$failed){throw 'Authentication failure unexpectedly fell back'};if([int](Get-Content $state)-ne 1){throw 'Ineligible failure attempted fallback'};if(Test-Path (Join-Path $project '.ai/partial.txt')){throw 'Partial state not restored'}

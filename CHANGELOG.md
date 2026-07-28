@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.2.0 - 2026-07-28
+
+- Added real top-level Architect failover for `/ai-init`, `/ai-audit`, `/ai-discover` and `/ai-plan` through cross-platform transactional `run-governed` runners.
+- Added fresh-process route attempts with concrete model/variant selection, bounded cooldown state and same-family provider preference before different-family fallback.
+- Added complete `.ai/**` snapshots outside the repository and byte-for-byte restoration before every eligible retry.
+- Added fail-closed protection when source or project-documentation state changes, governance restoration fails, the error is ineligible, or no valid route remains.
+- Preserved sticky attempts: primary recovery never interrupts an active fallback and is reconsidered only on a later runner invocation after cooldown.
+- Explicitly blocked top-level automatic restart of `/ai-workflow`, execution, review and release commands after the implementation/review side-effect boundary.
+- Preserved v3.1 reviewer/final hidden-route failover, legacy single-model installation, seven public agents, twelve commands and all v2/v3 governance contracts.
+- Executor failover remains intentionally disabled pending the dedicated isolated/safepoint implementation in v3.3.
+
 ## 3.1.0 - 2026-07-28
 
 - Added optional automatic failover for Implementation Reviewer, Architecture/Security Reviewer and Final Reviewer using hidden native OpenCode subagent aliases while preserving exactly seven public governance authorities.

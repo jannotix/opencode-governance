@@ -2,6 +2,7 @@
   "schema_version": "1.0",
   "settings": {
     "enabled_roles": [
+      "architect",
       "reviewer",
       "reviewer-architecture",
       "final-reviewer"
@@ -26,7 +27,24 @@
         "model_family": "minimax-m3",
         "only_on": []
       },
-      "fallbacks": []
+      "fallbacks": [
+        {
+          "model": "opencode-go/minimax-m3",
+          "variant": "thinking",
+          "variant_policy": "explicit",
+          "model_family": "minimax-m3",
+          "priority": 1,
+          "only_on": []
+        },
+        {
+          "model": "alibaba-token-plan/qwen3.7-max",
+          "variant": null,
+          "variant_policy": "highest_supported",
+          "model_family": "qwen3.7",
+          "priority": 2,
+          "only_on": []
+        }
+      ]
     },
     "executor": {
       "primary": {
