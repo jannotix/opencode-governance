@@ -1,0 +1,167 @@
+name: Verify Executor failover v3.3
+on:
+  push:
+  pull_request:
+jobs:
+  linux-executor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          show-progress: false
+      - name: Validate Unix scripts
+        run: bash -n scripts/install.sh scripts/verify.sh scripts/verify-routing.sh scripts/run-governed.sh scripts/executor-attempt.sh scripts/uninstall.sh
+      - name: Install Executor routing
+        shell: bash
+        run: |
+          set -euo pipefail
+          config="$RUNNER_TEMP/opencode-v33"
+          ./scripts/install.sh --config-dir "$config" --routing-config "$GITHUB_WORKSPACE/tests/fixtures/routing/executor-failover.valid.json"
+          ./scripts/verify.sh "$config"
+          bash ./scripts/verify-routing.sh "$config"
+          test "$(find "$config/agents" -maxdepth 1 -type f -name '*.md' | wc -l)" -eq 13
+          test "$(find "$config/agents" -maxdepth 1 -type f -name 'executor-fallback-*.md' | wc -l)" -eq 3
+      - name: Verify route selection by work class
+        shell: bash
+        run: |
+          set -euo pipefail
+          profile="$GITHUB_WORKSPACE/tests/fixtures/routing/executor-failover.valid.json"
+          config="$RUNNER_TEMP/route-config"
+          mkdir -p "$config"
+          first="$(bash ./scripts/executor-attempt.sh select --routing-config "$profile" --config-dir "$config" --work-class PATCH)"
+          test "$(python3 -c 'import json,sys;print(json.load(sys.stdin)["route_agent"])' <<<"$first")" = executor
+          bounded="$(bash ./scripts/executor-attempt.sh select --routing-config "$profile" --config-dir "$config" --work-class PATCH --failure-class MODEL_RETIRED --failed-route executor --attempted-route executor --attempted-route executor-fallback-1)"
+          test "$(python3 -c 'import json,sys;print(json.load(sys.stdin)["route_agent"])' <<<"$bounded")" = executor-fallback-2
+          major="$(bash ./scripts/executor-attempt.sh select --routing-config "$profile" --config-dir "$config" --work-class HIGH_RISK_CHANGE --failure-class MODEL_RETIRED --failed-route executor --attempted-route executor --attempted-route executor-fallback-1)"
+          test "$(python3 -c 'import json,sys;print(json.load(sys.stdin)["route_agent"])' <<<"$major")" = executor-fallback-3
+      - name: Verify isolated attempt discard and promotion
+        shell: bash
+        run: |
+          set -euo pipefail
+          project="$RUNNER_TEMP/executor-project"
+          config="$RUNNER_TEMP/executor-config"
+          profile="$GITHUB_WORKSPACE/tests/fixtures/routing/executor-failover.valid.json"
+          mkdir -p "$project" "$config"
+          git -C "$project" init -q
+          git -C "$project" config user.email test@example.com
+          git -C "$project" config user.name Test
+          printf 'base\n' > "$project/app.txt"
+          printf 'tracked\n' > "$project/unrelated.txt"
+          git -C "$project" add .
+          git -C "$project" commit -qm base
+          frozen="$(git -C "$project" rev-parse HEAD)"
+          printf 'user-dirty\n' >> "$project/unrelated.txt"
+          packet="$(printf packet | sha256sum | awk '{print $1}')"
+          prep1="$(bash ./scripts/executor-attempt.sh prepare --project-dir "$project" --routing-config "$profile" --config-dir "$config" --task-id TASK-1 --attempt-id attempt-1 --frozen-target "$frozen" --work-class PATCH --route-agent executor --packet-sha256 "$packet")"
+          root1="$(python3 -c 'import json,sys;print(json.load(sys.stdin)["execution_root"])' <<<"$prep1")"
+          printf 'partial\n' > "$root1/app.txt"
+          printf 'partial\n' > "$root1/partial.txt"
+          bash ./scripts/executor-attempt.sh discard --project-dir "$project" --routing-config "$profile" --config-dir "$config" --task-id TASK-1 --attempt-id attempt-1 --failure-class RATE_LIMIT >/dev/null
+          test "$(cat "$project/app.txt")" = base
+          test ! -e "$project/partial.txt"
+          test "$(tail -n 1 "$project/unrelated.txt")" = user-dirty
+          selected="$(bash ./scripts/executor-attempt.sh select --routing-config "$profile" --config-dir "$config" --work-class PATCH --failure-class RATE_LIMIT --failed-route executor --attempted-route executor)"
+          test "$(python3 -c 'import json,sys;print(json.load(sys.stdin)["route_agent"])' <<<"$selected")" = executor-fallback-1
+          prep2="$(bash ./scripts/executor-attempt.sh prepare --project-dir "$project" --routing-config "$profile" --config-dir "$config" --task-id TASK-1 --attempt-id attempt-2 --frozen-target "$frozen" --work-class PATCH --route-agent executor-fallback-1 --packet-sha256 "$packet")"
+          root2="$(python3 -c 'import json,sys;print(json.load(sys.stdin)["execution_root"])' <<<"$prep2")"
+          printf 'implemented\n' > "$root2/app.txt"
+          printf 'new\n' > "$root2/new.txt"
+          report="$project/.ai/tasks/TASK-1/evidence/executor-attempts/report-2.json"
+          mkdir -p "$(dirname "$report")"
+          python3 - "$report" "$packet" "$frozen" <<'PY'
+          import json,sys
+          json.dump({'EXECUTOR_ATTEMPT_ID':'attempt-2','PACKET_SHA256':sys.argv[2],'FROZEN_TARGET_SHA':sys.argv[3],'REPORT_COMPLETE':'YES'},open(sys.argv[1],'w'))
+          PY
+          bash ./scripts/executor-attempt.sh finalize --project-dir "$project" --routing-config "$profile" --config-dir "$config" --task-id TASK-1 --attempt-id attempt-2 --report-path "$report" >/dev/null
+          bash ./scripts/executor-attempt.sh promote --project-dir "$project" --routing-config "$profile" --config-dir "$config" --task-id TASK-1 --attempt-id attempt-2 >/dev/null
+          test "$(cat "$project/app.txt")" = implemented
+          test "$(cat "$project/new.txt")" = new
+          test "$(tail -n 1 "$project/unrelated.txt")" = user-dirty
+          test ! -d "$root2"
+      - name: Verify overlap blocks promotion
+        shell: bash
+        run: |
+          set -euo pipefail
+          project="$RUNNER_TEMP/overlap-project"
+          config="$RUNNER_TEMP/overlap-config"
+          profile="$GITHUB_WORKSPACE/tests/fixtures/routing/executor-failover.valid.json"
+          mkdir -p "$project" "$config"
+          git -C "$project" init -q
+          git -C "$project" config user.email test@example.com
+          git -C "$project" config user.name Test
+          printf 'base\n' > "$project/app.txt"
+          git -C "$project" add . && git -C "$project" commit -qm base
+          frozen="$(git -C "$project" rev-parse HEAD)"
+          printf 'dirty\n' >> "$project/app.txt"
+          packet="$(printf packet | sha256sum | awk '{print $1}')"
+          prep="$(bash ./scripts/executor-attempt.sh prepare --project-dir "$project" --routing-config "$profile" --config-dir "$config" --task-id TASK-2 --attempt-id attempt-overlap --frozen-target "$frozen" --work-class PATCH --route-agent executor --packet-sha256 "$packet")"
+          root="$(python3 -c 'import json,sys;print(json.load(sys.stdin)["execution_root"])' <<<"$prep")"
+          printf 'executor\n' > "$root/app.txt"
+          report="$project/.ai/tasks/TASK-2/evidence/executor-attempts/report.json"
+          mkdir -p "$(dirname "$report")"
+          python3 - "$report" "$packet" "$frozen" <<'PY'
+          import json,sys
+          json.dump({'EXECUTOR_ATTEMPT_ID':'attempt-overlap','PACKET_SHA256':sys.argv[2],'FROZEN_TARGET_SHA':sys.argv[3],'REPORT_COMPLETE':'YES'},open(sys.argv[1],'w'))
+          PY
+          bash ./scripts/executor-attempt.sh finalize --project-dir "$project" --routing-config "$profile" --config-dir "$config" --task-id TASK-2 --attempt-id attempt-overlap --report-path "$report" >/dev/null
+          if bash ./scripts/executor-attempt.sh promote --project-dir "$project" --routing-config "$profile" --config-dir "$config" --task-id TASK-2 --attempt-id attempt-overlap; then exit 1; fi
+          grep -q dirty "$project/app.txt"
+  windows-executor:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          show-progress: false
+      - name: Validate PowerShell scripts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          foreach($path in 'scripts/install.ps1','scripts/verify.ps1','scripts/verify-routing.ps1','scripts/run-governed.ps1','scripts/executor-attempt.ps1','scripts/uninstall.ps1'){
+            $tokens=$null;$errors=$null
+            [Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$errors)|Out-Null
+            if($errors.Count){throw "$path parse failed: $($errors -join '; ')"}
+          }
+      - name: Install Executor routing
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $config=Join-Path $env:RUNNER_TEMP 'opencode-v33'
+          ./scripts/install.ps1 -ConfigDir $config -NonInteractive -RoutingConfigPath (Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/executor-failover.valid.json')
+          ./scripts/verify.ps1 -ConfigDir $config
+          ./scripts/verify-routing.ps1 -ConfigDir $config
+          if((Get-ChildItem "$config/agents" -Filter '*.md').Count -ne 13){throw 'Expected 13 agents'}
+          if((Get-ChildItem "$config/agents" -Filter 'executor-fallback-*.md').Count -ne 3){throw 'Expected 3 Executor aliases'}
+      - name: Verify route selection by work class
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $profile=Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/executor-failover.valid.json';$config=Join-Path $env:RUNNER_TEMP 'route-config'
+          $first=./scripts/executor-attempt.ps1 -Operation select -RoutingConfigPath $profile -ConfigDir $config -WorkClass PATCH|ConvertFrom-Json
+          if($first.route_agent-ne'executor'){throw 'Primary route not selected'}
+          $bounded=./scripts/executor-attempt.ps1 -Operation select -RoutingConfigPath $profile -ConfigDir $config -WorkClass PATCH -FailureClass MODEL_RETIRED -FailedRoute executor -AttemptedRoute executor,executor-fallback-1|ConvertFrom-Json
+          if($bounded.route_agent-ne'executor-fallback-2'){throw 'Bounded Qwen route not selected'}
+          $major=./scripts/executor-attempt.ps1 -Operation select -RoutingConfigPath $profile -ConfigDir $config -WorkClass HIGH_RISK_CHANGE -FailureClass MODEL_RETIRED -FailedRoute executor -AttemptedRoute executor,executor-fallback-1|ConvertFrom-Json
+          if($major.route_agent-ne'executor-fallback-3'){throw 'High-risk Qwen route not selected'}
+      - name: Verify isolated attempt discard and promotion
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $project=Join-Path $env:RUNNER_TEMP 'executor-project';$config=Join-Path $env:RUNNER_TEMP 'executor-config';$profile=Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/executor-failover.valid.json'
+          New-Item -ItemType Directory -Force -Path $project,$config|Out-Null
+          git -C $project init -q;git -C $project config user.email test@example.com;git -C $project config user.name Test
+          'base'|Set-Content "$project/app.txt";'tracked'|Set-Content "$project/unrelated.txt";git -C $project add .;git -C $project commit -qm base
+          $frozen=(git -C $project rev-parse HEAD).Trim();Add-Content "$project/unrelated.txt" 'user-dirty'
+          $packet=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes('packet'))).ToLowerInvariant()
+          $prep1=./scripts/executor-attempt.ps1 -Operation prepare -ProjectDir $project -RoutingConfigPath $profile -ConfigDir $config -TaskId TASK-1 -AttemptId attempt-1 -FrozenTarget $frozen -WorkClass PATCH -RouteAgent executor -PacketSha256 $packet|ConvertFrom-Json
+          'partial'|Set-Content (Join-Path $prep1.execution_root 'app.txt');'partial'|Set-Content (Join-Path $prep1.execution_root 'partial.txt')
+          ./scripts/executor-attempt.ps1 -Operation discard -ProjectDir $project -RoutingConfigPath $profile -ConfigDir $config -TaskId TASK-1 -AttemptId attempt-1 -FailureClass RATE_LIMIT|Out-Null
+          if((Get-Content "$project/app.txt")-ne'base'){throw 'Real worktree changed'};if(Test-Path "$project/partial.txt"){throw 'Partial file leaked'}
+          $selected=./scripts/executor-attempt.ps1 -Operation select -RoutingConfigPath $profile -ConfigDir $config -WorkClass PATCH -FailureClass RATE_LIMIT -FailedRoute executor -AttemptedRoute executor|ConvertFrom-Json
+          if($selected.route_agent-ne'executor-fallback-1'){throw 'Same-family fallback not selected'}
+          $prep2=./scripts/executor-attempt.ps1 -Operation prepare -ProjectDir $project -RoutingConfigPath $profile -ConfigDir $config -TaskId TASK-1 -AttemptId attempt-2 -FrozenTarget $frozen -WorkClass PATCH -RouteAgent executor-fallback-1 -PacketSha256 $packet|ConvertFrom-Json
+          'implemented'|Set-Content (Join-Path $prep2.execution_root 'app.txt');'new'|Set-Content (Join-Path $prep2.execution_root 'new.txt')
+          $report="$project/.ai/tasks/TASK-1/evidence/executor-attempts/report-2.json";New-Item -ItemType Directory -Force -Path (Split-Path $report)|Out-Null
+          @{EXECUTOR_ATTEMPT_ID='attempt-2';PACKET_SHA256=$packet;FROZEN_TARGET_SHA=$frozen;REPORT_COMPLETE='YES'}|ConvertTo-Json|Set-Content $report
+          ./scripts/executor-attempt.ps1 -Operation finalize -ProjectDir $project -RoutingConfigPath $profile -ConfigDir $config -TaskId TASK-1 -AttemptId attempt-2 -ReportPath $report|Out-Null
+          ./scripts/executor-attempt.ps1 -Operation promote -ProjectDir $project -RoutingConfigPath $profile -ConfigDir $config -TaskId TASK-1 -AttemptId attempt-2|Out-Null
+          if((Get-Content "$project/app.txt")-ne'implemented'){throw 'Patch not promoted'};if((Get-Content "$project/new.txt")-ne'new'){throw 'New file not promoted'};if((Get-Content "$project/unrelated.txt")[-1]-ne'user-dirty'){throw 'Unrelated dirty change lost'}
