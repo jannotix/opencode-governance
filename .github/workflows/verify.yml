@@ -59,7 +59,13 @@ jobs:
               -ReviewerArchitectureModel 'test/architecture' -ReviewerArchitectureVariant 'high' `
               -FinalReviewerModel 'test/final' -FinalReviewerVariant 'thinking'
           } catch {
-            $_ | Format-List * -Force | Out-String | Set-Content (Join-Path $env:RUNNER_TEMP 'windows-install-error.txt')
+            $diagnostic=Join-Path $env:RUNNER_TEMP 'windows-install-error.txt'
+            $_ | Format-List * -Force | Out-String | Set-Content $diagnostic
+            $architect=Join-Path $config 'agents/architect.md'
+            if(Test-Path $architect){
+              '--- RENDERED ARCHITECT HEADER ---' | Add-Content $diagnostic
+              Get-Content $architect -TotalCount 10 | Add-Content $diagnostic
+            }
             throw
           }
       - name: Upload Windows install diagnostics
