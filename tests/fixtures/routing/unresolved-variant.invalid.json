@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "settings": {
+    "enabled_roles": ["reviewer"],
+    "eligible_failures": ["PROVIDER_UNAVAILABLE"],
+    "default_cooldown_seconds": 300,
+    "allow_degraded_independence": false
+  },
+  "roles": {
+    "architect": {"primary": {"model": "test/architect", "variant": "thinking", "variant_policy": "explicit", "model_family": "architect-family"}, "fallbacks": []},
+    "executor": {"primary": {"model": "test/executor", "variant": null, "variant_policy": "provider_default", "model_family": "executor-family"}, "fallbacks": []},
+    "reviewer": {
+      "primary": {"model": "test/reviewer", "variant": "max", "variant_policy": "explicit", "model_family": "reviewer-family"},
+      "fallbacks": [{"model": "test/fallback", "variant": null, "variant_policy": "highest_supported", "model_family": "fallback-family", "priority": 1}]
+    },
+    "reviewer-architecture": {"primary": {"model": "test/architecture", "variant": "max", "variant_policy": "explicit", "model_family": "architecture-family"}, "fallbacks": []},
+    "final-reviewer": {"primary": {"model": "test/final", "variant": "max", "variant_policy": "explicit", "model_family": "final-family"}, "fallbacks": []}
+  }
+}
