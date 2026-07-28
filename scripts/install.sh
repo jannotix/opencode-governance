@@ -28,10 +28,26 @@ for file in "${commands[@]}"; do backup_if_exists "$CONFIG_DIR/commands/$file.md
 backup_if_exists "$CONFIG_DIR/opencode.jsonc"; backup_if_exists "$CONFIG_DIR/opencode.json"
 render(){
   python3 - "$1" "$2" "$3" "$4" "$5" "$6" <<'PY2'
-import pathlib,sys
+import pathlib,re,sys
 src,dst,model,variant,model_token,variant_token=sys.argv[1:]
-text=pathlib.Path(src).read_text(encoding='utf-8')
+source=pathlib.Path(src)
+text=source.read_text(encoding='utf-8')
 text=text.replace(model_token,model).replace(variant_token,f'variant: {variant}' if variant else '')
+if source.stem != 'executor':
+    legacy=re.compile(r'(?m)^  edit:\r?\n    "\*": deny\r?\n    "\.ai/\*\*": allow\r?\n')
+    portable='''  edit:
+    "*": deny
+    ".ai": allow
+    ".ai/*": allow
+    "*/.ai": allow
+    "*/.ai/*": allow
+    '.ai\\*': allow
+    '*\\.ai': allow
+    '*\\.ai\\*': allow
+'''
+    text,count=legacy.subn(portable,text)
+    if count != 1:
+        raise SystemExit(f'Cannot render portable .ai permissions for {src}.')
 pathlib.Path(dst).write_text(text,encoding='utf-8')
 PY2
 }
@@ -54,7 +70,7 @@ else: data={'$schema':'https://opencode.ai/config.json'}
 data['default_agent']='architect'; target.write_text(json.dumps(data,indent=2)+'\n',encoding='utf-8')
 PY2
 "$SCRIPT_DIR/verify.sh" "$CONFIG_DIR"
-echo "Installed OpenCode Governance v3.0: 7 agents, 12 commands, adaptive product discovery, constructive challenge, independent discovery review, product completeness, Evidence-Driven Verification and Operational Assurance."
+echo "Installed OpenCode Governance v3.0.2: 7 agents, 12 commands, portable .ai permissions, adaptive product discovery, independent review and product completeness."
 echo "Project v2 state is migrated lazily by project commands; installation does not rewrite .ai state."
 echo "No push, merge, deployment or rollback is automatic. Restart OpenCode Desktop/TUI before use."
 echo "Backup: $BACKUP_DIR"
