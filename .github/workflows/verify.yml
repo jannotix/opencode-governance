@@ -37,7 +37,7 @@ jobs:
           printf 'state\n' > "$project/.ai/STATUS.md"
           printf '%s\n' 'test/architect' 'max' 'test/executor' '' 'test/reviewer' 'thinking' 'test/architecture' 'high' 'test/final' 'thinking' | ./scripts/install.sh --config-dir "$config"
           ./scripts/verify.sh "$config"
-          ./scripts/verify-routing.sh "$config"
+          bash ./scripts/verify-routing.sh "$config"
           test "$(find "$config/agents" -maxdepth 1 -type f -name '*.md' ! -name 'unrelated-user-agent.md' | wc -l)" -eq 7
           test "$(find "$config/commands" -maxdepth 1 -type f -name '*.md' ! -name 'unrelated-user-command.md' | wc -l)" -eq 12
           ./scripts/uninstall.sh >/dev/null
@@ -49,10 +49,12 @@ jobs:
         run: |
           set -euo pipefail
           config="$RUNNER_TEMP/opencode-invalid"
-          if ./scripts/install.sh --config-dir "$config" --routing-config "$GITHUB_WORKSPACE/tests/fixtures/routing/unresolved-variant.invalid.json"; then
+          output="$RUNNER_TEMP/invalid-routing.log"
+          if ./scripts/install.sh --config-dir "$config" --routing-config "$GITHUB_WORKSPACE/tests/fixtures/routing/unresolved-variant.invalid.json" >"$output" 2>&1; then
             echo 'Unresolved highest_supported routing profile unexpectedly passed.' >&2
             exit 1
           fi
+          grep -Fq 'highest_supported must be resolved locally' "$output"
       - name: Verify reviewer failover routing
         shell: bash
         run: |
@@ -62,7 +64,7 @@ jobs:
           printf 'user\n' > "$config/agents/unrelated-user-agent.md"
           ./scripts/install.sh --config-dir "$config" --routing-config "$GITHUB_WORKSPACE/tests/fixtures/routing/reviewer-failover.valid.json"
           ./scripts/verify.sh "$config"
-          ./scripts/verify-routing.sh "$config"
+          bash ./scripts/verify-routing.sh "$config"
           test "$(find "$config/agents" -maxdepth 1 -type f -name '*.md' ! -name 'unrelated-user-agent.md' | wc -l)" -eq 15
           test -f "$config/opencode-governance-routing.json"
           ./scripts/uninstall.sh
@@ -107,11 +109,16 @@ jobs:
       - name: Reject unresolved routing variant
         shell: pwsh
         run: |
-          $ErrorActionPreference='Continue'
-          $config=Join-Path $env:RUNNER_TEMP 'opencode-invalid'
-          & ./scripts/install.ps1 -ConfigDir $config -NonInteractive -RoutingConfigPath (Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/unresolved-variant.invalid.json')
-          if($LASTEXITCODE -eq 0 -and $?) { throw 'Unresolved highest_supported routing profile unexpectedly passed.' }
           $ErrorActionPreference='Stop'
+          $config=Join-Path $env:RUNNER_TEMP 'opencode-invalid'
+          $failed=$false
+          try {
+            ./scripts/install.ps1 -ConfigDir $config -NonInteractive -RoutingConfigPath (Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/unresolved-variant.invalid.json')
+          } catch {
+            $failed=$true
+            if($_.Exception.Message -notlike '*highest_supported must be resolved locally*'){throw}
+          }
+          if(-not $failed){throw 'Unresolved highest_supported routing profile unexpectedly passed.'}
       - name: Verify reviewer failover routing
         shell: pwsh
         run: |
