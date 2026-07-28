@@ -40,7 +40,7 @@ jobs:
           bash ./scripts/verify-routing.sh "$config"
           test "$(find "$config/agents" -maxdepth 1 -type f -name '*.md' ! -name 'unrelated-user-agent.md' | wc -l)" -eq 7
           test "$(find "$config/commands" -maxdepth 1 -type f -name '*.md' ! -name 'unrelated-user-command.md' | wc -l)" -eq 12
-          ./scripts/uninstall.sh >/dev/null
+          ./scripts/uninstall.sh --config-dir "$config" >/dev/null
           test -f "$config/agents/unrelated-user-agent.md"
           test -f "$config/commands/unrelated-user-command.md"
           test -f "$project/.ai/STATUS.md"
@@ -67,7 +67,7 @@ jobs:
           bash ./scripts/verify-routing.sh "$config"
           test "$(find "$config/agents" -maxdepth 1 -type f -name '*.md' ! -name 'unrelated-user-agent.md' | wc -l)" -eq 15
           test -f "$config/opencode-governance-routing.json"
-          ./scripts/uninstall.sh
+          ./scripts/uninstall.sh --config-dir "$config"
           test -f "$config/agents/unrelated-user-agent.md"
           test ! -e "$config/opencode-governance-routing.json"
           test "$(find "$config/agents" -maxdepth 1 -type f -name '*-fallback-*.md' | wc -l)" -eq 0
