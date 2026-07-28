@@ -39,7 +39,7 @@ jobs:
             [System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$errors)|Out-Null
             if($errors.Count -gt 0){throw "$path parse failed: $($errors -join '; ')"}
           }
-      - name: Render verify and uninstall
+      - name: Install rendered configuration
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
@@ -47,16 +47,30 @@ jobs:
           New-Item -ItemType Directory -Force -Path (Join-Path $config 'agents'),(Join-Path $config 'commands')|Out-Null
           'user'|Set-Content (Join-Path $config 'agents/unrelated-user-agent.md')
           'user'|Set-Content (Join-Path $config 'commands/unrelated-user-command.md')
-          $env:OPENCODE_CONFIG_DIR=$config
           ./scripts/install.ps1 -ConfigDir $config `
             -ArchitectModel 'test/architect' -ArchitectVariant 'max' `
-            -ExecutorModel 'test/executor' -ExecutorVariant '' `
+            -ExecutorModel 'test/executor' -ExecutorVariant ([string]::Empty) `
             -ReviewerImplementationModel 'test/reviewer' -ReviewerImplementationVariant 'thinking' `
             -ReviewerArchitectureModel 'test/architecture' -ReviewerArchitectureVariant 'high' `
             -FinalReviewerModel 'test/final' -FinalReviewerVariant 'thinking'
+      - name: Verify rendered contract
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $config=Join-Path $env:RUNNER_TEMP 'opencode'
           ./scripts/verify.ps1 -ConfigDir $config
+      - name: Verify managed counts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $config=Join-Path $env:RUNNER_TEMP 'opencode'
           if((Get-ChildItem (Join-Path $config 'agents') -Filter '*.md'|Where-Object Name -ne 'unrelated-user-agent.md').Count -ne 7){throw 'Expected 7 managed agents'}
           if((Get-ChildItem (Join-Path $config 'commands') -Filter '*.md'|Where-Object Name -ne 'unrelated-user-command.md').Count -ne 12){throw 'Expected 12 managed commands'}
+      - name: Uninstall preserves unrelated files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $config=Join-Path $env:RUNNER_TEMP 'opencode'
           ./scripts/uninstall.ps1 -ConfigDir $config
           if(-not(Test-Path (Join-Path $config 'agents/unrelated-user-agent.md'))){throw 'Unrelated agent removed'}
           if(-not(Test-Path (Join-Path $config 'commands/unrelated-user-command.md'))){throw 'Unrelated command removed'}

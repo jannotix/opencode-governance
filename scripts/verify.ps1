@@ -124,6 +124,16 @@ if ($PlanText -notmatch '(?m)^  task: deny\s*$') { throw 'Plan must deny task de
 $ExecutorText = Get-Content (Join-Path $ConfigDir 'agents\executor.md') -Raw
 if ($ExecutorText -notmatch 'external_directory:\s+deny') { throw 'Executor must deny external_directory' }
 
+$SemanticCommon = @('EVIDENCE_FRESHNESS','REVIEW_FREEZE','BOUNDED_REPAIR','NO_AUTOMATIC_EXTERNAL_ACTION')
+foreach ($Name in @('architect','build','reviewer','reviewer-architecture','final-reviewer')) {
+    foreach ($Marker in $SemanticCommon) { Require-Text (Join-Path $ConfigDir "agents\$Name.md") $Marker }
+}
+foreach ($Marker in @('BASELINE_DUAL_AUDIT','REQUIREMENT_PROVENANCE')) { Require-Text (Join-Path $ConfigDir 'agents\architect.md') $Marker }
+foreach ($Marker in @('REQUIREMENT_PROVENANCE','NO_AUTOMATIC_EXTERNAL_ACTION')) { Require-Text (Join-Path $ConfigDir 'agents\plan.md') $Marker }
+foreach ($Marker in @('EVIDENCE_FRESHNESS','REVIEW_FREEZE','NO_AUTOMATIC_EXTERNAL_ACTION','PLAN_CONFLICT')) { Require-Text (Join-Path $ConfigDir 'agents\executor.md') $Marker }
+foreach ($Command in @('ai-init','ai-discover','ai-plan','ai-workflow','ai-execute','ai-review','ai-release')) { Require-Text (Join-Path $ConfigDir "commands\$Command.md") 'NO_AUTOMATIC_EXTERNAL_ACTION' }
+foreach ($Command in @('ai-workflow','ai-review','ai-resume')) { Require-Text (Join-Path $ConfigDir "commands\$Command.md") 'REVIEW_FREEZE' }
+
 foreach ($Directory in @((Join-Path $ConfigDir 'agents'), (Join-Path $ConfigDir 'commands'))) {
     $Matches = Get-ChildItem $Directory -Filter '*.md' |
         Select-String -Pattern 'DISCOVERY_DEPTH[^\r\n]{0,30}NONE|NONE\s*\|\s*LIGHT'

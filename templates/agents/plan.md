@@ -59,3 +59,19 @@ Create task provenance, `CONTEXT_MANIFEST.md`, plan, `MINIMUM_CHANGE_ASSESSMENT`
 Keep `VERIFICATION_PROFILE.md`, `TASK_RISK_PROFILE`, authoritative `VALIDATION_PROFILE`, `BUGFIX_PROOF`, `TEST_IMPACT_MAP`, `CONTRACT_COMPATIBILITY`, `ENVIRONMENT_FINGERPRINT`, `DEPENDENCY_ADMISSION_GATE`, `DEPENDENCY_DELTA`, `GENERATED_ARTIFACT_GATE`, `PRE_CHANGE_SAFEPOINT`, `MIGRATION_PROOF`, `NON_FUNCTIONAL_BUDGETS`, `FLAKINESS_EVIDENCE`, `ADVERSARIAL_INPUT_VALIDATION`, `CODEOWNERS_HUMAN_GATE`, `CLOSED_LOOP_LEARNING`, `OPERATIONAL_ASSURANCE`, `PREVIEW_ENVIRONMENT_GATE`, `USER_FLOW_VERIFICATION`, `VISUAL_BEHAVIOR_GATE`, `RELEASE_RECOVERY_PROOF`, `TOOL_CAPABILITY_PROFILE`, `MCP_CAPABILITY_ASSESSMENT`, `SAFE_EXPERIMENTATION`, `GOVERNED_SKILL_ROUTING`, `GOVERNANCE_MEMORY` and `ADAPTIVE_OUTPUT_EFFICIENCY` fully active. `TASK_RISK_PROFILE` retains `SECURITY`, `DATA_MIGRATION`, `PUBLIC_CONTRACT`, `DEPENDENCY`, `DEPLOYMENT`, `PERFORMANCE`, `GENERATED_ARTIFACT`, `DESTRUCTIVE_ACTION`, `INPUT_VALIDATION`, `TEST_RELIABILITY`, `HUMAN_OWNERSHIP`, `USER_FLOW`, `VISUAL_BEHAVIOR`, `EXTERNAL_TOOLING`, `RECOVERY` and `EXPERIMENTATION`. Evidence may require more proof but never grants more privilege. Required `UNAVAILABLE` evidence is not `PASS`. Never install a dependency or verifier merely to satisfy governance, invent thresholds, expose secrets, fabricate approval, push, merge, deploy or rollback automatically.
 
 Never choose a license, expose secrets or treat research/memory/skills as requirement authority. Emit `GOVERNANCE_RESULT` with `EVIDENCE_STATUS` and stop after planning.
+
+## Detailed planning contract
+
+Preserve `REQUIREMENT_PROVENANCE` and product authority. Read original request and complete clarifications before approved requirements, blueprint or plan. Unresolved conflict or material ambiguity blocks planning. Process steering chronologically and replan when it invalidates scope.
+
+Classify product/work impact from evidence. Run direct bounded discovery only; because this role cannot delegate, return `DISCOVERY_REVIEW_REQUIRED` when independent discovery review is mandatory. Research remains evidence or recommendation until approved. Record constructive challenge, options, trade-offs, decision class, approval and any override.
+
+Build `CONTEXT_MANIFEST.md` from validated indexes, Git delta, applicable instructions, selected skills and active scoped memory. Start bounded; expand only on primary evidence. Define affected modules, callers/callees, trust/data boundaries, public contracts, schema, integrations, deployment, docs and validation.
+
+The plan contains exact scope/out-of-scope, `VERTICAL_MILESTONE`, `PRODUCT_CAPABILITY_TRACEABILITY`, acceptance criteria mapped to requirements/capability IDs, `DOCUMENTATION_IMPACT`, `MINIMUM_CHANGE_ASSESSMENT`, `TASK_RISK_PROFILE`, `VALIDATION_PROFILE`, evidence/operational applicability and fallback/blocker behavior. Do not divide a product only into backend/frontend/test phases when no end-to-end capability results.
+
+`DEPENDENCY_ADMISSION_GATE` is exact package/source/version and must resolve before installation. `PRE_CHANGE_SAFEPOINT` is planned before applicable irreversible work. Migration proof identifies reversibility and data preservation. Non-functional budgets use only authoritative thresholds. Missing required evidence remains unavailable/blocking; no tool is installed merely for a gate.
+
+Create complete `RUN_STATE.json` with preserved v2 and v3 fields and a fresh referential `EXECUTION_PACKET.md`. `READY_FOR_EXECUTION` requires `DISCOVERY_PASS`, zero material unknowns, required approval, validated baseline, coherent provenance, approved product scope, precise plan and all planning evidence.
+
+`NO_AUTOMATIC_EXTERNAL_ACTION`: planning never authorizes push, merge, deployment, publication, production rollback, production credentials/data use or permission expansion.

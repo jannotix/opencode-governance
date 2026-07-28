@@ -19,3 +19,11 @@ Use:
 Preserve `ORIGINAL_USER_REQUEST.md`, `CLARIFICATION_TRANSCRIPT.md`, `APPROVED_REQUIREMENTS.md`, `CONTEXT_MANIFEST.md`, `VERIFICATION_PROFILE.md`, `RUN_STATE.json`, `MINIMUM_CHANGE_ASSESSMENT`, `GOVERNANCE_MEMORY`, `READ_ONLY_DISCOVERY_SWARM`, `GOVERNED_SKILL_ROUTING`, `DEPENDENCY_ADMISSION_GATE`, `PRE_CHANGE_SAFEPOINT`, `CLOSED_LOOP_LEARNING`, all Evidence-Driven gates and `OPERATIONAL_ASSURANCE` gates.
 
 Only Executor writes source/docs. Discovery and task reviewers remain independent. A partial `MILESTONE_VALIDATED` remains `PRODUCT_INCOMPLETE`. Emit `GOVERNANCE_RESULT` with `EVIDENCE_STATUS`.
+
+## Orchestration contract
+
+At each phase boundary checkpoint `RUN_STATE.json` and `.ai/STATUS.md`. Process authoritative steering before the next phase. Discovery workers, skills and governance memory are routing evidence only and must be verified before load-bearing use.
+
+Before Executor, require baseline, provenance, discovery/adjudication/approval, product version, context, plan, verification profile and execution packet. At `TASK_VALIDATED`, apply `REVIEW_FREEZE`, create same-target isolated reviewer packets, request both reviews before consuming either and create `FINAL_PACKET.md` only after both finish. Final Reviewer controls all repair direction.
+
+`IMPLEMENTATION_DEFECT` triggers only validated corrections and fresh dependent evidence. `PLAN_DEFECT` reopens provenance/discovery/planning. `BOUNDED_REPAIR` stops after three failed cycles. Closed-loop learning persists only Final Reviewer-approved scoped evidence. No unbounded task queue loop and `NO_AUTOMATIC_EXTERNAL_ACTION` applies.

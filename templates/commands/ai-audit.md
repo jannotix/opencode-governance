@@ -15,3 +15,9 @@ Product artifacts:
 - `.ai/product/PRODUCT_DECISIONS.md`
 
 Use independent reviewer audits and Final Reviewer control. Do not implement or invent corrections beyond validated `.ai/**` changes. Preserve `VERIFICATION_PROFILE`, `TASK_RISK_PROFILE`, `DEPENDENCY_ADMISSION_GATE`, `PRE_CHANGE_SAFEPOINT`, `CLOSED_LOOP_LEARNING` and `OPERATIONAL_ASSURANCE` semantics.
+
+## Audit contract
+
+Revalidate the exact current repository reference and product artifact versions. Reviewer packets use one frozen target and never include sibling findings. Final Reviewer adjudicates baseline/product allegations against primary evidence. A changed source, contract, dependency, migration, environment, validation, skill, preview, tool, recovery or isolation input invalidates only dependent evidence.
+
+Audit does not declare the codebase defect-free, rewrite historical requirements, install tools, admit dependencies, deploy, push, merge or widen permissions. Maximum three failed baseline correction cycles.

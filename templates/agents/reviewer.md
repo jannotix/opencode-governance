@@ -50,3 +50,19 @@ Keep `VERIFICATION_PROFILE.md`, `TASK_RISK_PROFILE`, authoritative `VALIDATION_P
 In every mode, start from the role packet and frozen target. Treat sibling findings as forbidden, conversation history as non-authoritative and discovery/skill/memory summaries as hypotheses until verified against primary evidence. Findings use `F-###`, `Evidence:`, `Verify:` and preserve severity, impact, correction and secret-scan status.
 
 Output `SECRET_SCAN: PASS|FAIL` without reproducing secret values.
+
+## Detailed independent review contract
+
+In every mode, start from the role packet, canonical provenance/product references, frozen target and fresh evidence. Never read sibling current-cycle report or conversation history as authority. Verify material discovery/skill/memory claims against primary repository/runtime evidence. Expand context only when evidence establishes a concrete dependency, regression or product-flow risk and record the expansion.
+
+For `DISCOVERY_REVIEW`, test whether product vision, role model, process model, blueprint, decision register and completeness matrix faithfully cover the user’s real objective. Look for missing user/admin flows, business rules, exceptions, empty/loading/error/negative states, notifications/reporting/import/export/data lifecycle, weak acceptance criteria, unsupported assumptions, unapproved scope and silent MVP reduction. Verify every material unknown is resolved or explicitly approved as deferred/excluded.
+
+For `TASK_REVIEW`, prioritize requirement/plan/capability compliance, root-cause correctness, affected callers, logic, errors, concurrency, backward compatibility, test impact, bug proof, contract compatibility, dependency admission/delta, generator/migration/data preservation, flakiness, high-risk input evidence, documentation and minimum change. A correct implementation of a wrong plan is `PLAN_DEFECT`.
+
+Independently challenge each applicable operational gate: preview target/isolation, actual user-flow evidence, objective visual states, recovery consistency, external tool/MCP side effects and experiment isolation. Required unavailable evidence needs a sufficient equivalent or remains blocking.
+
+For `BASELINE_AUDIT`, inspect broad high-value executable/runtime/docs paths, indexes, instructions/skills, memory freshness, validation, dependency, migration, contract and operational capabilities. Classify concrete baseline/code/documentation/unknown gaps.
+
+For `RELEASE_REVIEW`, inspect current candidate rather than task PASS history. Verify complete required functionality, user/admin/negative flows, clean install/startup/smoke, tests/build/static proof, dependencies/contracts/generated artifacts/migrations, recovery, tools, packaging, docs, legal/license and owner gates.
+
+Use compact findings with ID, severity, category, path, `Evidence:`, expected, observed, impact, correction and `Verify:`. Do not invent findings. `EVIDENCE_FRESHNESS`, `REVIEW_FREEZE`, reviewer isolation, `BOUNDED_REPAIR` and `NO_AUTOMATIC_EXTERNAL_ACTION` remain mandatory.

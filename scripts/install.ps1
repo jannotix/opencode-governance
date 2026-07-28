@@ -27,15 +27,15 @@ $Stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $BackupDir = Join-Path $ConfigDir "backups\opencode-governance-$Stamp"
 
 if (-not $ArchitectModel) { $ArchitectModel = Read-Host 'Architect model ID (provider/model)' }
-if ($null -eq $ArchitectVariant) { $ArchitectVariant = Read-Host 'Architect variant/reasoning (optional)' }
+if (-not $PSBoundParameters.ContainsKey('ArchitectVariant')) { $ArchitectVariant = Read-Host 'Architect variant/reasoning (optional)' }
 if (-not $ExecutorModel) { $ExecutorModel = Read-Host 'Executor model ID (provider/model)' }
-if ($null -eq $ExecutorVariant) { $ExecutorVariant = Read-Host 'Executor variant/reasoning (optional)' }
+if (-not $PSBoundParameters.ContainsKey('ExecutorVariant')) { $ExecutorVariant = Read-Host 'Executor variant/reasoning (optional)' }
 if (-not $ReviewerImplementationModel) { $ReviewerImplementationModel = Read-Host 'Implementation Reviewer model ID (provider/model)' }
-if ($null -eq $ReviewerImplementationVariant) { $ReviewerImplementationVariant = Read-Host 'Implementation Reviewer variant/reasoning (optional)' }
+if (-not $PSBoundParameters.ContainsKey('ReviewerImplementationVariant')) { $ReviewerImplementationVariant = Read-Host 'Implementation Reviewer variant/reasoning (optional)' }
 if (-not $ReviewerArchitectureModel) { $ReviewerArchitectureModel = Read-Host 'Architecture/Security Reviewer model ID (provider/model)' }
-if ($null -eq $ReviewerArchitectureVariant) { $ReviewerArchitectureVariant = Read-Host 'Architecture/Security Reviewer variant/reasoning (optional)' }
+if (-not $PSBoundParameters.ContainsKey('ReviewerArchitectureVariant')) { $ReviewerArchitectureVariant = Read-Host 'Architecture/Security Reviewer variant/reasoning (optional)' }
 if (-not $FinalReviewerModel) { $FinalReviewerModel = Read-Host 'Final Reviewer/Judge model ID (provider/model)' }
-if ($null -eq $FinalReviewerVariant) { $FinalReviewerVariant = Read-Host 'Final Reviewer/Judge variant/reasoning (optional)' }
+if (-not $PSBoundParameters.ContainsKey('FinalReviewerVariant')) { $FinalReviewerVariant = Read-Host 'Final Reviewer/Judge variant/reasoning (optional)' }
 
 $RequiredModels = @(
     $ArchitectModel,

@@ -15,3 +15,7 @@ Read:
 - `.ai/product/PRODUCT_DECISIONS.md`
 
 Also report `GOVERNANCE_MEMORY`, `READ_ONLY_DISCOVERY_SWARM`, `GOVERNED_SKILL_ROUTING`, `DEPENDENCY_ADMISSION_GATE`, `PRE_CHANGE_SAFEPOINT`, `CLOSED_LOOP_LEARNING`, `MEMORY_DECISION`, `OPERATIONAL_ASSURANCE`. Do not invent percentages or missing evidence.
+
+## Status integrity contract
+
+Report exact persisted states and evidence references, not optimistic summaries. Include baseline/reference freshness, requirement integrity, approval/blocker, review freeze, current cycle, dependency/safepoint/operational status, failed/unavailable/stale gates and next safe action. An approved deferral remains visible. A partial milestone never produces a completion percentage based on unknown capabilities.

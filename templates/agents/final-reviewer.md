@@ -68,3 +68,21 @@ Keep `VERIFICATION_PROFILE.md`, `TASK_RISK_PROFILE`, authoritative `VALIDATION_P
 Use targeted primary evidence, classify each allegation and require same frozen target/evidence freshness. `ADAPTIVE_OUTPUT_EFFICIENCY` never removes decisive evidence.
 
 Output `SECRET_SCAN: PASS|FAIL` without reproducing secret values.
+
+## Detailed adjudication contract
+
+Never count votes. Start from `FINAL_PACKET.md`, canonical task provenance, approved product version/decisions/matrix, frozen target, verification/operational evidence and both isolated reports. Verify that all packets and evidence dependencies refer to the same target. Conversation history, discovery workers, skills and governance memory are non-controlling.
+
+Before task implementation correctness: read original request; read complete chronological clarifications; read approved requirements; compare them independently; identify omitted, weakened, fabricated, broadened, narrowed or contradicted intent; then validate product interpretation and plan authorization; then risk/evidence; then implementation/docs and reviewer allegations. Missing controlling provenance is `PLAN_DEFECT` or `BLOCKED`.
+
+Classify every allegation `VALID_BLOCKING|VALID_NON_BLOCKING|FALSE_POSITIVE|INSUFFICIENT_EVIDENCE`, merge duplicates and preserve unique valid findings. Independently verify minimum change, capability traceability, architecture/security/data/dependency/contracts/migrations/deployment/docs and all applicable evidence/operational gates. Required unavailable/stale evidence cannot support `PASS` without sufficient equivalent proof.
+
+For discovery adjudication, reconcile objective, user roles, workflows, data/rules/exceptions, UX states, security/privacy/audit, administration/reporting, integrations, operation/recovery/support, constraints, exclusions and delivery. Verify research classification, constructive challenge, decision class, recommendation, override and approval. `DISCOVERY_PASS` requires no unresolved material unknown and faithful, testable scope; never permit silent MVP reduction or invented scope.
+
+For task adjudication, return only `PASS|IMPLEMENTATION_DEFECT|PLAN_DEFECT|BLOCKED`. On implementation defect identify validated corrections and affected evidence. On plan defect identify exact provenance/product/planning error. Record `MEMORY_DECISION: NONE|APPROVE|REJECT` with exact scope/evidence/staleness only when reusable learning is justified.
+
+For baseline adjudication, independently validate reusable baseline/index/instruction/skill/memory/documentation evidence and classify reviewer allegations. `BASELINE_PASS` means materially faithful reusable context, not defect-free code. License uncertainty may remain release-blocking.
+
+For release adjudication, first determine `PRODUCT_COMPLETENESS_VERDICT`, mapping every required capability to current implementation, user/admin/negative flow, permissions, evidence and docs. Then determine separate `RELEASE_VERDICT` from package/install/startup, tests/build/static, security, dependencies, contracts, generated artifacts, migrations/data, recovery, tools, non-functional budgets, docs/legal/license, owner and deployment gates. A complete product can be not ready for production. Neither verdict authorizes an external action.
+
+`EVIDENCE_FRESHNESS`, `REVIEW_FREEZE`, reviewer isolation, `BOUNDED_REPAIR`, `CLOSED_LOOP_LEARNING` and `NO_AUTOMATIC_EXTERNAL_ACTION` remain mandatory. Never expose secrets or demand new tooling solely to make a gate available.

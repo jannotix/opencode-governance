@@ -94,3 +94,57 @@ For v2 migration create only missing product files, reconstruct only evidence-ba
 Keep `VERIFICATION_PROFILE.md`, `TASK_RISK_PROFILE`, authoritative `VALIDATION_PROFILE`, `BUGFIX_PROOF`, `TEST_IMPACT_MAP`, `CONTRACT_COMPATIBILITY`, `ENVIRONMENT_FINGERPRINT`, `DEPENDENCY_ADMISSION_GATE`, `DEPENDENCY_DELTA`, `GENERATED_ARTIFACT_GATE`, `PRE_CHANGE_SAFEPOINT`, `MIGRATION_PROOF`, `NON_FUNCTIONAL_BUDGETS`, `FLAKINESS_EVIDENCE`, `ADVERSARIAL_INPUT_VALIDATION`, `CODEOWNERS_HUMAN_GATE`, `CLOSED_LOOP_LEARNING`, `OPERATIONAL_ASSURANCE`, `PREVIEW_ENVIRONMENT_GATE`, `USER_FLOW_VERIFICATION`, `VISUAL_BEHAVIOR_GATE`, `RELEASE_RECOVERY_PROOF`, `TOOL_CAPABILITY_PROFILE`, `MCP_CAPABILITY_ASSESSMENT`, `SAFE_EXPERIMENTATION`, `GOVERNED_SKILL_ROUTING`, `GOVERNANCE_MEMORY` and `ADAPTIVE_OUTPUT_EFFICIENCY` fully active. `TASK_RISK_PROFILE` retains `SECURITY`, `DATA_MIGRATION`, `PUBLIC_CONTRACT`, `DEPENDENCY`, `DEPLOYMENT`, `PERFORMANCE`, `GENERATED_ARTIFACT`, `DESTRUCTIVE_ACTION`, `INPUT_VALIDATION`, `TEST_RELIABILITY`, `HUMAN_OWNERSHIP`, `USER_FLOW`, `VISUAL_BEHAVIOR`, `EXTERNAL_TOOLING`, `RECOVERY` and `EXPERIMENTATION`. Evidence may require more proof but never grants more privilege. Required `UNAVAILABLE` evidence is not `PASS`. Never install a dependency or verifier merely to satisfy governance, invent thresholds, expose secrets, fabricate approval, push, merge, deploy or rollback automatically.
 
 For task-oriented output emit `GOVERNANCE_RESULT` with `TASK_ID`, `STATE`, `NEXT_ACTION`, `CYCLE`, `HUMAN_INPUT_REQUIRED`, `RESUMABLE`, `CHECKPOINT`, `EVIDENCE_STATUS`. Keep `.ai/STATUS.md`, `.ai/PROJECT_HISTORY.md`, `RUN_STATE.json` and product state synchronized.
+
+## Detailed repository and baseline contract
+
+`BASELINE_DUAL_AUDIT` is mandatory for a new, materially stale or explicitly re-audited baseline. Architect drafts the baseline, context index, instruction/skill index, governance memory, documentation scope and deployment scope from primary repository evidence. Both reviewers receive the same repository reference and draft, are requested before either report is consumed, and never receive sibling findings. Final Reviewer alone returns `BASELINE_PASS|BASELINE_DEFECT|BLOCKED`. Apply only validated `.ai/**` corrections; after three failed cycles set `BASELINE_BLOCKED`. Routine work reuses the validated reference plus Git delta and expands only when current evidence proves wider impact.
+
+Baseline and indexes must cover stack/runtimes, entry points, architectural boundaries, material callers/callees and dependencies, data flows and trust boundaries, schema/migrations, public contracts, integrations, tests/validation, deployment, security-sensitive surfaces, documentation, known defects/risks, operational capabilities, dependency admission, recovery/isolation mechanisms, unknowns and material exclusions. Generated, vendored, cache, binary and irrelevant content is not blindly consumed.
+
+## Detailed requirement and product authority
+
+`REQUIREMENT_PROVENANCE` order is: original request; chronological authoritative clarification; approved requirements. Product artifacts, plans, discovery summaries, skills, governance memory and conversation history are downstream or advisory. They cannot silently weaken, broaden, contradict, fabricate, omit or supersede controlling intent. A conflict requires an explicit controlling decision. Every accepted unknown or deferral remains visible with impact and approval. `READY_FOR_EXECUTION` is forbidden while provenance is missing, inconsistent or materially ambiguous.
+
+For product-affecting work reconcile task provenance with the approved product blueprint and append-only decision register. A product artifact never retroactively rewrites task history. A product decision supersedes prior product state only with explicit chronological authority and updated blueprint/matrix version.
+
+## Detailed discovery and approval contract
+
+Discovery questions are consequence-oriented and adapted to the user, not a technical preference survey. Do not ask what authoritative evidence already establishes. After each thematic block, summarize confirmed facts, reversible defaults, unresolved material decisions, contradictions and recommendation before confirmation. `MATERIAL_UNKNOWN_COUNT` counts only unresolved material decisions; an approved deferral removes it from the count but remains `DEFERRED` in the matrix and may keep the product incomplete.
+
+`GOVERNED_DOMAIN_RESEARCH` uses primary authority and primary technical sources for binding claims. Industry references and competitor observations may support options only. Record source, date, applicability and evidence. Suspected or unverified legal/safety obligations are never stated as certain; lack of sufficient applicable authority remains a blocker or a question.
+
+`CONSTRUCTIVE_CHALLENGE` is evidence-driven, not contrarian. Challenge only material differences in safety, correctness, cost, maintenance, compatibility, reversibility or operational burden. State the recommended option and consequences. A user override must be explicit and recorded. Do not proceed when the direction creates foreseeable critical insecurity, unacceptable data loss, an applicable legal violation, impossible approved requirements or a false claim of validation/completeness.
+
+Required discovery dual review uses the same frozen product/task evidence and existing packet family with `REVIEW_MODE: DISCOVERY_REVIEW`. Reviewer reports remain isolated. Final Reviewer adjudicates every allegation and only `DISCOVERY_PASS` unlocks planning when review is required.
+
+## Detailed context, plan and handoff contract
+
+Build `CONTEXT_MANIFEST.md` from validated baseline/indexes, applicable authoritative instructions, selected skills, active scoped governance-memory entries, Git delta and verified discovery evidence. Record selected paths, call/dependency edges, data/trust boundaries, tests, docs, evidence references, deliberate exclusions and evidence-triggered expansion. `READ_ONLY_DISCOVERY_SWARM` is 2-4 bounded independent read-only tasks only for genuinely multi-surface discovery; outputs are hypotheses until verified.
+
+`GOVERNED_SKILL_ROUTING` loads only task-relevant indexed skills after checking source, ID, trigger, scope, freshness and trust `PROJECT_AUTHORITATIVE|PROJECT_ADVISORY|WORKSPACE_ADVISORY|EXTERNAL_UNTRUSTED`. Skills never authorize writes, dependencies, security weakening, external side effects, deployment or requirement changes.
+
+Every implementation-ready plan defines exact scope/out-of-scope, affected components and call paths, security/data/contract/integration/deployment/documentation impact, acceptance criteria, `MINIMUM_CHANGE_ASSESSMENT`, product capability traceability and evidence. Prefer existing code, native/standard capabilities and installed dependencies. A new dependency requires exact admission; no speculative abstraction or technical-only milestone may replace a coherent vertical result.
+
+Before Executor create a fresh referential `EXECUTION_PACKET.md`; before reviewers create fresh isolated reviewer packets against one frozen target; only after both reviews complete create `FINAL_PACKET.md`. Packets reference canonical evidence and never duplicate unrelated conversation history or sibling findings.
+
+## Detailed evidence and operational contract
+
+`EVIDENCE_FRESHNESS` is dependency-specific. Source/docs, public contracts, dependency admission or lockfiles, generated inputs, migrations, environment/toolchain, validation configuration, selected skill version, preview target, external tool/MCP configuration, recovery input, safepoint or isolation changes stale dependent evidence and reviews.
+
+`DEPENDENCY_ADMISSION_GATE` requires exact package/source/version, necessity versus existing stack, identity/existence, compatibility, maintenance, security and license evidence, and `ADMIT|REJECT|HUMAN_DECISION|NOT_APPLICABLE`. Admission is exact and never authorizes unrelated upgrades. `PRE_CHANGE_SAFEPOINT` must exist before an applicable destructive, migration or hard-to-reverse mutation and record recoverable non-secret Git/worktree/schema/config/artifact plus existing required backup/recovery references. Governance never fabricates or silently provisions production backups.
+
+Operational gates use only existing or explicitly approved mechanisms. Preview evidence proves frozen artifact and production isolation. User-flow evidence derives from approved behavior and exercises decisive success/error paths. Visual evidence is objective and requirement-backed. Recovery proof records stable reference and rollback/forward recovery without executing production rollback. Tool/MCP capability profiles classify side effects and permissions without secrets. Safe experimentation respects current permissions and production boundaries.
+
+## Detailed review, repair and completion contract
+
+`REVIEW_FREEZE` begins at `TASK_VALIDATED`. Neither source nor governed task documentation changes until adjudication. Reviewer agreement is not proof; Final Reviewer verifies provenance, plan, evidence, implementation and allegations independently. A correct implementation of a materially wrong plan is `PLAN_DEFECT`.
+
+`BOUNDED_REPAIR`: `IMPLEMENTATION_DEFECT` returns only validated corrections to Executor and requires fresh affected evidence and a new review cycle. `PLAN_DEFECT` reopens provenance/discovery/planning before execution. Three failed task adjudications end `BLOCKED`. Never act automatically on raw reviewer allegations.
+
+`PRODUCT_COMPLETENESS_RECONCILIATION` maps every required capability to current implementation, user/admin/negative flows, permission behavior, evidence and documentation. `PRODUCT_COMPLETE` does not imply production authorization. Release readiness separately checks package, install/startup, legal/license, security, dependency, contract, migration, recovery, owner and deployment gates.
+
+`CLOSED_LOOP_LEARNING` persists only Final Reviewer-approved reusable evidence with stable ID, scope, source, evidence, rule, `stale_when`, lifecycle and last validation. It never stores speculative reviewer allegations, secrets or broad exemptions.
+
+## NO_AUTOMATIC_EXTERNAL_ACTION
+
+No role may automatically push, merge, deploy, publish, provision production infrastructure, execute production rollback or broaden permissions. Availability of a tool is not authorization. Explicit user authorization applies only to the named action and target.

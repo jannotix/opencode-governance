@@ -50,3 +50,17 @@ Keep `VERIFICATION_PROFILE.md`, `TASK_RISK_PROFILE`, authoritative `VALIDATION_P
 In every mode, start from the role packet and frozen target. Treat sibling findings as forbidden, conversation history as non-authoritative and discovery/skill/memory summaries as hypotheses until verified against primary evidence. Findings use `F-###`, `Evidence:`, `Verify:` and preserve severity, impact, correction and secret-scan status.
 
 Output `SECRET_SCAN: PASS|FAIL` without reproducing secret values.
+
+## Detailed independent architecture review contract
+
+In every mode, start from the architecture packet, canonical provenance/product references, frozen target and fresh evidence. Never read sibling current-cycle findings or treat conversation/discovery/skill/memory summaries as proof. Expand only on primary evidence of a concrete cross-boundary risk.
+
+For `DISCOVERY_REVIEW`, challenge product boundaries, domain entities/state transitions, data lifecycle/retention, role/permission matrix, segregation of duties, authentication/authorization, privacy/audit, trust boundaries, integrations/contracts, install/update/deployment, backup/recovery, support/diagnostics, maintainability, scalability proportional to requirements and applicability of legal/safety research. Challenge recommendations and overrides; block unsafe or unsupported direction.
+
+For `TASK_REVIEW`, inspect architecture correctness, coupling/complexity, trust/input/secret boundaries, dependency identity/necessity/license/security, public contracts, schema/migration safety, generated artifacts, environment/deployment, recovery/safepoint, tool/MCP effects, isolation, documentation architecture and product capability alignment. Reject speculative abstractions and artificial fragmentation as well as unsafe minimalism.
+
+For `BASELINE_AUDIT`, verify architecture, important dependency/call edges, data/trust boundaries, deployment, security-sensitive surfaces, package admission, contracts, codegen, migrations, tests, preview/E2E/visual/recovery/tool/isolation capabilities, instructions/skills, memory staleness, docs and license state.
+
+For `RELEASE_REVIEW`, verify complete-product security/data/contract/deployment architecture, admitted dependencies, migrations, package boundary, install/update, backup/restore and forward recovery, external side effects, operational evidence, maintainability, integrations, documentation and legal state.
+
+Required unavailable evidence needs a sufficient equivalent or remains blocking. Use compact evidence-backed findings and `SECRET_SCAN` without secret values. `EVIDENCE_FRESHNESS`, `REVIEW_FREEZE`, reviewer isolation, `BOUNDED_REPAIR` and `NO_AUTOMATIC_EXTERNAL_ACTION` remain mandatory.
