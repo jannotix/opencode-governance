@@ -3,6 +3,17 @@ set -euo pipefail
 CONFIG_DIR="${1:-${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}}"
 required_agents=(architect build plan executor reviewer reviewer-architecture final-reviewer)
 required_commands=(ai-init ai-audit ai-docs ai-discover ai-plan ai-execute ai-review ai-workflow ai-status ai-resume ai-metrics ai-release)
+ai_edit_agents=(architect build plan reviewer reviewer-architecture final-reviewer)
+portable_ai_edit_patterns=(
+  '    "*": deny'
+  '    ".ai": allow'
+  '    ".ai/*": allow'
+  '    "*/.ai": allow'
+  '    "*/.ai/*": allow'
+  "    '.ai\\*': allow"
+  "    '*\\.ai': allow"
+  "    '*\\.ai\\*': allow"
+)
 product_paths=(
   '.ai/product/PRODUCT_VISION.md'
   '.ai/product/USER_AND_ROLE_MODEL.md'
@@ -21,11 +32,20 @@ for name in "${required_agents[@]}"; do
   grep -Eq '^  skill:[[:space:]]*$' "$file" || fail "$name missing governed skill permission block"
   for marker in "${v2_markers[@]}"; do grep -Fq "$marker" "$file" || fail "$name missing v2 marker $marker"; done
 done
+for name in "${ai_edit_agents[@]}"; do
+  file="$CONFIG_DIR/agents/$name.md"
+  for pattern in "${portable_ai_edit_patterns[@]}"; do
+    grep -Fqx "$pattern" "$file" || fail "$name missing portable .ai edit rule: $pattern"
+  done
+done
 for name in "${required_commands[@]}"; do [[ -s "$CONFIG_DIR/commands/$name.md" ]] || fail "Missing command: $name"; done
 for name in architect build plan; do for marker in "${v3_markers[@]}"; do grep -Fq "$marker" "$CONFIG_DIR/agents/$name.md" || fail "$name missing v3 marker $marker"; done; done
 for path in "${product_paths[@]}"; do
   for file in architect build plan; do grep -Fq "$path" "$CONFIG_DIR/agents/$file.md" || fail "$file missing product path $path"; done
   for cmd in ai-init ai-discover ai-plan ai-workflow ai-status ai-resume ai-release; do grep -Fq "$path" "$CONFIG_DIR/commands/$cmd.md" || fail "$cmd missing product path $path"; done
+done
+for marker in PERMISSION_BOOTSTRAP_PROBE PRODUCT_ARTIFACT_SET_VERIFIED GOVERNANCE_PERMISSION_BLOCKED; do
+  grep -Fq "$marker" "$CONFIG_DIR/commands/ai-init.md" || fail "ai-init missing $marker"
 done
 for file in reviewer reviewer-architecture final-reviewer; do grep -Fq 'DISCOVERY_REVIEW' "$CONFIG_DIR/agents/$file.md" || fail "$file missing DISCOVERY_REVIEW"; done
 for verdict in DISCOVERY_PASS DISCOVERY_DEFECT DISCOVERY_BLOCKED; do grep -Fq "$verdict" "$CONFIG_DIR/agents/final-reviewer.md" || fail "final-reviewer missing $verdict"; done
@@ -63,5 +83,31 @@ raw=re.sub(r'(^|\s)//.*',r'\1',raw)
 raw=re.sub(r',\s*([}\]])',r'\1',raw)
 data=json.loads(raw)
 if data.get('default_agent')!='architect': raise SystemExit('default_agent must be architect')
+patterns=[
+ ('*','deny'),('.ai','allow'),('.ai/*','allow'),('*/.ai','allow'),('*/.ai/*','allow'),
+ (r'.ai\*','allow'),(r'*\.ai','allow'),(r'*\.ai\*','allow'),
+]
+def matches(pattern,value):
+ regex='^'+re.escape(pattern).replace(r'\*','.*').replace(r'\?','.')+'$'
+ return re.match(regex,value,re.S) is not None
+def decision(value):
+ result=None
+ for pattern,action in patterns:
+  if matches(pattern,value): result=action
+ return result
+positive=[
+ '.ai/permission-verification.tmp',
+ 'C:/Users/User/Desktop/TLR/.ai/permission-verification.tmp',
+ r'.ai\permission-verification.tmp',
+ r'C:\Users\User\Desktop\TLR\.ai\permission-verification.tmp',
+]
+negative=[
+ 'src/app.ts','C:/Users/User/Desktop/TLR/src/app.ts',r'C:\Users\User\Desktop\TLR\src\app.ts',
+ '.ai-evil/file','nested/.ai2/file',
+]
+for value in positive:
+ if decision(value)!='allow': raise SystemExit(f'Portable .ai rule rejected expected path: {value}')
+for value in negative:
+ if decision(value)!='deny': raise SystemExit(f'Portable .ai rule allowed non-governance path: {value}')
 PY
-echo "PASS: OpenCode Governance v3.0 rendered contract verified (7 agents, 12 commands)."
+echo "PASS: OpenCode Governance v3.0 rendered contract verified (7 agents, 12 commands, portable .ai permissions)."
