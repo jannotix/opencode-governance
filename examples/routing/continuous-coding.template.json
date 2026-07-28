@@ -1,0 +1,131 @@
+{
+  "schema_version": "1.0",
+  "settings": {
+    "enabled_roles": [
+      "reviewer",
+      "reviewer-architecture",
+      "final-reviewer"
+    ],
+    "eligible_failures": [
+      "PROVIDER_UNAVAILABLE",
+      "RATE_LIMIT",
+      "PLAN_QUOTA_EXHAUSTED",
+      "MODEL_RETIRED",
+      "MODEL_TEMPORARILY_UNAVAILABLE",
+      "BOUNDED_TIMEOUT"
+    ],
+    "default_cooldown_seconds": 900,
+    "allow_degraded_independence": false
+  },
+  "roles": {
+    "architect": {
+      "primary": {
+        "model": "minimax-token-plan/minimax-m3",
+        "variant": "thinking",
+        "variant_policy": "explicit",
+        "model_family": "minimax-m3"
+      },
+      "fallbacks": []
+    },
+    "executor": {
+      "primary": {
+        "model": "xiaomi/mimo-v2.5-pro",
+        "variant": null,
+        "variant_policy": "highest_supported",
+        "model_family": "mimo-v2.5"
+      },
+      "fallbacks": []
+    },
+    "reviewer": {
+      "primary": {
+        "model": "opencode-go/deepseek-v4-pro",
+        "variant": "max",
+        "variant_policy": "explicit",
+        "model_family": "deepseek-v4"
+      },
+      "fallbacks": [
+        {
+          "model": "alibaba-token-plan/deepseek-v4-pro",
+          "variant": "max",
+          "variant_policy": "explicit",
+          "model_family": "deepseek-v4",
+          "priority": 1
+        },
+        {
+          "model": "alibaba-token-plan/qwen3.7-max",
+          "variant": null,
+          "variant_policy": "highest_supported",
+          "model_family": "qwen3.7",
+          "priority": 2,
+          "only_on": [
+            "MODEL_RETIRED",
+            "MODEL_UNAVAILABLE_ON_ALL_CONFIGURED_PROVIDERS"
+          ]
+        }
+      ]
+    },
+    "reviewer-architecture": {
+      "primary": {
+        "model": "zai/glm-5.2",
+        "variant": "max",
+        "variant_policy": "explicit",
+        "model_family": "glm-5.2"
+      },
+      "fallbacks": [
+        {
+          "model": "alibaba-token-plan/glm-5.2",
+          "variant": "max",
+          "variant_policy": "explicit",
+          "model_family": "glm-5.2",
+          "priority": 1
+        },
+        {
+          "model": "opencode-go/glm-5.2",
+          "variant": "max",
+          "variant_policy": "explicit",
+          "model_family": "glm-5.2",
+          "priority": 2
+        },
+        {
+          "model": "opencode-go/qwen3.7-max",
+          "variant": null,
+          "variant_policy": "highest_supported",
+          "model_family": "qwen3.7",
+          "priority": 3
+        }
+      ]
+    },
+    "final-reviewer": {
+      "primary": {
+        "model": "openai/gpt-5.6-sol",
+        "variant": "max",
+        "variant_policy": "explicit",
+        "model_family": "gpt-5.6"
+      },
+      "fallbacks": [
+        {
+          "model": "alibaba-token-plan/qwen3.7-max",
+          "variant": null,
+          "variant_policy": "highest_supported",
+          "model_family": "qwen3.7",
+          "priority": 1
+        },
+        {
+          "model": "opencode-go/qwen3.7-max",
+          "variant": null,
+          "variant_policy": "highest_supported",
+          "model_family": "qwen3.7",
+          "priority": 2
+        },
+        {
+          "model": "alibaba-token-plan/glm-5.2",
+          "variant": "max",
+          "variant_policy": "explicit",
+          "model_family": "glm-5.2",
+          "priority": 3,
+          "requires_role_rebalance": true
+        }
+      ]
+    }
+  }
+}
