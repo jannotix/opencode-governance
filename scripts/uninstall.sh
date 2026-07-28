@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 CONFIG_DIR="${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}"
+if [[ $# -gt 0 ]]; then
+  if [[ "$1" == "--config-dir" ]]; then
+    [[ $# -ge 2 ]] || { echo '--config-dir requires a value.' >&2; exit 1; }
+    CONFIG_DIR="$2"
+  else
+    CONFIG_DIR="$1"
+  fi
+fi
 MANIFEST="$CONFIG_DIR/opencode-governance-routing.json"
 if [[ -f "$MANIFEST" ]]; then
   python3 - "$CONFIG_DIR" <<'PY'
