@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.0.2 - 2026-07-28
+
+- Fixed Windows project-local `.ai/**` writes when OpenCode evaluates edit targets as normalized absolute paths.
+- Preserved deny-by-default editing outside `.ai/**` by rendering portable relative/absolute path patterns instead of enabling broad external-directory access.
+- Added `/ai-init` `PERMISSION_BOOTSTRAP_PROBE` with create, read-back and delete verification before any other governance write.
+- Added `PRODUCT_ARTIFACT_SET_VERIFIED` so v2-to-v3 migration cannot report success unless all six canonical product artifacts exist, are readable and contain required schema metadata.
+- Strengthened Windows and Unix verifiers with positive and negative portable-path cases while preserving seven agents, twelve commands, provider/model agnosticism and all v2/v3 governance contracts.
+- No application-source permission, provider routing, dependency, automatic external action or public command surface changed.
+
 ## 3.0.1 - 2026-07-28
 
 - Removed the redundant `docs/installation.md` file and made the README installation section canonical.

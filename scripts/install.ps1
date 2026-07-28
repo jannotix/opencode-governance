@@ -104,6 +104,19 @@ function Write-Utf8NoBom([string]$Path, [string]$Text) {
     )
 }
 
+$LegacyAiEditPattern = '(?m)^  edit:\r?\n    "\*": deny\r?\n    "\.ai/\*\*": allow\r?\n'
+$PortableAiEditBlock = @'
+  edit:
+    "*": deny
+    ".ai": allow
+    ".ai/*": allow
+    "*/.ai": allow
+    "*/.ai/*": allow
+    '.ai\*': allow
+    '*\.ai': allow
+    '*\.ai\*': allow
+'@
+
 function Render-Agent(
     [string]$Source,
     [string]$Destination,
@@ -116,6 +129,18 @@ function Render-Agent(
     $Text = $Text.Replace($ModelToken, $Model)
     $VariantLine = if ([string]::IsNullOrWhiteSpace($Variant)) { '' } else { "variant: $Variant" }
     $Text = $Text.Replace($VariantToken, $VariantLine)
+
+    if ((Split-Path $Source -LeafBase) -ne 'executor') {
+        if ($Text -notmatch $LegacyAiEditPattern) {
+            throw "Cannot render portable .ai permissions for $Source."
+        }
+        $Text = [regex]::Replace(
+            $Text,
+            $LegacyAiEditPattern,
+            ($PortableAiEditBlock.TrimEnd() + "`n")
+        )
+    }
+
     Write-Utf8NoBom $Destination $Text
 }
 
@@ -161,7 +186,7 @@ $Object | Add-Member -MemberType NoteProperty -Name 'default_agent' -Value 'arch
 Write-Utf8NoBom $Target (($Object | ConvertTo-Json -Depth 20) + [Environment]::NewLine)
 
 & (Join-Path $PSScriptRoot 'verify.ps1') -ConfigDir $ConfigDir
-Write-Host 'Installed OpenCode Governance v3.0: 7 agents, 12 commands, adaptive product discovery, constructive challenge, independent discovery review, product completeness, Evidence-Driven Verification and Operational Assurance.'
+Write-Host 'Installed OpenCode Governance v3.0.2: 7 agents, 12 commands, portable .ai permissions, adaptive product discovery, independent review and product completeness.'
 Write-Host 'Project v2 state is migrated lazily by project commands; installation does not rewrite .ai state.'
 Write-Host 'No push, merge, deployment or rollback is automatic. Restart OpenCode Desktop/TUI before use.'
 Write-Host "Backup: $BackupDir"
