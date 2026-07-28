@@ -164,7 +164,7 @@ $PortableAiEditBlock=@'
     '*\.ai\*': allow
 '@
 function Add-RouteMetadata([string]$Text,[string]$Role,[string]$RouteAgent,[object]$Candidate,[int]$Priority,[bool]$HiddenAlias) {
-    if ($HiddenAlias) { $Text=[regex]::Replace($Text,'(?m)^mode: subagent\r?$','mode: subagent`nhidden: true',1) }
+    if ($HiddenAlias) { $Text=[regex]::Replace($Text,'(?m)^mode: subagent\r?$',"mode: subagent`nhidden: true",1) }
     $Variant=if([string]::IsNullOrWhiteSpace([string]$Candidate.variant)){'PROVIDER_DEFAULT'}else{[string]$Candidate.variant}
     $OnlyOnValues=Get-OnlyOn $Candidate "$RouteAgent route"
     $OnlyOn=if($OnlyOnValues.Count -eq 0){'ANY_ELIGIBLE_FAILURE'}else{$OnlyOnValues -join '|'}
