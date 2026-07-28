@@ -18,6 +18,20 @@ $Commands = @(
     'ai-plan', 'ai-execute', 'ai-review', 'ai-workflow',
     'ai-status', 'ai-resume', 'ai-metrics', 'ai-release'
 )
+$AiEditAgents = @(
+    'architect', 'build', 'plan',
+    'reviewer', 'reviewer-architecture', 'final-reviewer'
+)
+$PortableAiEditRules = @(
+    '    "*": deny',
+    '    ".ai": allow',
+    '    ".ai/*": allow',
+    '    "*/.ai": allow',
+    '    "*/.ai/*": allow',
+    "    '.ai\*': allow",
+    "    '*\.ai': allow",
+    "    '*\.ai\*': allow"
+)
 $ProductPaths = @(
     '.ai/product/PRODUCT_VISION.md',
     '.ai/product/USER_AND_ROLE_MODEL.md',
@@ -55,6 +69,29 @@ function Require-Text([string]$Path, [string]$Marker) {
     }
 }
 
+function Test-SimpleWildcard([string]$Pattern, [string]$Value) {
+    $Regex = '^' + [regex]::Escape($Pattern).Replace('\*', '.*').Replace('\?', '.') + '$'
+    return [regex]::IsMatch($Value, $Regex, [System.Text.RegularExpressions.RegexOptions]::Singleline)
+}
+
+function Resolve-PortableEditDecision([string]$Value) {
+    $Rules = @(
+        @('*', 'deny'),
+        @('.ai', 'allow'),
+        @('.ai/*', 'allow'),
+        @('*/.ai', 'allow'),
+        @('*/.ai/*', 'allow'),
+        @('.ai\*', 'allow'),
+        @('*\.ai', 'allow'),
+        @('*\.ai\*', 'allow')
+    )
+    $Result = $null
+    foreach ($Rule in $Rules) {
+        if (Test-SimpleWildcard $Rule[0] $Value) { $Result = $Rule[1] }
+    }
+    return $Result
+}
+
 foreach ($Name in $Agents) {
     $Path = Join-Path $ConfigDir "agents\$Name.md"
     if (-not (Test-Path $Path -PathType Leaf)) { throw "Missing agent: $Name" }
@@ -63,6 +100,36 @@ foreach ($Name in $Agents) {
     if ($Text -match '__[A-Z_]+__') { throw "Unrendered placeholder: $Name" }
     if ($Text -notmatch '(?m)^  skill:\s*$') { throw "$Name missing governed skill block" }
     foreach ($Marker in $V2Markers) { Require-Text $Path $Marker }
+}
+
+foreach ($Name in $AiEditAgents) {
+    $Path = Join-Path $ConfigDir "agents\$Name.md"
+    $Lines = Get-Content $Path
+    foreach ($Rule in $PortableAiEditRules) {
+        if ($Lines -cnotcontains $Rule) { throw "$Name missing portable .ai edit rule: $Rule" }
+    }
+}
+
+foreach ($Value in @(
+    '.ai/permission-verification.tmp',
+    'C:/Users/User/Desktop/TLR/.ai/permission-verification.tmp',
+    '.ai\permission-verification.tmp',
+    'C:\Users\User\Desktop\TLR\.ai\permission-verification.tmp'
+)) {
+    if ((Resolve-PortableEditDecision $Value) -ne 'allow') {
+        throw "Portable .ai rule rejected expected path: $Value"
+    }
+}
+foreach ($Value in @(
+    'src/app.ts',
+    'C:/Users/User/Desktop/TLR/src/app.ts',
+    'C:\Users\User\Desktop\TLR\src\app.ts',
+    '.ai-evil/file',
+    'nested/.ai2/file'
+)) {
+    if ((Resolve-PortableEditDecision $Value) -ne 'deny') {
+        throw "Portable .ai rule allowed non-governance path: $Value"
+    }
 }
 
 foreach ($Name in $Commands) {
@@ -82,6 +149,10 @@ foreach ($ProductPath in $ProductPaths) {
     foreach ($Command in @('ai-init', 'ai-discover', 'ai-plan', 'ai-workflow', 'ai-status', 'ai-resume', 'ai-release')) {
         Require-Text (Join-Path $ConfigDir "commands\$Command.md") $ProductPath
     }
+}
+
+foreach ($Marker in @('PERMISSION_BOOTSTRAP_PROBE','PRODUCT_ARTIFACT_SET_VERIFIED','GOVERNANCE_PERMISSION_BLOCKED')) {
+    Require-Text (Join-Path $ConfigDir 'commands\ai-init.md') $Marker
 }
 
 foreach ($Name in @('reviewer', 'reviewer-architecture', 'final-reviewer')) {
@@ -151,4 +222,4 @@ $Stripped = [regex]::Replace($Stripped, ',\s*([}\]])', '$1')
 $Object = $Stripped | ConvertFrom-Json
 if ($Object.default_agent -ne 'architect') { throw 'default_agent must be architect' }
 
-Write-Host 'PASS: OpenCode Governance v3.0 rendered contract verified (7 agents, 12 commands).'
+Write-Host 'PASS: OpenCode Governance v3.0 rendered contract verified (7 agents, 12 commands, portable .ai permissions).'
