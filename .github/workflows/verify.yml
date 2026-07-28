@@ -51,12 +51,23 @@ jobs:
           New-Item -ItemType Directory -Force -Path (Join-Path $config 'agents'),(Join-Path $config 'commands')|Out-Null
           'user'|Set-Content (Join-Path $config 'agents/unrelated-user-agent.md')
           'user'|Set-Content (Join-Path $config 'commands/unrelated-user-command.md')
-          ./scripts/install.ps1 -ConfigDir $config -NonInteractive `
-            -ArchitectModel 'test/architect' -ArchitectVariant 'max' `
-            -ExecutorModel 'test/executor' `
-            -ReviewerImplementationModel 'test/reviewer' -ReviewerImplementationVariant 'thinking' `
-            -ReviewerArchitectureModel 'test/architecture' -ReviewerArchitectureVariant 'high' `
-            -FinalReviewerModel 'test/final' -FinalReviewerVariant 'thinking'
+          try {
+            ./scripts/install.ps1 -ConfigDir $config -NonInteractive `
+              -ArchitectModel 'test/architect' -ArchitectVariant 'max' `
+              -ExecutorModel 'test/executor' `
+              -ReviewerImplementationModel 'test/reviewer' -ReviewerImplementationVariant 'thinking' `
+              -ReviewerArchitectureModel 'test/architecture' -ReviewerArchitectureVariant 'high' `
+              -FinalReviewerModel 'test/final' -FinalReviewerVariant 'thinking'
+          } catch {
+            $_ | Format-List * -Force | Out-String | Set-Content (Join-Path $env:RUNNER_TEMP 'windows-install-error.txt')
+            throw
+          }
+      - name: Upload Windows install diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-install-error
+          path: ${{ runner.temp }}\windows-install-error.txt
       - name: Verify rendered contract
         shell: pwsh
         run: |
