@@ -2,10 +2,25 @@
 
 OpenCode permissions enforce the governance role boundaries in addition to prompt policy.
 
+## Portable governed-state writes
+
+Governance roles that write evidence are denied general editing and allowed only inside project-local `.ai/**`.
+
+OpenCode may present an edit target as a relative path or as a normalized absolute path. The installer therefore renders a portable ordered rule set that recognizes the project-local `.ai` directory with either slash style while retaining a leading catch-all deny. It does not enable broad `external_directory` access and does not hard-code a user or project path.
+
+`/ai-init` runs `PERMISSION_BOOTSTRAP_PROBE` before any other governance write:
+
+1. create `.ai/permission-verification.tmp`;
+2. read back a fixed non-secret marker;
+3. delete the probe;
+4. verify that the probe is gone.
+
+Failure returns `GOVERNANCE_PERMISSION_BLOCKED` and initialization stops. After initialization or v2 migration, `PRODUCT_ARTIFACT_SET_VERIFIED` confirms that all six canonical `.ai/product/` files exist, are readable and contain required schema metadata.
+
 ## Architect
 
 - application source/project-documentation writes: denied;
-- `.ai/**`: allowed;
+- project-local `.ai/**`: allowed through portable relative/absolute matching;
 - `question`: allowed;
 - governed delegation: Executor, both Reviewers and Final Reviewer;
 - read-only discovery: `Explore` and `Scout` allowed;
@@ -21,7 +36,7 @@ Architect may persist `.ai/GOVERNANCE_MEMORY.md` only after Final Reviewer appro
 `build` is the full-workflow primary entry point and uses the Architect model.
 
 - application source/project-documentation writes: denied;
-- `.ai/**`: allowed;
+- project-local `.ai/**`: allowed through portable relative/absolute matching;
 - `question`: allowed;
 - governed delegation: Executor, both Reviewers and Final Reviewer;
 - read-only discovery: `Explore` and `Scout` allowed;
@@ -37,7 +52,7 @@ Implementation/documentation writes are always delegated to Executor.
 `plan` is planning-only and uses the Architect model.
 
 - application source/project-documentation writes: denied;
-- `.ai/**`: allowed;
+- project-local `.ai/**`: allowed through portable relative/absolute matching;
 - `question`: allowed;
 - subagent delegation: denied;
 - implementation/review execution: denied by policy;
@@ -71,7 +86,7 @@ Executor never writes `.ai/GOVERNANCE_MEMORY.md`.
 `reviewer` and `reviewer-architecture` share the same safety boundary:
 
 - application source/project-documentation writes: denied;
-- `.ai/**`: allowed only for their own review/audit evidence;
+- project-local `.ai/**`: allowed through portable relative/absolute matching only for their own review/audit evidence;
 - delegation: denied;
 - skills: ask/authorize only for scoped review evidence;
 - external directory: denied;
@@ -84,7 +99,7 @@ Both reviewers independently validate the frozen target and required Evidence-Dr
 ## Final Reviewer
 
 - application source/project-documentation writes: denied;
-- `.ai/**`: allowed for final baseline/task/release adjudication evidence;
+- project-local `.ai/**`: allowed through portable relative/absolute matching for final baseline/task/release adjudication evidence;
 - delegation: denied;
 - skills: ask/authorize only for scoped adjudication evidence;
 - external directory: denied;
