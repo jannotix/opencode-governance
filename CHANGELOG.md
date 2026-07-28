@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.1.0 - 2026-07-28
+
+- Added optional automatic failover for Implementation Reviewer, Architecture/Security Reviewer and Final Reviewer using hidden native OpenCode subagent aliases while preserving exactly seven public governance authorities.
+- Added complete-role restart semantics: failed partial output is rejected and the fallback reruns from the byte-identical packet and frozen target.
+- Added sticky fallback attempts and bounded primary re-entry: a recovered primary never interrupts an active fallback and is reconsidered only on a later invocation after cooldown.
+- Added provider-aware routing that prefers the same model family for provider, rate-limit or quota failures and skips a retired or globally unavailable model family.
+- Added actual selected-family independence checks, fail-closed `MODEL_INDEPENDENCE_CONFLICT` and explicit role rebalance for conflicting Final Reviewer fallback routes.
+- Added validated routing profiles, concrete variant resolution, non-secret routing manifests, exact alias-to-manifest verification and conservative managed-alias uninstall.
+- Preserved legacy single-model installation, seven public agents, twelve commands, provider/model agnosticism, reviewer isolation, frozen-target evidence, single-writer execution and all v2/v3 governance contracts.
+- Executor and Architect/Build/Plan failover remain intentionally disabled pending their dedicated safe-restart releases.
+
 ## 3.0.2 - 2026-07-28
 
 - Fixed Windows project-local `.ai/**` writes when OpenCode evaluates edit targets as normalized absolute paths.
