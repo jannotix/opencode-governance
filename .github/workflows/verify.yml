@@ -51,29 +51,12 @@ jobs:
           New-Item -ItemType Directory -Force -Path (Join-Path $config 'agents'),(Join-Path $config 'commands')|Out-Null
           'user'|Set-Content (Join-Path $config 'agents/unrelated-user-agent.md')
           'user'|Set-Content (Join-Path $config 'commands/unrelated-user-command.md')
-          try {
-            ./scripts/install.ps1 -ConfigDir $config -NonInteractive `
-              -ArchitectModel 'test/architect' -ArchitectVariant 'max' `
-              -ExecutorModel 'test/executor' `
-              -ReviewerImplementationModel 'test/reviewer' -ReviewerImplementationVariant 'thinking' `
-              -ReviewerArchitectureModel 'test/architecture' -ReviewerArchitectureVariant 'high' `
-              -FinalReviewerModel 'test/final' -FinalReviewerVariant 'thinking'
-          } catch {
-            $diagnostic=Join-Path $env:RUNNER_TEMP 'windows-install-error.txt'
-            $_ | Format-List * -Force | Out-String | Set-Content $diagnostic
-            $architect=Join-Path $config 'agents/architect.md'
-            if(Test-Path $architect){
-              '--- RENDERED ARCHITECT HEADER ---' | Add-Content $diagnostic
-              Get-Content $architect -TotalCount 10 | Add-Content $diagnostic
-            }
-            throw
-          }
-      - name: Upload Windows install diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-install-error
-          path: ${{ runner.temp }}\windows-install-error.txt
+          ./scripts/install.ps1 -ConfigDir $config -NonInteractive `
+            -ArchitectModel 'test/architect' -ArchitectVariant 'max' `
+            -ExecutorModel 'test/executor' `
+            -ReviewerImplementationModel 'test/reviewer' -ReviewerImplementationVariant 'thinking' `
+            -ReviewerArchitectureModel 'test/architecture' -ReviewerArchitectureVariant 'high' `
+            -FinalReviewerModel 'test/final' -FinalReviewerVariant 'thinking'
       - name: Verify rendered contract
         shell: pwsh
         run: |

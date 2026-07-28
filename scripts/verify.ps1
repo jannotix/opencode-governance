@@ -59,7 +59,7 @@ foreach ($Name in $Agents) {
     $Path = Join-Path $ConfigDir "agents\$Name.md"
     if (-not (Test-Path $Path -PathType Leaf)) { throw "Missing agent: $Name" }
     $Text = Get-Content $Path -Raw
-    if ($Text -notmatch '(?m)^model: [^\s/]+/\S+$') { throw "Missing provider-qualified model: $Name" }
+    if ($Text -notmatch '(?m)^model: [^\s/]+/\S+\r?$') { throw "Missing provider-qualified model: $Name" }
     if ($Text -match '__[A-Z_]+__') { throw "Unrendered placeholder: $Name" }
     if ($Text -notmatch '(?m)^  skill:\s*$') { throw "$Name missing governed skill block" }
     foreach ($Marker in $V2Markers) { Require-Text $Path $Marker }
