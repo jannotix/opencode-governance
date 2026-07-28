@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "settings": {
+    "enabled_roles": ["reviewer", "reviewer-architecture", "final-reviewer"],
+    "eligible_failures": ["PROVIDER_UNAVAILABLE", "RATE_LIMIT", "PLAN_QUOTA_EXHAUSTED", "MODEL_RETIRED", "MODEL_TEMPORARILY_UNAVAILABLE", "BOUNDED_TIMEOUT"],
+    "default_cooldown_seconds": 300,
+    "allow_degraded_independence": false
+  },
+  "roles": {
+    "architect": {"primary": {"model": "test/architect", "variant": "thinking", "variant_policy": "explicit", "model_family": "architect-family"}, "fallbacks": []},
+    "executor": {"primary": {"model": "test/executor", "variant": null, "variant_policy": "provider_default", "model_family": "executor-family"}, "fallbacks": []},
+    "reviewer": {
+      "primary": {"model": "test/reviewer-primary", "variant": "max", "variant_policy": "explicit", "model_family": "reviewer-family"},
+      "fallbacks": [
+        {"model": "test/reviewer-alt-provider", "variant": "max", "variant_policy": "explicit", "model_family": "reviewer-family", "priority": 1},
+        {"model": "test/reviewer-other-family", "variant": "high", "variant_policy": "highest_supported", "model_family": "reviewer-other", "priority": 2, "only_on": ["MODEL_RETIRED", "MODEL_UNAVAILABLE_ON_ALL_CONFIGURED_PROVIDERS"]}
+      ]
+    },
+    "reviewer-architecture": {
+      "primary": {"model": "test/architecture-primary", "variant": "max", "variant_policy": "explicit", "model_family": "architecture-family"},
+      "fallbacks": [
+        {"model": "test/architecture-alt-1", "variant": "max", "variant_policy": "explicit", "model_family": "architecture-family", "priority": 1},
+        {"model": "test/architecture-alt-2", "variant": "max", "variant_policy": "explicit", "model_family": "architecture-family", "priority": 2},
+        {"model": "test/architecture-other", "variant": "high", "variant_policy": "highest_supported", "model_family": "architecture-other", "priority": 3}
+      ]
+    },
+    "final-reviewer": {
+      "primary": {"model": "test/final-primary", "variant": "max", "variant_policy": "explicit", "model_family": "final-family"},
+      "fallbacks": [
+        {"model": "test/final-other-1", "variant": "high", "variant_policy": "highest_supported", "model_family": "final-other", "priority": 1},
+        {"model": "test/final-other-2", "variant": "high", "variant_policy": "highest_supported", "model_family": "final-other", "priority": 2},
+        {"model": "test/final-rebalance", "variant": "max", "variant_policy": "explicit", "model_family": "architecture-family", "priority": 3, "requires_role_rebalance": true}
+      ]
+    }
+  }
+}
