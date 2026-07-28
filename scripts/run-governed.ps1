@@ -107,7 +107,13 @@ $AiExisted=Test-Path $AiPath;if($AiExisted){Copy-Item $AiPath $Backup -Recurse -
 $Attempted=@{};$Failure=$null;$FailedFamily=$null;$attempt=0
 try{
  while($true){
-  $ordered=@($Routes|Where-Object{Candidate-Allowed $_ ($Failure??'PROVIDER_UNAVAILABLE') ($FailedFamily??'') $Attempted}|Sort-Object @{Expression={if($Failure -and [string]$_.candidate.model_family -eq $FailedFamily){0}else{1}}},priority)
+  $SelectionFailure=if([string]::IsNullOrWhiteSpace([string]$Failure)){'PROVIDER_UNAVAILABLE'}else{[string]$Failure}
+  $SelectionFamily=if([string]::IsNullOrWhiteSpace([string]$FailedFamily)){''}else{[string]$FailedFamily}
+  $ordered=@(
+   $Routes |
+    Where-Object{Candidate-Allowed $_ $SelectionFailure $SelectionFamily $Attempted} |
+    Sort-Object @{Expression={if($Failure -and [string]$_.candidate.model_family -eq $FailedFamily){0}else{1}}},priority
+  )
   if($ordered.Count -eq 0){throw "ARCHITECT_FAILOVER_BLOCKED: no eligible Architect route remains after $Failure. HUMAN_RECOVERY_REQUIRED"}
   $route=$ordered[0];$Attempted[$route.route]=$true;$attempt++
   Write-Host "ARCHITECT_ROUTE_ATTEMPT $attempt $($route.route) $($route.candidate.model)"
