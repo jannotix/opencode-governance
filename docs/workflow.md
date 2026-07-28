@@ -29,6 +29,4 @@ BASELINE_VALIDATED
 → LOCAL_COMMITTED
 ```
 
-Small tasks still use `LIGHT` discovery. Product-specific phases may be `NOT_REQUIRED` only when primary evidence proves no product-scope effect. `NONE` is not a discovery depth.
-
-Use `/ai-workflow` for the complete lifecycle, `/ai-discover` for discovery/refresh/audit, `/ai-plan` for planning only, `/ai-resume` after interruption and `/ai-release` for completeness plus production readiness. Independent reviewers never see sibling current-cycle findings. Only Executor writes source/docs. Push, merge, deploy and rollback remain separate authorizations.
+Transitions are fail-closed. Small tasks still use `LIGHT` discovery. Product-specific phases may be `NOT_REQUIRED` only when primary evidence proves no product-scope effect, and `NONE` is never a discovery depth. Failed or stale evidence returns the workflow to the earliest affected phase. A validated milestone may remain `PRODUCT_INCOMPLETE` until every required capability is accepted.
