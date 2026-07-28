@@ -13,8 +13,8 @@ v3 guides an idea through adaptive product discovery, constructive technical cha
 - Implementation and architecture/security reviewers remain independent.
 - Final Reviewer controls baseline, discovery, task, product and release adjudication.
 - Requirement provenance and evidence outrank summaries and assertions.
-- No automatic push, merge, deployment or rollback.
-- Provider/model IDs are supplied during installation.
+- No automatic push, merge, deployment or production rollback.
+- Provider/model IDs and concrete variants are supplied during setup.
 - Optional fallback aliases are hidden routing transports, not additional governance authorities.
 
 ## Commands
@@ -41,7 +41,7 @@ Legacy single-model routing:
 - Windows: `./scripts/install.ps1`
 - macOS/Linux: `chmod +x scripts/install.sh && ./scripts/install.sh`
 
-Reviewer failover routing:
+Model failover routing:
 
 - copy `examples/routing/continuous-coding.template.json` to a local untracked file;
 - replace every model ID with the exact value returned by the local OpenCode catalog;
@@ -49,9 +49,42 @@ Reviewer failover routing:
 - Windows: `./scripts/install.ps1 -NonInteractive -RoutingConfigPath <profile.json>`;
 - macOS/Linux: `./scripts/install.sh --routing-config <profile.json>`.
 
-The installer renders seven public agents and twelve commands, preserves unrelated configuration and creates a timestamped backup. With a routing profile it also renders hidden reviewer/final fallback aliases and writes the non-secret `opencode-governance-routing.json` manifest. This README is the canonical installation reference.
+The installer renders seven public agents and twelve commands, preserves unrelated configuration and creates a timestamped backup. With a routing profile it also renders hidden reviewer/final fallback aliases and writes the non-secret `opencode-governance-routing.json` manifest. Architect routes remain in the manifest for the external transactional runner; no hidden Architect alias is created.
 
-A fallback never continues a partial response. It restarts the complete role from the same packet and frozen target. A recovering primary does not interrupt an active fallback; it becomes eligible again only for a later invocation after cooldown.
+## Architect failover runner
+
+Top-level Architect failover is available for pre-execution commands only:
+
+```text
+ai-init
+ai-audit
+ai-discover
+ai-plan
+```
+
+Windows:
+
+```powershell
+./scripts/run-governed.ps1 `
+  -ProjectDir <project> `
+  -Command ai-plan `
+  -Arguments "<request>" `
+  -RoutingConfigPath <resolved-profile-or-installed-manifest>
+```
+
+macOS/Linux:
+
+```bash
+./scripts/run-governed.sh \
+  --project-dir <project> \
+  --command ai-plan \
+  --arguments "<request>" \
+  --routing-config <resolved-profile-or-installed-manifest>
+```
+
+The runner starts a fresh `opencode run` process for each route, snapshots the complete `.ai/**` tree and restores it before an eligible retry. A fallback never continues partial output and a recovered primary never interrupts an active fallback.
+
+Top-level automatic restart is intentionally unavailable for `ai-workflow`, `ai-execute`, `ai-review` and `ai-release`, because those flows may already have crossed an implementation or review side-effect boundary. Reviewer/final failover remains available inside those workflows.
 
 ## Project state
 
