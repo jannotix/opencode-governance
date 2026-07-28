@@ -39,7 +39,7 @@ Windows: `./scripts/install.ps1`
 
 macOS/Linux: `chmod +x scripts/install.sh && ./scripts/install.sh`
 
-The installer renders seven agents and twelve commands, preserves unrelated configuration and creates a timestamped backup.
+The installer renders seven agents and twelve commands, preserves unrelated configuration and creates a timestamped backup. This README is the canonical installation reference.
 
 ## Project state
 
@@ -66,7 +66,9 @@ The installer renders seven agents and twelve commands, preserves unrelated conf
 
 Discovery is always `LIGHT`, `STANDARD` or `DEEP`. Domain evidence and recommendations do not become requirements automatically. A validated milestone may remain `PRODUCT_INCOMPLETE`. `PRODUCT_COMPLETENESS_VERDICT` is separate from `RELEASE_VERDICT`.
 
-See [Product Lifecycle Governance](docs/product-lifecycle-governance.md), [Workflow](docs/workflow.md), [Requirement Provenance](docs/requirement-provenance.md), [Evidence-Driven Verification](docs/evidence-driven-verification.md), [Operational Assurance](docs/operational-assurance.md), [Installation](docs/installation.md), [Permissions](docs/permissions.md) and [Troubleshooting](docs/troubleshooting.md).
+## Documentation
+
+Focused references: [Product Lifecycle Governance](docs/product-lifecycle-governance.md), [Workflow](docs/workflow.md), [Requirement Provenance](docs/requirement-provenance.md), [Context Efficiency and Resume](docs/context-efficiency-resume.md), [Evidence-Driven Verification](docs/evidence-driven-verification.md), [Operational Assurance](docs/operational-assurance.md), [Permissions](docs/permissions.md), [Project Documentation](docs/project-documentation.md) and [Troubleshooting](docs/troubleshooting.md).
 
 ## Verification
 
