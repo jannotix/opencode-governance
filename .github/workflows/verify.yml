@@ -24,24 +24,51 @@ jobs:
             exit 1
           fi
       - name: Validate shell scripts
-        run: bash -n scripts/install.sh scripts/verify.sh scripts/uninstall.sh
-      - name: Render verify and uninstall
+        run: bash -n scripts/install.sh scripts/verify.sh scripts/verify-routing.sh scripts/uninstall.sh
+      - name: Verify legacy installation
         shell: bash
         run: |
           set -euo pipefail
-          export OPENCODE_CONFIG_DIR="$RUNNER_TEMP/opencode"
-          mkdir -p "$OPENCODE_CONFIG_DIR/agents" "$OPENCODE_CONFIG_DIR/commands" "$RUNNER_TEMP/project/.ai"
-          printf 'user\n' > "$OPENCODE_CONFIG_DIR/agents/unrelated-user-agent.md"
-          printf 'user\n' > "$OPENCODE_CONFIG_DIR/commands/unrelated-user-command.md"
-          printf 'state\n' > "$RUNNER_TEMP/project/.ai/STATUS.md"
-          printf '%s\n' 'test/architect' 'max' 'test/executor' '' 'test/reviewer' 'thinking' 'test/architecture' 'high' 'test/final' 'thinking' | ./scripts/install.sh
-          ./scripts/verify.sh "$OPENCODE_CONFIG_DIR"
-          test "$(find "$OPENCODE_CONFIG_DIR/agents" -maxdepth 1 -type f -name '*.md' ! -name 'unrelated-user-agent.md' | wc -l)" -eq 7
-          test "$(find "$OPENCODE_CONFIG_DIR/commands" -maxdepth 1 -type f -name '*.md' ! -name 'unrelated-user-command.md' | wc -l)" -eq 12
+          config="$RUNNER_TEMP/opencode-legacy"
+          project="$RUNNER_TEMP/project-legacy"
+          mkdir -p "$config/agents" "$config/commands" "$project/.ai"
+          printf 'user\n' > "$config/agents/unrelated-user-agent.md"
+          printf 'user\n' > "$config/commands/unrelated-user-command.md"
+          printf 'state\n' > "$project/.ai/STATUS.md"
+          printf '%s\n' 'test/architect' 'max' 'test/executor' '' 'test/reviewer' 'thinking' 'test/architecture' 'high' 'test/final' 'thinking' | ./scripts/install.sh --config-dir "$config"
+          ./scripts/verify.sh "$config"
+          ./scripts/verify-routing.sh "$config"
+          test "$(find "$config/agents" -maxdepth 1 -type f -name '*.md' ! -name 'unrelated-user-agent.md' | wc -l)" -eq 7
+          test "$(find "$config/commands" -maxdepth 1 -type f -name '*.md' ! -name 'unrelated-user-command.md' | wc -l)" -eq 12
+          ./scripts/uninstall.sh >/dev/null
+          test -f "$config/agents/unrelated-user-agent.md"
+          test -f "$config/commands/unrelated-user-command.md"
+          test -f "$project/.ai/STATUS.md"
+      - name: Reject unresolved routing variant
+        shell: bash
+        run: |
+          set -euo pipefail
+          config="$RUNNER_TEMP/opencode-invalid"
+          if ./scripts/install.sh --config-dir "$config" --routing-config "$GITHUB_WORKSPACE/tests/fixtures/routing/unresolved-variant.invalid.json"; then
+            echo 'Unresolved highest_supported routing profile unexpectedly passed.' >&2
+            exit 1
+          fi
+      - name: Verify reviewer failover routing
+        shell: bash
+        run: |
+          set -euo pipefail
+          config="$RUNNER_TEMP/opencode-routing"
+          mkdir -p "$config/agents" "$config/commands"
+          printf 'user\n' > "$config/agents/unrelated-user-agent.md"
+          ./scripts/install.sh --config-dir "$config" --routing-config "$GITHUB_WORKSPACE/tests/fixtures/routing/reviewer-failover.valid.json"
+          ./scripts/verify.sh "$config"
+          ./scripts/verify-routing.sh "$config"
+          test "$(find "$config/agents" -maxdepth 1 -type f -name '*.md' ! -name 'unrelated-user-agent.md' | wc -l)" -eq 15
+          test -f "$config/opencode-governance-routing.json"
           ./scripts/uninstall.sh
-          test -f "$OPENCODE_CONFIG_DIR/agents/unrelated-user-agent.md"
-          test -f "$OPENCODE_CONFIG_DIR/commands/unrelated-user-command.md"
-          test -f "$RUNNER_TEMP/project/.ai/STATUS.md"
+          test -f "$config/agents/unrelated-user-agent.md"
+          test ! -e "$config/opencode-governance-routing.json"
+          test "$(find "$config/agents" -maxdepth 1 -type f -name '*-fallback-*.md' | wc -l)" -eq 0
   windows:
     runs-on: windows-latest
     steps:
@@ -52,16 +79,16 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          foreach($path in 'scripts/install.ps1','scripts/verify.ps1','scripts/uninstall.ps1'){
+          foreach($path in 'scripts/install.ps1','scripts/verify.ps1','scripts/verify-routing.ps1','scripts/uninstall.ps1'){
             $tokens=$null;$errors=$null
             [System.Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$errors)|Out-Null
             if($errors.Count -gt 0){throw "$path parse failed: $($errors -join '; ')"}
           }
-      - name: Install rendered configuration
+      - name: Verify legacy installation
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          $config=Join-Path $env:RUNNER_TEMP 'opencode'
+          $config=Join-Path $env:RUNNER_TEMP 'opencode-legacy'
           New-Item -ItemType Directory -Force -Path (Join-Path $config 'agents'),(Join-Path $config 'commands')|Out-Null
           'user'|Set-Content (Join-Path $config 'agents/unrelated-user-agent.md')
           'user'|Set-Content (Join-Path $config 'commands/unrelated-user-command.md')
@@ -71,24 +98,33 @@ jobs:
             -ReviewerImplementationModel 'test/reviewer' -ReviewerImplementationVariant 'thinking' `
             -ReviewerArchitectureModel 'test/architecture' -ReviewerArchitectureVariant 'high' `
             -FinalReviewerModel 'test/final' -FinalReviewerVariant 'thinking'
-      - name: Verify rendered contract
-        shell: pwsh
-        run: |
-          $ErrorActionPreference='Stop'
-          $config=Join-Path $env:RUNNER_TEMP 'opencode'
           ./scripts/verify.ps1 -ConfigDir $config
-      - name: Verify managed counts
-        shell: pwsh
-        run: |
-          $ErrorActionPreference='Stop'
-          $config=Join-Path $env:RUNNER_TEMP 'opencode'
-          if((Get-ChildItem (Join-Path $config 'agents') -Filter '*.md'|Where-Object Name -ne 'unrelated-user-agent.md').Count -ne 7){throw 'Expected 7 managed agents'}
-          if((Get-ChildItem (Join-Path $config 'commands') -Filter '*.md'|Where-Object Name -ne 'unrelated-user-command.md').Count -ne 12){throw 'Expected 12 managed commands'}
-      - name: Uninstall preserves unrelated files
-        shell: pwsh
-        run: |
-          $ErrorActionPreference='Stop'
-          $config=Join-Path $env:RUNNER_TEMP 'opencode'
+          ./scripts/verify-routing.ps1 -ConfigDir $config
+          if((Get-ChildItem (Join-Path $config 'agents') -Filter '*.md'|Where-Object Name -ne 'unrelated-user-agent.md').Count -ne 7){throw 'Expected 7 managed public agents'}
           ./scripts/uninstall.ps1 -ConfigDir $config
           if(-not(Test-Path (Join-Path $config 'agents/unrelated-user-agent.md'))){throw 'Unrelated agent removed'}
           if(-not(Test-Path (Join-Path $config 'commands/unrelated-user-command.md'))){throw 'Unrelated command removed'}
+      - name: Reject unresolved routing variant
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Continue'
+          $config=Join-Path $env:RUNNER_TEMP 'opencode-invalid'
+          & ./scripts/install.ps1 -ConfigDir $config -NonInteractive -RoutingConfigPath (Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/unresolved-variant.invalid.json')
+          if($LASTEXITCODE -eq 0 -and $?) { throw 'Unresolved highest_supported routing profile unexpectedly passed.' }
+          $ErrorActionPreference='Stop'
+      - name: Verify reviewer failover routing
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $config=Join-Path $env:RUNNER_TEMP 'opencode-routing'
+          New-Item -ItemType Directory -Force -Path (Join-Path $config 'agents'),(Join-Path $config 'commands')|Out-Null
+          'user'|Set-Content (Join-Path $config 'agents/unrelated-user-agent.md')
+          ./scripts/install.ps1 -ConfigDir $config -NonInteractive -RoutingConfigPath (Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/reviewer-failover.valid.json')
+          ./scripts/verify.ps1 -ConfigDir $config
+          ./scripts/verify-routing.ps1 -ConfigDir $config
+          if((Get-ChildItem (Join-Path $config 'agents') -Filter '*.md'|Where-Object Name -ne 'unrelated-user-agent.md').Count -ne 15){throw 'Expected 7 public plus 8 hidden routing agents'}
+          if(-not(Test-Path (Join-Path $config 'opencode-governance-routing.json'))){throw 'Routing manifest missing'}
+          ./scripts/uninstall.ps1 -ConfigDir $config
+          if(-not(Test-Path (Join-Path $config 'agents/unrelated-user-agent.md'))){throw 'Unrelated agent removed'}
+          if(Test-Path (Join-Path $config 'opencode-governance-routing.json')){throw 'Routing manifest not removed'}
+          if((Get-ChildItem (Join-Path $config 'agents') -Filter '*-fallback-*.md').Count -ne 0){throw 'Managed aliases not removed'}
