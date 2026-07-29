@@ -4,7 +4,7 @@ Provider- and model-agnostic product-lifecycle and engineering governance for Op
 
 > Community project. Not affiliated with or maintained by the OpenCode team.
 
-Current release: **3.3.2 — Architect Runner Integration Fix**.
+Current release: **3.3.3 — PowerShell Host & Verifier Reliability**.
 
 v3 guides an idea through adaptive product discovery, constructive technical challenge, approved product definition, vertical delivery, evidence-driven implementation, independent review, product-completeness reconciliation and production-readiness assessment.
 
@@ -92,17 +92,17 @@ ai-discover
 ai-plan
 ```
 
-With Architect failover enabled, version 3.3.2 installs deterministic entrypoints inside the active OpenCode configuration directory:
+With Architect failover enabled, version 3.3.3 installs deterministic entrypoints inside the active OpenCode configuration directory:
 
 ```text
 opencode-governance-tools/architect-attempt.ps1
 opencode-governance-tools/architect-attempt.sh
 ```
 
-Windows:
+Windows requires PowerShell 7 or newer. Invoke the PowerShell runner explicitly through `pwsh`; Windows PowerShell 5.1 fails before reading or modifying project state with `POWERSHELL_7_REQUIRED`.
 
 ```powershell
-& "<config-dir>\opencode-governance-tools\architect-attempt.ps1" `
+pwsh -NoProfile -File "<config-dir>\opencode-governance-tools\architect-attempt.ps1" `
   -ProjectDir "<project>" `
   -Command ai-plan `
   -Arguments "<request>" `
@@ -121,7 +121,7 @@ macOS/Linux:
   --config-dir "<config-dir>"
 ```
 
-Direct `/ai-init`, `/ai-audit`, `/ai-discover` or `/ai-plan` invocation inside an existing OpenCode process now fails closed before `.ai/**` writes with `ARCHITECT_RUNNER_REQUIRED` and the exact installed runner path. The external runner marks child attempts with `[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]`; marked children continue normally and never recursively launch another runner.
+Direct `/ai-init`, `/ai-audit`, `/ai-discover` or `/ai-plan` invocation inside an existing OpenCode process fails closed before `.ai/**` writes with `ARCHITECT_RUNNER_REQUIRED`, the exact installed runner path and the required Windows host command. The external runner marks child attempts with `[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]`; marked children continue normally and never recursively launch another runner.
 
 The runner starts a fresh `opencode run` process for each route, snapshots the complete `.ai/**` tree and restores it before an eligible retry. A fallback never continues partial output and a recovered primary never interrupts an active fallback.
 
