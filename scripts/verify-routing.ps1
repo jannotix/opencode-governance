@@ -15,7 +15,7 @@ if ($Version -eq '3.3.0') {
     & (Join-Path $PSScriptRoot 'verify-routing-core.ps1') -ConfigDir $ConfigDir
     return
 }
-if ($Version -notin @('3.3.2','3.3.3')) { throw "Routing manifest governance_version must be 3.3.0, 3.3.2 or 3.3.3, got: $Version" }
+if ($Version -notin @('3.3.2','3.3.3','3.3.4')) { throw "Routing manifest governance_version must be 3.3.0, 3.3.2, 3.3.3 or 3.3.4, got: $Version" }
 if ([string]$Manifest.architect_runner_version -ne $Version) { throw "architect_runner_version must be $Version." }
 
 $ToolsDir = Join-Path $ConfigDir 'opencode-governance-tools'
@@ -33,7 +33,8 @@ foreach ($Tool in $ExpectedTools) {
 }
 $Marker = '[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]'
 $PolicyMarkers = @('ARCHITECT_RUNNER_INTEGRATION','ARCHITECT_RUNNER_REQUIRED',$Marker,$ExpectedTools[0],$ExpectedTools[1],'Never invoke the Architect runner from inside the active OpenCode process.')
-if ($Version -eq '3.3.3') { $PolicyMarkers += @('POWERSHELL_7_REQUIRED','pwsh -NoProfile -File') }
+if ($Version -in @('3.3.3','3.3.4')) { $PolicyMarkers += @('POWERSHELL_7_REQUIRED','pwsh -NoProfile -File') }
+if ($Version -eq '3.3.4') { $PolicyMarkers += @('PROJECT_STATE_FINGERPRINT_V1','NON_GIT_PROJECT_SUPPORTED','PROJECT_STATE_CHANGED') }
 foreach ($Name in @('architect','build','plan')) {
     $Text = Get-Content -LiteralPath (Join-Path $ConfigDir "agents\$Name.md") -Raw
     foreach ($Value in $PolicyMarkers) {
@@ -41,15 +42,26 @@ foreach ($Name in @('architect','build','plan')) {
     }
 }
 $GateMarkers = @('ARCHITECT_RUNNER_ENTRY_GATE','ARCHITECT_RUNNER_REQUIRED',$Marker,$ExpectedTools[0],$ExpectedTools[1])
-if ($Version -eq '3.3.3') { $GateMarkers += 'pwsh -NoProfile -File' }
+if ($Version -in @('3.3.3','3.3.4')) { $GateMarkers += 'pwsh -NoProfile -File' }
+if ($Version -eq '3.3.4') { $GateMarkers += 'PROJECT_STATE_CHANGED' }
 foreach ($Command in @('ai-init','ai-audit','ai-discover','ai-plan')) {
     $Text = Get-Content -LiteralPath (Join-Path $ConfigDir "commands\$Command.md") -Raw
     foreach ($Value in $GateMarkers) {
         if ($Text -notlike "*$Value*") { throw "$Command missing Architect entry gate marker: $Value" }
     }
 }
+if ($Version -eq '3.3.4') {
+    $PowerShellRunner = Get-Content -LiteralPath $ExpectedTools[0] -Raw
+    $UnixRunner = Get-Content -LiteralPath $ExpectedTools[1] -Raw
+    foreach ($Value in @('PROJECT_STATE_FINGERPRINT_V1','PROJECT_STATE_CHANGED','Get-ProjectStateFingerprint')) {
+        if ($PowerShellRunner -notlike "*$Value*") { throw "PowerShell Architect runner missing project-state marker: $Value" }
+    }
+    foreach ($Value in @('PROJECT_STATE_FINGERPRINT_V1','PROJECT_STATE_CHANGED','project_state_fingerprint')) {
+        if ($UnixRunner -notlike "*$Value*") { throw "Unix Architect runner missing project-state marker: $Value" }
+    }
+}
 
-$Temp = Join-Path ([IO.Path]::GetTempPath()) ('opencode-v333-verify-' + [guid]::NewGuid().ToString('N'))
+$Temp = Join-Path ([IO.Path]::GetTempPath()) ('opencode-v334-verify-' + [guid]::NewGuid().ToString('N'))
 try {
     New-Item -ItemType Directory -Force -Path (Join-Path $Temp 'agents'),(Join-Path $Temp 'opencode-governance-tools') | Out-Null
     Copy-Item (Join-Path $ConfigDir 'agents\*.md') (Join-Path $Temp 'agents') -Force
