@@ -25,6 +25,9 @@ $Eligible=@($Routing.settings.eligible_failures)
 $DefaultCooldown=[int]$Routing.settings.default_cooldown_seconds
 $StatePath=Join-Path $ConfigDir 'opencode-governance-routing-state.tsv'
 New-Item -ItemType Directory -Force -Path $ConfigDir|Out-Null
+$Marker='[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]'
+$env:OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE='1'
+$RoutedArguments=if($Arguments -like "*$Marker*"){$Arguments}elseif([string]::IsNullOrWhiteSpace($Arguments)){$Marker}else{"$Arguments`n`n$Marker"}
 
 function Get-OnlyOn([object]$Candidate){if(-not $Candidate.PSObject.Properties['only_on']){throw 'Every route candidate must define only_on.'};return @($Candidate.only_on|Where-Object{-not[string]::IsNullOrWhiteSpace([string]$_)})}
 function Validate-Route([object]$Route,[bool]$Priority){
@@ -80,10 +83,11 @@ function Classify-Failure([string]$Text,[bool]$TimedOut){
 function Invoke-Route([object]$Route,[int]$Attempt,[string]$LogDir){
  $stdout=Join-Path $LogDir "attempt-$Attempt.stdout.log";$stderr=Join-Path $LogDir "attempt-$Attempt.stderr.log"
  $psi=[Diagnostics.ProcessStartInfo]::new();$psi.FileName=$OpenCodeCommand;$psi.UseShellExecute=$false;$psi.RedirectStandardOutput=$true;$psi.RedirectStandardError=$true;$psi.CreateNoWindow=$true
+ $psi.Environment['OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE']='1'
  foreach($x in $OpenCodePrefixArguments){$null=$psi.ArgumentList.Add($x)}
  foreach($x in @('run','--dir',$ProjectDir,'--agent','architect','--model',[string]$Route.candidate.model)){ $null=$psi.ArgumentList.Add($x) }
  if(-not[string]::IsNullOrWhiteSpace([string]$Route.candidate.variant)){$null=$psi.ArgumentList.Add('--variant');$null=$psi.ArgumentList.Add([string]$Route.candidate.variant)}
- foreach($x in @('--command',$Command,'--format','json',$Arguments)){$null=$psi.ArgumentList.Add($x)}
+ foreach($x in @('--command',$Command,'--format','json',$RoutedArguments)){$null=$psi.ArgumentList.Add($x)}
  $p=[Diagnostics.Process]::new();$p.StartInfo=$psi;if(-not $p.Start()){throw 'Unable to start OpenCode.'}
  $outTask=$p.StandardOutput.ReadToEndAsync();$errTask=$p.StandardError.ReadToEndAsync();$timedOut=-not $p.WaitForExit($TimeoutSeconds*1000)
  if($timedOut){try{$p.Kill($true)}catch{};$p.WaitForExit()}
@@ -109,11 +113,7 @@ try{
  while($true){
   $SelectionFailure=if([string]::IsNullOrWhiteSpace([string]$Failure)){'PROVIDER_UNAVAILABLE'}else{[string]$Failure}
   $SelectionFamily=if([string]::IsNullOrWhiteSpace([string]$FailedFamily)){''}else{[string]$FailedFamily}
-  $ordered=@(
-   $Routes |
-    Where-Object{Candidate-Allowed $_ $SelectionFailure $SelectionFamily $Attempted} |
-    Sort-Object @{Expression={if($Failure -and [string]$_.candidate.model_family -eq $FailedFamily){0}else{1}}},priority
-  )
+  $ordered=@($Routes|Where-Object{Candidate-Allowed $_ $SelectionFailure $SelectionFamily $Attempted}|Sort-Object @{Expression={if($Failure -and [string]$_.candidate.model_family -eq $FailedFamily){0}else{1}}},priority)
   if($ordered.Count -eq 0){throw "ARCHITECT_FAILOVER_BLOCKED: no eligible Architect route remains after $Failure. HUMAN_RECOVERY_REQUIRED"}
   $route=$ordered[0];$Attempted[$route.route]=$true;$attempt++
   Write-Host "ARCHITECT_ROUTE_ATTEMPT $attempt $($route.route) $($route.candidate.model)"
