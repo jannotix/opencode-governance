@@ -141,7 +141,7 @@ if 'executor' in settings.get('enabled_roles', []):
             'Never delegate a routed Executor against the real project root',
             '"executor-fallback-*": allow',
             'opencode-governance-tools/executor-attempt.sh',
-            'opencode-governance-tools\\executor-attempt.ps1',
+            'opencode-governance-tools/executor-attempt.ps1',
         ]:
             if marker not in text:
                 raise SystemExit(f'{name} missing Executor failover policy marker: {marker}')
