@@ -4,7 +4,7 @@ Provider- and model-agnostic product-lifecycle and engineering governance for Op
 
 > Community project. Not affiliated with or maintained by the OpenCode team.
 
-Current release: **3.3.3 — PowerShell Host & Verifier Reliability**.
+Current release: **3.3.4 — Project State Integrity**.
 
 v3 guides an idea through adaptive product discovery, constructive technical challenge, approved product definition, vertical delivery, evidence-driven implementation, independent review, product-completeness reconciliation and production-readiness assessment.
 
@@ -92,7 +92,7 @@ ai-discover
 ai-plan
 ```
 
-With Architect failover enabled, version 3.3.3 installs deterministic entrypoints inside the active OpenCode configuration directory:
+With Architect failover enabled, version 3.3.4 installs deterministic entrypoints inside the active OpenCode configuration directory:
 
 ```text
 opencode-governance-tools/architect-attempt.ps1
@@ -124,6 +124,10 @@ macOS/Linux:
 Direct `/ai-init`, `/ai-audit`, `/ai-discover` or `/ai-plan` invocation inside an existing OpenCode process fails closed before `.ai/**` writes with `ARCHITECT_RUNNER_REQUIRED`, the exact installed runner path and the required Windows host command. The external runner marks child attempts with `[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]`; marked children continue normally and never recursively launch another runner.
 
 The runner starts a fresh `opencode run` process for each route, snapshots the complete `.ai/**` tree and restores it before an eligible retry. A fallback never continues partial output and a recovered primary never interrupts an active fallback.
+
+Version 3.3.4 fingerprints every project entry outside root `.ai/**` before and after each routed attempt using path, entry type, mode/attributes, length, SHA-256 and symlink target. Git workspaces additionally bind the fingerprint to HEAD, the index and recursive submodule state. Non-Git directories are supported with the same content-integrity contract. Any source or project-documentation delta returns `PROJECT_STATE_CHANGED` and blocks fallback, including changes to files that were already dirty, staged or untracked.
+
+Content fingerprinting scans the complete project tree outside `.ai/**`; very large workspaces may incur additional pre/post attempt latency. This cost is intentional because classification-only Git status cannot prove immutability.
 
 Top-level automatic restart remains unavailable for `ai-workflow`, `ai-execute`, `ai-review` and `ai-release`, because those flows may already have crossed an implementation or review side-effect boundary.
 
