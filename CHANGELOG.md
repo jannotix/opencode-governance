@@ -33,4 +33,4 @@
 
 ## Earlier releases
 
-The complete changelog from 1.0.0 through 3.3.2 is preserved at [docs/releases/CHANGELOG-1.0.0-3.3.2.md](docs/releases/CHANGELOG-1.0.0-3.3.2.md).
+The complete changelog from 1.0.0 through 3.3.2 is preserved at [CHANGELOG-ARCHIVE-1.0.0-3.3.2.md](CHANGELOG-ARCHIVE-1.0.0-3.3.2.md).
