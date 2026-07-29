@@ -111,6 +111,7 @@ try {
 } finally {
     if ($HasNativePreference) { $PSNativeCommandUseErrorActionPreference = $PreviousNativePreference }
 }
+$global:LASTEXITCODE = 0
 
 $PostVerification = $null
 $VerificationError = $null
