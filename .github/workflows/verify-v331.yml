@@ -67,7 +67,7 @@ jobs:
           if ((Get-Content $external -Raw) -ne 'outside') { throw 'External file was modified' }
           if ((Get-Content (Join-Path $config 'backups/old.txt') -Raw) -ne 'excluded') { throw 'Excluded backup file was modified' }
 
-      - name: Verify path and reparse-point fail-closed guards
+      - name: Verify path, manifest and reparse-point fail-closed guards
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -85,6 +85,24 @@ jobs:
           $failed = $false
           try { ./scripts/config-durability.ps1 -Action Snapshot -ConfigDir $config -DurabilityRoot (Join-Path $root 'store') -PassThru | Out-Null } catch { $failed = $true }
           if (-not $failed) { throw 'Reparse point was accepted' }
+
+          $tamperRoot = Join-Path $env:RUNNER_TEMP 'durability-tamper'
+          $tamperConfig = Join-Path $tamperRoot 'config'
+          $tamperStore = Join-Path $tamperRoot 'store'
+          $victim = Join-Path $tamperRoot 'outside.txt'
+          New-Item -ItemType Directory -Force -Path $tamperConfig | Out-Null
+          'safe' | Set-Content -NoNewline (Join-Path $tamperConfig 'file.txt')
+          'outside' | Set-Content -NoNewline $victim
+          $snapshot = ./scripts/config-durability.ps1 -Action Snapshot -ConfigDir $tamperConfig -DurabilityRoot $tamperStore -PassThru
+          $manifestPath = Join-Path $tamperStore "snapshots/$($snapshot.snapshot_id)/manifest.json"
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          $manifest.files[0].path = '../outside.txt'
+          $manifest | ConvertTo-Json -Depth 20 | Set-Content $manifestPath
+          $failed = $false
+          try { ./scripts/config-durability.ps1 -Action Restore -ConfigDir $tamperConfig -DurabilityRoot $tamperStore -SnapshotId $snapshot.snapshot_id -PassThru | Out-Null } catch { $failed = $true }
+          if (-not $failed) { throw 'Tampered manifest path traversal was accepted' }
+          if ((Get-Content $victim -Raw) -ne 'outside') { throw 'Tampered manifest modified an external file' }
+          if ((Get-Content (Join-Path $tamperConfig 'file.txt') -Raw) -ne 'safe') { throw 'Tampered manifest modified protected state before rejection' }
 
       - name: Verify enable persists the explicit configuration directory
         shell: pwsh
