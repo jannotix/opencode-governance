@@ -4,6 +4,8 @@ Provider- and model-agnostic product-lifecycle and engineering governance for Op
 
 > Community project. Not affiliated with or maintained by the OpenCode team.
 
+Current release: **3.3.0 — Isolated Executor Failover**.
+
 v3 guides an idea through adaptive product discovery, constructive technical challenge, approved product definition, vertical delivery, evidence-driven implementation, independent review, product-completeness reconciliation and production-readiness assessment.
 
 ## Core invariants
@@ -152,8 +154,6 @@ Optional routing contract:
 
 - Windows: `./scripts/verify-routing.ps1`
 - macOS/Linux: `bash ./scripts/verify-routing.sh`
-
-GitHub Actions verify legacy installation, routed installation, cross-platform script parsing, route selection, isolated attempt discard, binary patch promotion, changed-state blocking and conservative uninstall.
 
 ## License
 
