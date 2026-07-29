@@ -44,6 +44,7 @@ jobs:
           if ($code -eq 0) { throw 'Windows PowerShell 5.1 unexpectedly ran the Architect runner.' }
           if ($text -notmatch 'POWERSHELL_7_REQUIRED') { throw "Missing deterministic PowerShell 7 requirement. Output: $text" }
           if ((Get-Content (Join-Path $project '.ai/BASELINE.md') -Raw) -ne 'ORIGINAL') { throw 'PowerShell host rejection modified .ai state.' }
+          $global:LASTEXITCODE = 0
 
       - name: Ignore stale LASTEXITCODE for v3.3.3 verification
         shell: pwsh
