@@ -11,7 +11,7 @@ jobs:
         with:
           show-progress: false
 
-      - name: Install deterministic Architect runner
+      - name: Install and verify deterministic Architect runner
         shell: bash
         run: |
           set -euo pipefail
@@ -19,89 +19,32 @@ jobs:
           unrelated="$config/opencode-governance-tools/unrelated-user-tool.txt"
           ./scripts/install.sh --config-dir "$config" --routing-config "$GITHUB_WORKSPACE/tests/fixtures/routing/architect-failover.valid.json"
           mkdir -p "$(dirname "$unrelated")"; printf 'preserve\n' > "$unrelated"
-
-          test -f "$config/opencode-governance-tools/architect-attempt.ps1"
-          test -x "$config/opencode-governance-tools/architect-attempt.sh"
           cmp scripts/run-governed.ps1 "$config/opencode-governance-tools/architect-attempt.ps1"
           cmp scripts/run-governed.sh "$config/opencode-governance-tools/architect-attempt.sh"
-
           python3 - "$config" <<'PY'
           import json,pathlib,sys
-          root=pathlib.Path(sys.argv[1])
-          data=json.loads((root/'opencode-governance-routing.json').read_text())
-          assert data['governance_version']=='3.3.3'
-          assert data['architect_runner_version']=='3.3.3'
+          root=pathlib.Path(sys.argv[1]); data=json.loads((root/'opencode-governance-routing.json').read_text())
+          assert data['governance_version']=='3.3.4'
+          assert data['architect_runner_version']=='3.3.4'
           expected={str(root/'opencode-governance-tools'/name) for name in ['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh']}
           assert set(data['managed_tools'])==expected
           for name in ['architect','build','plan']:
               text=(root/'agents'/f'{name}.md').read_text()
-              assert str(root/'opencode-governance-tools'/'architect-attempt.ps1') in text
-              assert str(root/'opencode-governance-tools'/'architect-attempt.sh') in text
-              assert '[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]' in text
-              assert 'ARCHITECT_RUNNER_REQUIRED' in text
-              assert 'POWERSHELL_7_REQUIRED' in text
-              assert 'pwsh -NoProfile -File' in text
-              assert 'Never invoke the Architect runner from inside the active OpenCode process.' in text
+              for marker in ['ARCHITECT_RUNNER_INTEGRATION','ARCHITECT_RUNNER_REQUIRED','POWERSHELL_7_REQUIRED','PROJECT_STATE_FINGERPRINT_V1','NON_GIT_PROJECT_SUPPORTED','PROJECT_STATE_CHANGED','[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]']:
+                  assert marker in text
           for command in ['ai-init','ai-audit','ai-discover','ai-plan']:
               text=(root/'commands'/f'{command}.md').read_text()
-              assert 'ARCHITECT_RUNNER_ENTRY_GATE' in text
-              assert '[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]' in text
-              assert 'ARCHITECT_RUNNER_REQUIRED' in text
-              assert 'pwsh -NoProfile -File' in text
+              for marker in ['ARCHITECT_RUNNER_ENTRY_GATE','ARCHITECT_RUNNER_REQUIRED','PROJECT_STATE_CHANGED','pwsh -NoProfile -File']:
+                  assert marker in text
           PY
-
+          ./scripts/verify-routing.sh "$config"
           ./scripts/uninstall.sh --config-dir "$config" >/dev/null
           test -f "$unrelated"
-          test ! -e "$config/opencode-governance-tools/architect-attempt.ps1"
-          test ! -e "$config/opencode-governance-tools/architect-attempt.sh"
-          test ! -e "$config/opencode-governance-tools/executor-attempt.ps1"
-          test ! -e "$config/opencode-governance-tools/executor-attempt.sh"
+          for name in architect-attempt.ps1 architect-attempt.sh executor-attempt.ps1 executor-attempt.sh; do test ! -e "$config/opencode-governance-tools/$name"; done
 
-      - name: Exercise installed transactional runner
+      - name: Exercise transactional and non-Git behavior
         shell: bash
-        run: |
-          set -euo pipefail
-          config="$RUNNER_TEMP/opencode-v332-runner"
-          project="$RUNNER_TEMP/v332-project"
-          mock="$RUNNER_TEMP/mock-opencode-v332"
-          state="$RUNNER_TEMP/mock-opencode-v332-count"
-          ./scripts/install.sh --config-dir "$config" --routing-config "$GITHUB_WORKSPACE/tests/fixtures/routing/architect-failover.valid.json"
-          mkdir -p "$project/.ai"; git -C "$project" init -q; printf 'original\n' > "$project/.ai/STATUS.md"
-          cat > "$mock" <<'MOCK'
-          #!/usr/bin/env bash
-          set -euo pipefail
-          [[ "${OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE:-}" == "1" ]] || { echo 'runner environment marker missing' >&2; exit 21; }
-          [[ "$*" == *'[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]'* ]] || { echo 'runner argument marker missing' >&2; exit 22; }
-          project=''; model=''
-          while [[ $# -gt 0 ]]; do
-            case "$1" in
-              --dir) project="$2"; shift 2 ;;
-              --model) model="$2"; shift 2 ;;
-              *) shift ;;
-            esac
-          done
-          count=0; [[ ! -f "$MOCK_STATE" ]] || count="$(cat "$MOCK_STATE")"; echo $((count+1)) > "$MOCK_STATE"
-          if [[ "$model" == 'test/architect-primary' ]]; then
-            printf 'partial\n' > "$project/.ai/partial.txt"
-            echo 'rate limit 429' >&2
-            exit 1
-          fi
-          [[ ! -e "$project/.ai/partial.txt" ]] || { echo 'partial state survived retry' >&2; exit 23; }
-          [[ "$(cat "$project/.ai/STATUS.md")" == 'original' ]] || { echo 'baseline state changed' >&2; exit 24; }
-          printf 'success\n' > "$project/.ai/success.txt"
-          exit 0
-          MOCK
-          chmod +x "$mock"; export MOCK_STATE="$state"
-          "$config/opencode-governance-tools/architect-attempt.sh" \
-            --project-dir "$project" \
-            --command ai-init \
-            --arguments 'WHMCS forensic baseline' \
-            --routing-config "$config/opencode-governance-routing.json" \
-            --config-dir "$config" \
-            --opencode-command "$mock"
-          test "$(cat "$state")" -eq 2
-          test -f "$project/.ai/success.txt"
-          test ! -e "$project/.ai/partial.txt"
+        run: bash tests/test-project-state-integrity.sh
 
   windows-architect-runner:
     runs-on: windows-latest
@@ -110,7 +53,7 @@ jobs:
         with:
           show-progress: false
 
-      - name: Install deterministic Architect runner
+      - name: Install and verify deterministic Architect runner
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
@@ -118,74 +61,31 @@ jobs:
           ./scripts/install.ps1 -ConfigDir $config -NonInteractive -RoutingConfigPath (Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/architect-failover.valid.json')
           $tools=Join-Path $config 'opencode-governance-tools'
           'preserve'|Set-Content (Join-Path $tools 'unrelated-user-tool.txt')
-          foreach($name in 'architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh'){
-            if(-not(Test-Path (Join-Path $tools $name) -PathType Leaf)){throw "Missing managed tool: $name"}
-          }
           if((Get-FileHash scripts/run-governed.ps1).Hash-ne(Get-FileHash (Join-Path $tools 'architect-attempt.ps1')).Hash){throw 'Installed PowerShell Architect runner is stale'}
           if((Get-FileHash scripts/run-governed.sh).Hash-ne(Get-FileHash (Join-Path $tools 'architect-attempt.sh')).Hash){throw 'Installed Unix Architect runner is stale'}
           $manifest=Get-Content (Join-Path $config 'opencode-governance-routing.json') -Raw|ConvertFrom-Json
-          if($manifest.governance_version-ne'3.3.3'){throw 'Routing manifest version is not 3.3.3'}
-          if($manifest.architect_runner_version-ne'3.3.3'){throw 'Architect runner version is not 3.3.3'}
+          if($manifest.governance_version-ne'3.3.4'){throw 'Routing manifest version is not 3.3.4'}
+          if($manifest.architect_runner_version-ne'3.3.4'){throw 'Architect runner version is not 3.3.4'}
           if(@($manifest.managed_tools).Count-ne 4){throw 'Expected four managed tools'}
           foreach($name in 'architect','build','plan'){
             $text=Get-Content (Join-Path $config "agents/$name.md") -Raw
-            foreach($marker in (Join-Path $tools 'architect-attempt.ps1'),(Join-Path $tools 'architect-attempt.sh'),'[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]','ARCHITECT_RUNNER_REQUIRED','POWERSHELL_7_REQUIRED','pwsh -NoProfile -File','Never invoke the Architect runner from inside the active OpenCode process.'){
+            foreach($marker in 'ARCHITECT_RUNNER_INTEGRATION','ARCHITECT_RUNNER_REQUIRED','POWERSHELL_7_REQUIRED','PROJECT_STATE_FINGERPRINT_V1','NON_GIT_PROJECT_SUPPORTED','PROJECT_STATE_CHANGED','[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]'){
               if($text-notlike"*$marker*"){throw "$name missing marker: $marker"}
             }
           }
           foreach($command in 'ai-init','ai-audit','ai-discover','ai-plan'){
             $text=Get-Content (Join-Path $config "commands/$command.md") -Raw
-            foreach($marker in 'ARCHITECT_RUNNER_ENTRY_GATE','[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]','ARCHITECT_RUNNER_REQUIRED','pwsh -NoProfile -File'){
-              if($text-notlike"*$marker*"){throw "$command missing entry gate marker: $marker"}
+            foreach($marker in 'ARCHITECT_RUNNER_ENTRY_GATE','ARCHITECT_RUNNER_REQUIRED','PROJECT_STATE_CHANGED','pwsh -NoProfile -File'){
+              if($text-notlike"*$marker*"){throw "$command missing marker: $marker"}
             }
           }
+          ./scripts/verify-routing.ps1 -ConfigDir $config
           ./scripts/uninstall.ps1 -ConfigDir $config|Out-Null
           if(-not(Test-Path (Join-Path $tools 'unrelated-user-tool.txt'))){throw 'Unrelated tool was removed'}
           foreach($name in 'architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh'){
             if(Test-Path (Join-Path $tools $name)){throw "Managed tool survived uninstall: $name"}
           }
 
-      - name: Exercise installed transactional runner
+      - name: Exercise transactional and non-Git behavior
         shell: pwsh
-        run: |
-          $ErrorActionPreference='Stop'
-          $config=Join-Path $env:RUNNER_TEMP 'opencode-v332-runner'
-          $project=Join-Path $env:RUNNER_TEMP 'v332-project'
-          $mock=Join-Path $env:RUNNER_TEMP 'mock-opencode-v332.ps1'
-          $state=Join-Path $env:RUNNER_TEMP 'mock-opencode-v332-count'
-          ./scripts/install.ps1 -ConfigDir $config -NonInteractive -RoutingConfigPath (Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/architect-failover.valid.json')
-          New-Item -ItemType Directory -Force -Path (Join-Path $project '.ai')|Out-Null
-          git -C $project init -q
-          'original'|Set-Content (Join-Path $project '.ai/STATUS.md')
-          @'
-          param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
-          if($env:OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE-ne'1'){[Console]::Error.WriteLine('runner environment marker missing');exit 21}
-          if(($Args-join ' ')-notlike '*[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]*'){[Console]::Error.WriteLine('runner argument marker missing');exit 22}
-          $project='';$model=''
-          for($i=0;$i-lt$Args.Count;$i++){
-            if($Args[$i]-eq'--dir'){$project=$Args[++$i]}
-            elseif($Args[$i]-eq'--model'){$model=$Args[++$i]}
-          }
-          $count=if(Test-Path $env:MOCK_STATE){[int](Get-Content $env:MOCK_STATE)}else{0};($count+1)|Set-Content $env:MOCK_STATE
-          if($model-eq'test/architect-primary'){
-            'partial'|Set-Content (Join-Path $project '.ai/partial.txt')
-            [Console]::Error.WriteLine('rate limit 429')
-            exit 1
-          }
-          if(Test-Path (Join-Path $project '.ai/partial.txt')){exit 23}
-          if((Get-Content (Join-Path $project '.ai/STATUS.md'))-ne'original'){exit 24}
-          'success'|Set-Content (Join-Path $project '.ai/success.txt')
-          exit 0
-          '@|Set-Content $mock
-          $env:MOCK_STATE=$state
-          & (Join-Path $config 'opencode-governance-tools/architect-attempt.ps1') `
-            -ProjectDir $project `
-            -Command ai-init `
-            -Arguments 'WHMCS forensic baseline' `
-            -RoutingConfigPath (Join-Path $config 'opencode-governance-routing.json') `
-            -ConfigDir $config `
-            -OpenCodeCommand pwsh `
-            -OpenCodePrefixArguments @('-NoProfile','-File',$mock)
-          if([int](Get-Content $state)-ne 2){throw 'Expected two Architect route attempts'}
-          if(-not(Test-Path (Join-Path $project '.ai/success.txt'))){throw 'Fallback did not complete'}
-          if(Test-Path (Join-Path $project '.ai/partial.txt')){throw 'Partial state survived retry'}
+        run: pwsh -NoProfile -File tests/test-project-state-integrity.ps1
