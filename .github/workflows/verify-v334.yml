@@ -11,179 +11,12 @@ jobs:
         with:
           show-progress: false
 
-      - name: Install synthetic Architect routing
-        shell: bash
-        run: |
-          set -euo pipefail
-          config="$RUNNER_TEMP/opencode-v334-linux"
-          ./scripts/install.sh --config-dir "$config" --routing-config "$GITHUB_WORKSPACE/tests/fixtures/routing/architect-failover.valid.json"
+      - name: Validate scripts
+        run: bash -n scripts/run-governed.sh tests/test-project-state-integrity.sh
 
-      - name: Detect content changes to an already dirty tracked file
+      - name: Run Unix project-state regressions
         shell: bash
-        run: |
-          set -euo pipefail
-          config="$RUNNER_TEMP/opencode-v334-linux"
-          project="$RUNNER_TEMP/v334-linux-dirty"
-          mock="$RUNNER_TEMP/v334-linux-mutate-dirty"
-          mkdir -p "$project/.ai"
-          git -C "$project" init -q
-          git -C "$project" config user.email test@example.invalid
-          git -C "$project" config user.name Test
-          printf 'base\n' > "$project/source.txt"
-          git -C "$project" add source.txt
-          git -C "$project" commit -qm base
-          printf 'dirty-before\n' > "$project/source.txt"
-          before="$(git -C "$project" status --porcelain=v1 --untracked-files=all)"
-          cat > "$mock" <<'MOCK'
-          #!/usr/bin/env bash
-          set -euo pipefail
-          project=''
-          while [[ $# -gt 0 ]]; do
-            case "$1" in --dir) project="$2"; shift 2 ;; *) shift ;; esac
-          done
-          printf 'dirty-after\n' > "$project/source.txt"
-          exit 0
-          MOCK
-          chmod +x "$mock"
-          set +e
-          output="$($config/opencode-governance-tools/architect-attempt.sh --project-dir "$project" --command ai-init --arguments dirty-content-test --routing-config "$config/opencode-governance-routing.json" --config-dir "$config" --opencode-command "$mock" 2>&1)"
-          code=$?
-          set -e
-          after="$(git -C "$project" status --porcelain=v1 --untracked-files=all)"
-          test "$before" = "$after"
-          test "$code" -ne 0
-          grep -q 'PROJECT_STATE_CHANGED' <<<"$output"
-
-      - name: Detect content changes to an existing untracked file
-        shell: bash
-        run: |
-          set -euo pipefail
-          config="$RUNNER_TEMP/opencode-v334-linux"
-          project="$RUNNER_TEMP/v334-linux-untracked"
-          mock="$RUNNER_TEMP/v334-linux-mutate-untracked"
-          mkdir -p "$project/.ai"
-          git -C "$project" init -q
-          printf 'untracked-before\n' > "$project/untracked.txt"
-          before="$(git -C "$project" status --porcelain=v1 --untracked-files=all)"
-          cat > "$mock" <<'MOCK'
-          #!/usr/bin/env bash
-          set -euo pipefail
-          project=''
-          while [[ $# -gt 0 ]]; do
-            case "$1" in --dir) project="$2"; shift 2 ;; *) shift ;; esac
-          done
-          printf 'untracked-after\n' > "$project/untracked.txt"
-          exit 0
-          MOCK
-          chmod +x "$mock"
-          set +e
-          output="$($config/opencode-governance-tools/architect-attempt.sh --project-dir "$project" --command ai-init --arguments untracked-content-test --routing-config "$config/opencode-governance-routing.json" --config-dir "$config" --opencode-command "$mock" 2>&1)"
-          code=$?
-          set -e
-          after="$(git -C "$project" status --porcelain=v1 --untracked-files=all)"
-          test "$before" = "$after"
-          test "$code" -ne 0
-          grep -q 'PROJECT_STATE_CHANGED' <<<"$output"
-
-      - name: Detect replacement of already staged content
-        shell: bash
-        run: |
-          set -euo pipefail
-          config="$RUNNER_TEMP/opencode-v334-linux"
-          project="$RUNNER_TEMP/v334-linux-staged"
-          mock="$RUNNER_TEMP/v334-linux-mutate-staged"
-          mkdir -p "$project/.ai"
-          git -C "$project" init -q
-          git -C "$project" config user.email test@example.invalid
-          git -C "$project" config user.name Test
-          printf 'base\n' > "$project/staged.txt"
-          git -C "$project" add staged.txt
-          git -C "$project" commit -qm base
-          printf 'staged-before\n' > "$project/staged.txt"
-          git -C "$project" add staged.txt
-          before="$(git -C "$project" status --porcelain=v1 --untracked-files=all)"
-          cat > "$mock" <<'MOCK'
-          #!/usr/bin/env bash
-          set -euo pipefail
-          project=''
-          while [[ $# -gt 0 ]]; do
-            case "$1" in --dir) project="$2"; shift 2 ;; *) shift ;; esac
-          done
-          printf 'staged-after\n' > "$project/staged.txt"
-          git -C "$project" add staged.txt
-          exit 0
-          MOCK
-          chmod +x "$mock"
-          set +e
-          output="$($config/opencode-governance-tools/architect-attempt.sh --project-dir "$project" --command ai-init --arguments staged-content-test --routing-config "$config/opencode-governance-routing.json" --config-dir "$config" --opencode-command "$mock" 2>&1)"
-          code=$?
-          set -e
-          after="$(git -C "$project" status --porcelain=v1 --untracked-files=all)"
-          test "$before" = "$after"
-          test "$code" -ne 0
-          grep -q 'PROJECT_STATE_CHANGED' <<<"$output"
-
-      - name: Support a non-Git project when only governance state changes
-        shell: bash
-        run: |
-          set -euo pipefail
-          config="$RUNNER_TEMP/opencode-v334-linux"
-          project="$RUNNER_TEMP/v334-linux-nongit-safe"
-          mock="$RUNNER_TEMP/v334-linux-nongit-safe-mock"
-          state="$RUNNER_TEMP/v334-linux-nongit-safe-count"
-          mkdir -p "$project/.ai"
-          printf 'original\n' > "$project/.ai/BASELINE.md"
-          printf 'source\n' > "$project/source.txt"
-          cat > "$mock" <<'MOCK'
-          #!/usr/bin/env bash
-          set -euo pipefail
-          project=''; model=''
-          while [[ $# -gt 0 ]]; do
-            case "$1" in --dir) project="$2"; shift 2 ;; --model) model="$2"; shift 2 ;; *) shift ;; esac
-          done
-          count=0; [[ ! -f "$MOCK_STATE" ]] || count="$(cat "$MOCK_STATE")"; echo $((count+1)) > "$MOCK_STATE"
-          if [[ "$model" == test/architect-primary ]]; then
-            printf 'partial\n' > "$project/.ai/partial.txt"
-            echo 'rate limit 429' >&2
-            exit 1
-          fi
-          [[ ! -e "$project/.ai/partial.txt" ]]
-          [[ "$(cat "$project/.ai/BASELINE.md")" == original ]]
-          printf 'success\n' > "$project/.ai/success.txt"
-          exit 0
-          MOCK
-          chmod +x "$mock"; export MOCK_STATE="$state"
-          "$config/opencode-governance-tools/architect-attempt.sh" --project-dir "$project" --command ai-init --arguments nongit-safe-test --routing-config "$config/opencode-governance-routing.json" --config-dir "$config" --opencode-command "$mock"
-          test "$(cat "$state")" -eq 2
-          test "$(cat "$project/source.txt")" = source
-          test -f "$project/.ai/success.txt"
-
-      - name: Block a source mutation in a non-Git project
-        shell: bash
-        run: |
-          set -euo pipefail
-          config="$RUNNER_TEMP/opencode-v334-linux"
-          project="$RUNNER_TEMP/v334-linux-nongit-mutate"
-          mock="$RUNNER_TEMP/v334-linux-nongit-mutate-mock"
-          mkdir -p "$project/.ai"
-          printf 'source-before\n' > "$project/source.txt"
-          cat > "$mock" <<'MOCK'
-          #!/usr/bin/env bash
-          set -euo pipefail
-          project=''
-          while [[ $# -gt 0 ]]; do
-            case "$1" in --dir) project="$2"; shift 2 ;; *) shift ;; esac
-          done
-          printf 'source-after\n' > "$project/source.txt"
-          exit 0
-          MOCK
-          chmod +x "$mock"
-          set +e
-          output="$($config/opencode-governance-tools/architect-attempt.sh --project-dir "$project" --command ai-init --arguments nongit-mutation-test --routing-config "$config/opencode-governance-routing.json" --config-dir "$config" --opencode-command "$mock" 2>&1)"
-          code=$?
-          set -e
-          test "$code" -ne 0
-          grep -q 'PROJECT_STATE_CHANGED' <<<"$output"
+        run: bash tests/test-project-state-integrity.sh
 
   windows-project-state:
     runs-on: windows-latest
@@ -192,98 +25,16 @@ jobs:
         with:
           show-progress: false
 
-      - name: Install synthetic Architect routing
+      - name: Validate PowerShell scripts
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          $config=Join-Path $env:RUNNER_TEMP 'opencode-v334-windows'
-          ./scripts/install.ps1 -ConfigDir $config -NonInteractive -RoutingConfigPath (Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/architect-failover.valid.json')
-
-      - name: Detect dirty, untracked and staged content changes
-        shell: pwsh
-        run: |
-          $ErrorActionPreference='Stop'
-          $config=Join-Path $env:RUNNER_TEMP 'opencode-v334-windows'
-          $runner=Join-Path $config 'opencode-governance-tools/architect-attempt.ps1'
-          $manifest=Join-Path $config 'opencode-governance-routing.json'
-          foreach($mode in 'dirty','untracked','staged'){
-            $project=Join-Path $env:RUNNER_TEMP "v334-windows-$mode"
-            $mock=Join-Path $env:RUNNER_TEMP "v334-windows-$mode-mock.ps1"
-            New-Item -ItemType Directory -Force -Path (Join-Path $project '.ai')|Out-Null
-            git -C $project init -q
-            if($mode-ne'untracked'){
-              git -C $project config user.email test@example.invalid
-              git -C $project config user.name Test
-              'base'|Set-Content (Join-Path $project 'source.txt')
-              git -C $project add source.txt
-              git -C $project commit -qm base
-            }
-            if($mode-eq'dirty'){'dirty-before'|Set-Content (Join-Path $project 'source.txt')}
-            elseif($mode-eq'untracked'){'untracked-before'|Set-Content (Join-Path $project 'source.txt')}
-            else{'staged-before'|Set-Content (Join-Path $project 'source.txt');git -C $project add source.txt}
-            $before=(git -C $project status --porcelain=v1 --untracked-files=all)-join"`n"
-            @'
-            param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
-            $project=''
-            for($i=0;$i-lt$Args.Count;$i++){if($Args[$i]-eq'--dir'){$project=$Args[++$i]}}
-            if($env:TEST_MODE-eq'dirty'){'dirty-after'|Set-Content (Join-Path $project 'source.txt')}
-            elseif($env:TEST_MODE-eq'untracked'){'untracked-after'|Set-Content (Join-Path $project 'source.txt')}
-            else{'staged-after'|Set-Content (Join-Path $project 'source.txt');git -C $project add source.txt}
-            exit 0
-            '@|Set-Content $mock
-            $env:TEST_MODE=$mode
-            $output=& $runner -ProjectDir $project -Command ai-init -Arguments "$mode-content-test" -RoutingConfigPath $manifest -ConfigDir $config -OpenCodeCommand pwsh -OpenCodePrefixArguments @('-NoProfile','-File',$mock) 2>&1
-            $code=$LASTEXITCODE
-            $after=(git -C $project status --porcelain=v1 --untracked-files=all)-join"`n"
-            if($before-ne$after){throw "$mode test did not preserve the same porcelain classification"}
-            if($code-eq 0){throw "$mode content mutation escaped detection"}
-            if(($output-join"`n")-notmatch'PROJECT_STATE_CHANGED'){throw "$mode did not return PROJECT_STATE_CHANGED"}
+          foreach($path in 'scripts/run-governed.ps1','tests/test-project-state-integrity.ps1'){
+            $errors=$null
+            [Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path),[ref]$null,[ref]$errors)|Out-Null
+            if($errors){throw ($errors|Out-String)}
           }
-          $global:LASTEXITCODE=0
 
-      - name: Support safe non-Git retry and block non-Git source mutation
+      - name: Run Windows project-state regressions
         shell: pwsh
-        run: |
-          $ErrorActionPreference='Stop'
-          $config=Join-Path $env:RUNNER_TEMP 'opencode-v334-windows'
-          $runner=Join-Path $config 'opencode-governance-tools/architect-attempt.ps1'
-          $manifest=Join-Path $config 'opencode-governance-routing.json'
-          $safe=Join-Path $env:RUNNER_TEMP 'v334-windows-nongit-safe'
-          $safeMock=Join-Path $env:RUNNER_TEMP 'v334-windows-nongit-safe-mock.ps1'
-          $state=Join-Path $env:RUNNER_TEMP 'v334-windows-nongit-count'
-          New-Item -ItemType Directory -Force -Path (Join-Path $safe '.ai')|Out-Null
-          'original'|Set-Content (Join-Path $safe '.ai/BASELINE.md')
-          'source'|Set-Content (Join-Path $safe 'source.txt')
-          @'
-          param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
-          $project='';$model=''
-          for($i=0;$i-lt$Args.Count;$i++){if($Args[$i]-eq'--dir'){$project=$Args[++$i]}elseif($Args[$i]-eq'--model'){$model=$Args[++$i]}}
-          $count=if(Test-Path $env:MOCK_STATE){[int](Get-Content $env:MOCK_STATE)}else{0};($count+1)|Set-Content $env:MOCK_STATE
-          if($model-eq'test/architect-primary'){'partial'|Set-Content (Join-Path $project '.ai/partial.txt');[Console]::Error.WriteLine('rate limit 429');exit 1}
-          if(Test-Path (Join-Path $project '.ai/partial.txt')){exit 23}
-          if((Get-Content (Join-Path $project '.ai/BASELINE.md'))-ne'original'){exit 24}
-          'success'|Set-Content (Join-Path $project '.ai/success.txt')
-          exit 0
-          '@|Set-Content $safeMock
-          $env:MOCK_STATE=$state
-          & $runner -ProjectDir $safe -Command ai-init -Arguments nongit-safe-test -RoutingConfigPath $manifest -ConfigDir $config -OpenCodeCommand pwsh -OpenCodePrefixArguments @('-NoProfile','-File',$safeMock)
-          if($LASTEXITCODE-ne 0){throw 'Safe non-Git retry failed'}
-          if([int](Get-Content $state)-ne 2){throw 'Safe non-Git retry did not use fallback'}
-          if((Get-Content (Join-Path $safe 'source.txt'))-ne'source'){throw 'Safe non-Git source changed'}
-
-          $mutate=Join-Path $env:RUNNER_TEMP 'v334-windows-nongit-mutate'
-          $mutateMock=Join-Path $env:RUNNER_TEMP 'v334-windows-nongit-mutate-mock.ps1'
-          New-Item -ItemType Directory -Force -Path (Join-Path $mutate '.ai')|Out-Null
-          'source-before'|Set-Content (Join-Path $mutate 'source.txt')
-          @'
-          param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
-          $project=''
-          for($i=0;$i-lt$Args.Count;$i++){if($Args[$i]-eq'--dir'){$project=$Args[++$i]}}
-          'source-after'|Set-Content (Join-Path $project 'source.txt')
-          exit 0
-          '@|Set-Content $mutateMock
-          $output=& $runner -ProjectDir $mutate -Command ai-init -Arguments nongit-mutation-test -RoutingConfigPath $manifest -ConfigDir $config -OpenCodeCommand pwsh -OpenCodePrefixArguments @('-NoProfile','-File',$mutateMock) 2>&1
-          $code=$LASTEXITCODE
-          if($code-eq 0){throw 'Non-Git source mutation escaped detection'}
-          if(($output-join"`n")-notmatch'PROJECT_STATE_CHANGED'){throw 'Non-Git source mutation did not return PROJECT_STATE_CHANGED'}
-          $global:LASTEXITCODE=0
+        run: pwsh -NoProfile -File tests/test-project-state-integrity.ps1
