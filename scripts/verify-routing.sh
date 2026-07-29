@@ -90,9 +90,12 @@ def verify_candidate(agent, role, candidate, priority, hidden):
         f'REQUIRES_ROLE_REBALANCE: {rebalance}',
     ]:
         require_line(text, line, agent)
-    for marker in ['PACKET_SHA256', 'FROZEN_TARGET_SHA', 'REPORT_COMPLETE']:
-        if marker not in text:
-            raise SystemExit(f'{agent} missing route marker: {marker}')
+    if role == 'executor':
+        for marker in ['EXECUTOR_ATTEMPT_ID', 'PACKET_SHA256', 'FROZEN_TARGET_SHA', 'REPORT_COMPLETE']:
+            if marker not in text:
+                raise SystemExit(f'{agent} missing Executor route marker: {marker}')
+    elif 'Require matching attempt, packet and frozen-target identifiers plus a complete report.' not in text:
+        raise SystemExit(f'{agent} missing complete-role restart contract.')
     if hidden:
         for line in ['mode: subagent', 'hidden: true', '  task: deny']:
             require_line(text, line, agent)
