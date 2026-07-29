@@ -4,49 +4,26 @@ $ErrorActionPreference = 'Stop'
 if (-not $ConfigDir) {
     $ConfigDir = if ($env:OPENCODE_CONFIG_DIR) { $env:OPENCODE_CONFIG_DIR } else { Join-Path $HOME '.config\opencode' }
 }
-
-$Agents = @('architect','build','plan','executor','reviewer','reviewer-architecture','final-reviewer')
-$Commands = @('ai-init','ai-audit','ai-docs','ai-discover','ai-plan','ai-execute','ai-review','ai-workflow','ai-status','ai-resume','ai-metrics','ai-release')
 $ManifestPath = Join-Path $ConfigDir 'opencode-governance-routing.json'
-$AllowedTools = @(
-    (Join-Path $ConfigDir 'opencode-governance-tools\executor-attempt.ps1'),
-    (Join-Path $ConfigDir 'opencode-governance-tools\executor-attempt.sh')
-)
-
-if (Test-Path $ManifestPath -PathType Leaf) {
-    try {
-        $Manifest = Get-Content $ManifestPath -Raw | ConvertFrom-Json
-    } catch {
-        throw 'Routing manifest is invalid; refusing to remove unknown managed files.'
+if (Test-Path -LiteralPath $ManifestPath -PathType Leaf) {
+    try { $Manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json } catch { throw 'Routing manifest is invalid; refusing to remove unknown managed files.' }
+    if ([string]$Manifest.governance_version -eq '3.3.2') {
+        $ToolsDir = Join-Path $ConfigDir 'opencode-governance-tools'
+        $Expected = @(
+            (Join-Path $ToolsDir 'architect-attempt.ps1'),
+            (Join-Path $ToolsDir 'architect-attempt.sh'),
+            (Join-Path $ToolsDir 'executor-attempt.ps1'),
+            (Join-Path $ToolsDir 'executor-attempt.sh')
+        )
+        $Managed = @($Manifest.managed_tools | ForEach-Object { [string]$_ })
+        if ($Managed.Count -ne $Expected.Count) { throw 'Unsafe managed tool count in v3.3.2 routing manifest.' }
+        foreach ($Tool in $Expected) { if ($Tool -notin $Managed) { throw "Unsafe managed tool set in v3.3.2 routing manifest: $Tool" } }
+        Remove-Item -LiteralPath $Expected[0],$Expected[1] -Force -ErrorAction SilentlyContinue
+        $Manifest | Add-Member -MemberType NoteProperty -Name governance_version -Value '3.3.0' -Force
+        $Manifest.PSObject.Properties.Remove('architect_runner_version')
+        $Manifest | Add-Member -MemberType NoteProperty -Name managed_tools -Value @($Expected[2],$Expected[3]) -Force
+        [IO.File]::WriteAllText($ManifestPath, (($Manifest | ConvertTo-Json -Depth 30) + [Environment]::NewLine), (New-Object Text.UTF8Encoding($false)))
     }
-    foreach ($Alias in @($Manifest.managed_aliases)) {
-        $AliasName = [string]$Alias
-        if ($AliasName -notmatch '^(executor|reviewer|reviewer-architecture|final-reviewer)-fallback-[0-9]+$') {
-            throw "Unsafe managed alias in routing manifest: $AliasName"
-        }
-        $Path = Join-Path $ConfigDir "agents\$AliasName.md"
-        if (Test-Path $Path -PathType Leaf) { Remove-Item $Path -Force }
-    }
-    foreach ($Tool in @($Manifest.managed_tools)) {
-        $ToolPath = [string]$Tool
-        if ($ToolPath -notin $AllowedTools) { throw "Unsafe managed tool in routing manifest: $ToolPath" }
-        if (Test-Path $ToolPath -PathType Leaf) { Remove-Item $ToolPath -Force }
-    }
-    $ToolsDir = Join-Path $ConfigDir 'opencode-governance-tools'
-    if (Test-Path $ToolsDir -PathType Container) {
-        $Remaining = @(Get-ChildItem $ToolsDir -Force)
-        if ($Remaining.Count -eq 0) { Remove-Item $ToolsDir -Force }
-    }
-    Remove-Item $ManifestPath -Force
 }
-
-foreach ($Name in $Agents) {
-    $Path = Join-Path $ConfigDir "agents\$Name.md"
-    if (Test-Path $Path) { Remove-Item $Path -Force }
-}
-foreach ($Name in $Commands) {
-    $Path = Join-Path $ConfigDir "commands\$Name.md"
-    if (Test-Path $Path) { Remove-Item $Path -Force }
-}
-
-Write-Host 'Removed OpenCode Governance public agents, commands, managed hidden routes, managed Executor tools and routing manifest. Provider authentication, config, project .ai state, project documentation, backups and unrelated files were preserved.'
+& (Join-Path $PSScriptRoot 'uninstall-core.ps1') -ConfigDir $ConfigDir
+exit $LASTEXITCODE
