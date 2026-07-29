@@ -31,11 +31,21 @@ if (-not $RoutingConfigPath) {
 }
 
 function Write-Json([object]$Value, [string]$Path) {
-    [System.IO.File]::WriteAllText(
-        $Path,
-        (($Value | ConvertTo-Json -Depth 30) + [Environment]::NewLine),
-        (New-Object System.Text.UTF8Encoding($false))
-    )
+    $Text = ($Value | ConvertTo-Json -Depth 30) + [Environment]::NewLine
+    [System.IO.File]::WriteAllText($Path, $Text, (New-Object System.Text.UTF8Encoding($false)))
+}
+
+function Get-Sha256Bytes([byte[]]$Bytes) {
+    $Algorithm = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return ([BitConverter]::ToString($Algorithm.ComputeHash($Bytes))).Replace('-', '').ToLowerInvariant()
+    } finally {
+        $Algorithm.Dispose()
+    }
+}
+
+function Get-Sha256Text([string]$Text) {
+    return Get-Sha256Bytes ([System.Text.Encoding]::UTF8.GetBytes($Text))
 }
 
 function Invoke-Git([string]$Directory, [string[]]$Arguments, [switch]$AllowFailure) {
@@ -48,10 +58,7 @@ function Invoke-Git([string]$Directory, [string[]]$Arguments, [switch]$AllowFail
         }
         throw $Text.Trim()
     }
-    return [pscustomobject]@{
-        ExitCode = $ExitCode
-        Text = $Text
-    }
+    return [pscustomobject]@{ ExitCode = $ExitCode; Text = $Text }
 }
 
 function Load-Routing {
@@ -96,11 +103,7 @@ function Get-RouteWorkClasses([object]$Candidate) {
 function Get-Routes([object]$Routing) {
     $Config = $Routing.roles.executor
     $Routes = @(
-        [pscustomobject]@{
-            route_agent = 'executor'
-            priority = 0
-            candidate = $Config.primary
-        }
+        [pscustomobject]@{ route_agent = 'executor'; priority = 0; candidate = $Config.primary }
     )
     foreach ($Candidate in @($Config.fallbacks | Sort-Object { [int]$_.priority })) {
         $Routes += [pscustomobject]@{
@@ -149,11 +152,7 @@ function Save-Cooldowns([hashtable]$Values) {
     foreach ($Key in ($Values.Keys | Sort-Object)) {
         $Lines += "$Key`t$($Values[$Key])"
     }
-    [System.IO.File]::WriteAllLines(
-        (Get-StatePath),
-        $Lines,
-        (New-Object System.Text.UTF8Encoding($false))
-    )
+    [System.IO.File]::WriteAllLines((Get-StatePath), $Lines, (New-Object System.Text.UTF8Encoding($false)))
 }
 
 function Validate-Identifier([string]$Value, [string]$Label) {
@@ -174,12 +173,12 @@ function Get-Project {
     return $Resolved
 }
 
-function Get-StatusEntries([string]$Project) {
+function Get-GitStatusEntries([string]$Project, [bool]$ExcludeGovernance) {
     $Result = Invoke-Git $Project @('-c','core.quotePath=false','status','--porcelain=v1','--untracked-files=all')
     $Entries = @()
     foreach ($Line in ($Result.Text -split "`r?`n")) {
         if ([string]::IsNullOrWhiteSpace($Line)) { continue }
-        if ($Line -match '^..\s+"?\.ai([\\/]|"?$)') { continue }
+        if ($ExcludeGovernance -and $Line -match '^..\s+"?\.ai([\\/]|"?$)') { continue }
         $Entries += $Line
     }
     return @($Entries | Sort-Object)
@@ -195,7 +194,7 @@ function Get-StatusPaths([string[]]$Entries) {
         $Normalized = $Body.Trim('"').Replace('\','/')
         $null = $Paths.Add($Normalized)
     }
-    return $Paths
+    return ,$Paths
 }
 
 function Get-PathFingerprint([string]$Project, [string]$RelativePath) {
@@ -203,31 +202,24 @@ function Get-PathFingerprint([string]$Project, [string]$RelativePath) {
     $FullPath = Join-Path $Project $NativeRelative
     if (-not (Test-Path $FullPath)) { return 'MISSING' }
     $Item = Get-Item $FullPath -Force
-    if ($Item.LinkType) {
-        return 'SYMLINK:' + (@($Item.Target) -join '|')
-    }
+    if ($Item.LinkType) { return 'SYMLINK:' + (@($Item.Target) -join '|') }
     if ($Item.PSIsContainer) { return 'DIRECTORY' }
     return 'FILE:' + (Get-FileHash $FullPath -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
 function Get-RealState([string]$Project) {
-    $Entries = @(Get-StatusEntries $Project)
+    $Entries = @(Get-GitStatusEntries $Project $true)
     $Paths = Get-StatusPaths $Entries
     $Fingerprints = [ordered]@{}
     foreach ($Path in ($Paths | Sort-Object)) {
         $Fingerprints[$Path] = Get-PathFingerprint $Project $Path
     }
-    $Canonical = [ordered]@{
-        status = $Entries
-        path_fingerprints = $Fingerprints
-    }
+    $Canonical = [ordered]@{ status = $Entries; path_fingerprints = $Fingerprints }
     $CanonicalJson = $Canonical | ConvertTo-Json -Depth 10 -Compress
-    $Bytes = [Text.Encoding]::UTF8.GetBytes($CanonicalJson)
-    $Hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($Bytes)).ToLowerInvariant()
     return [pscustomobject]@{
         status = $Entries
         path_fingerprints = $Fingerprints
-        state_sha256 = $Hash
+        state_sha256 = Get-Sha256Text $CanonicalJson
     }
 }
 
@@ -250,10 +242,7 @@ function Read-Attempt([string]$Project) {
     } catch {
         throw 'Executor attempt manifest is invalid JSON.'
     }
-    return [pscustomobject]@{
-        data = $Data
-        paths = $Paths
-    }
+    return [pscustomobject]@{ data = $Data; paths = $Paths }
 }
 
 function Resolve-ReportPath([string]$Project) {
@@ -272,6 +261,7 @@ function Select-Route([object]$Routing) {
 
     foreach ($Route in (Get-Routes $Routing)) {
         $Candidate = $Route.candidate
+        if ($Route.route_agent -eq $FailedRoute) { continue }
         if ($Attempted.Contains([string]$Route.route_agent)) { continue }
         if ($Cooldowns.ContainsKey([string]$Candidate.model) -and $Cooldowns[[string]$Candidate.model] -gt $Now) { continue }
         if ($WorkClass -notin @(Get-RouteWorkClasses $Candidate)) { continue }
@@ -283,8 +273,9 @@ function Select-Route([object]$Routing) {
                 $SameFamilyLeft = @(
                     (Get-Routes $Routing) | Where-Object {
                         $Failed -and
-                        $_.candidate.model_family -eq $Failed.candidate.model_family -and
+                        $_.route_agent -ne $FailedRoute -and
                         -not $Attempted.Contains([string]$_.route_agent) -and
+                        $_.candidate.model_family -eq $Failed.candidate.model_family -and
                         $WorkClass -in @(Get-RouteWorkClasses $_.candidate)
                     }
                 )
@@ -302,11 +293,11 @@ function Select-Route([object]$Routing) {
     }
 
     $FailedFamily = if ($Failed) { [string]$Failed.candidate.model_family } else { '' }
-    $Chosen = @(
-        $Candidates | Sort-Object \
-            @{ Expression = { if ($FailureClass -and $FailedFamily -and $_.candidate.model_family -eq $FailedFamily) { 0 } else { 1 } } }, \
-            @{ Expression = { [int]$_.priority } }
-    )[0]
+    $SortProperties = @(
+        @{ Expression = { if ($FailureClass -and $FailedFamily -and $_.candidate.model_family -eq $FailedFamily) { 0 } else { 1 } } },
+        @{ Expression = { [int]$_.priority } }
+    )
+    $Chosen = @($Candidates | Sort-Object -Property $SortProperties)[0]
     $Candidate = $Chosen.candidate
     [pscustomobject]@{
         route_agent = $Chosen.route_agent
@@ -397,7 +388,7 @@ function Finalize-Attempt([object]$Routing) {
     }
 
     $Worktree = [string]$Data.execution_root
-    $StatusEntries = @(Get-StatusEntries $Worktree)
+    $StatusEntries = @(Get-GitStatusEntries $Worktree $false)
     foreach ($Path in (Get-StatusPaths $StatusEntries)) {
         if ($Path -eq '.ai' -or $Path.StartsWith('.ai/') -or $Path -eq '.git' -or $Path.StartsWith('.git/')) {
             throw "Executor attempt changed forbidden path: $Path"
@@ -472,7 +463,7 @@ function Promote-Attempt([object]$Routing) {
     Invoke-Git $Project @('worktree','remove','--force',[string]$Data.execution_root) | Out-Null
     $Data.state = 'PROMOTED'
     $Data | Add-Member NoteProperty promoted_at ([DateTime]::UtcNow.ToString('o')) -Force
-    $Data | Add-Member NoteProperty post_status @(Get-StatusEntries $Project) -Force
+    $Data | Add-Member NoteProperty post_status @(Get-GitStatusEntries $Project $true) -Force
     Write-Json $Data $Attempt.paths.manifest
 
     [pscustomobject]@{
@@ -505,10 +496,7 @@ function Discard-Attempt([object]$Routing) {
     $Data | Add-Member NoteProperty failure_class $FailureClass -Force
     Write-Json $Data $Attempt.paths.manifest
 
-    [pscustomobject]@{
-        state = 'DISCARDED'
-        route_agent = $Data.route_agent
-    } | ConvertTo-Json -Compress
+    [pscustomobject]@{ state = 'DISCARDED'; route_agent = $Data.route_agent } | ConvertTo-Json -Compress
 }
 
 $Routing = Load-Routing
