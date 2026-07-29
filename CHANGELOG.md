@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.3.2 - 2026-07-29
+
+- Fixed `ARCHITECT_RUNNER_UNAVAILABLE` by installing deterministic `architect-attempt.ps1` and `architect-attempt.sh` entrypoints under the active OpenCode configuration directory.
+- Added exact managed-tool registration and verification for both Architect transactional runners while preserving all existing Executor helpers and hidden routes.
+- Added `ARCHITECT_RUNNER_ENTRY_GATE` to `ai-init`, `ai-audit`, `ai-discover` and `ai-plan`, preventing direct in-process invocation from writing `.ai/**` without the external runner.
+- Added the explicit `[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]` child marker and environment marker to prevent recursive runner invocation.
+- Preserved complete `.ai/**` rollback before eligible Architect retries and blocked continuation when source/project documentation changes, restoration fails or the error is ineligible.
+- Added conservative uninstall support that removes only the four manifest-managed Architect/Executor tools and preserves unrelated local tools.
+- Added Windows and Linux regression coverage reproducing the WHMCS failure, verifying same-family fallback, partial-state removal, exact path rendering and local-tool preservation.
+- Preserved Local Configuration Durability, Executor isolation, reviewer independence, whitelabel routing and all no-push/no-deploy contracts.
+
 ## 3.3.1 - 2026-07-29
 
 - Added Windows-first local configuration durability tooling for owner-triggered OpenCode desktop application updates.
