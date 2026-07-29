@@ -21,7 +21,6 @@ if (-not (Test-Path -LiteralPath $CoreInstaller -PathType Leaf)) {
 }
 
 & $CoreInstaller @PSBoundParameters
-if ($LASTEXITCODE -ne 0) { throw "Core installer exited with code $LASTEXITCODE." }
 
 if (-not $ConfigDir) {
     $ConfigDir = if ($env:OPENCODE_CONFIG_DIR) { $env:OPENCODE_CONFIG_DIR } else { Join-Path $HOME '.config\opencode' }
@@ -41,8 +40,8 @@ if ($RoutingConfigPath) {
         throw 'Routing manifest is invalid after core installation.'
     }
     if ([string]$Manifest.schema_version -ne '1.0') { throw 'Routing manifest schema_version must be 1.0.' }
-    $Manifest | Add-Member -MemberType NoteProperty -Name governance_version -Value '3.3.2' -Force
-    $Manifest | Add-Member -MemberType NoteProperty -Name architect_runner_version -Value '3.3.2' -Force
+    $Manifest | Add-Member -MemberType NoteProperty -Name governance_version -Value '3.3.3' -Force
+    $Manifest | Add-Member -MemberType NoteProperty -Name architect_runner_version -Value '3.3.3' -Force
     $Manifest | Add-Member -MemberType NoteProperty -Name managed_tools -Value @(
         $ArchitectRunnerPs,
         $ArchitectRunnerSh,
@@ -59,8 +58,11 @@ if ($RoutingConfigPath) {
 Architect pre-execution commands ``ai-init|ai-audit|ai-discover|ai-plan`` require the installed transactional runner.
 
 WINDOWS_ARCHITECT_RUNNER: $ArchitectRunnerPs
+WINDOWS_ARCHITECT_HOST: pwsh -NoProfile -File
 UNIX_ARCHITECT_RUNNER: $ArchitectRunnerSh
 ACTIVE_CHILD_MARKER: $Marker
+
+The PowerShell runner requires PowerShell 7 or newer and fails before any project-state mutation with ``POWERSHELL_7_REQUIRED`` under Windows PowerShell 5.1. Invoke it through ``pwsh -NoProfile -File``.
 
 When the marker is absent, do not write ``.ai/**``; return ``ARCHITECT_RUNNER_REQUIRED`` with the exact installed runner path and command. Never invent ``architect-attempt`` at another path. Never invoke the Architect runner from inside the active OpenCode process. A routed child invocation containing the marker continues normally.
 "@
@@ -91,12 +93,13 @@ When the marker is absent, stop immediately with:
 ``````text
 ARCHITECT_RUNNER_REQUIRED
 COMMAND: $Command
+WINDOWS_HOST: pwsh -NoProfile -File
 WINDOWS_RUNNER: $ArchitectRunnerPs
 UNIX_RUNNER: $ArchitectRunnerSh
 PROJECT_DIR: <CURRENT_PROJECT_ROOT>
 ``````
 
-Do not create, edit or delete ``.ai/**``. Do not invoke the runner from inside this OpenCode process. Tell the owner to run the installed external runner with the current project root and ``-Command $Command`` / ``--command $Command``. Do not invent another runner path.
+Do not create, edit or delete ``.ai/**``. Do not invoke the runner from inside this OpenCode process. Tell the owner to run ``pwsh -NoProfile -File "$ArchitectRunnerPs"`` with the current project root and ``-Command $Command`` on Windows, or the installed Unix runner with ``--command $Command``. Do not invent another runner path.
 
 When the exact marker is present, this is already a transactional child attempt; continue with the command contract below.
 "@
@@ -107,8 +110,7 @@ When the exact marker is present, this is already a transactional child attempt;
     }
 
     & (Join-Path $PSScriptRoot 'verify-routing.ps1') -ConfigDir $ConfigDir
-    if ($LASTEXITCODE -ne 0) { throw "Routing verifier exited with code $LASTEXITCODE." }
 }
 
-Write-Host 'Installed OpenCode Governance v3.3.2 — Architect Runner Integration Fix.'
-Write-Host 'Direct Architect pre-execution commands now fail closed with the exact installed runner path; routed child attempts are marker-protected.'
+Write-Host 'Installed OpenCode Governance v3.3.3 — PowerShell Host & Verifier Reliability.'
+Write-Host 'Architect PowerShell failover now requires pwsh 7+ explicitly; PowerShell child-script failures propagate through exceptions rather than stale native exit codes.'
