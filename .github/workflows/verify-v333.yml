@@ -25,6 +25,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
           $config = Join-Path $env:RUNNER_TEMP 'opencode-v333'
           $project = Join-Path $env:RUNNER_TEMP 'v333-ps51-project'
           New-Item -ItemType Directory -Force -Path (Join-Path $project '.ai') | Out-Null
@@ -44,7 +45,7 @@ jobs:
           if ($text -notmatch 'POWERSHELL_7_REQUIRED') { throw "Missing deterministic PowerShell 7 requirement. Output: $text" }
           if ((Get-Content (Join-Path $project '.ai/BASELINE.md') -Raw) -ne 'ORIGINAL') { throw 'PowerShell host rejection modified .ai state.' }
 
-      - name: Ignore stale LASTEXITCODE for v3.3.2 verification
+      - name: Ignore stale LASTEXITCODE for v3.3.3 verification
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
