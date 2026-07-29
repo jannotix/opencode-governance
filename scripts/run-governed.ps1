@@ -10,6 +10,11 @@ param(
     [switch]$KeepAttemptLogs
 )
 
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    [Console]::Error.WriteLine('POWERSHELL_7_REQUIRED: The Architect transactional runner requires PowerShell 7 or newer. Invoke it with: pwsh -NoProfile -File "<architect-attempt.ps1>" <arguments>')
+    exit 64
+}
+
 $ErrorActionPreference='Stop'
 $ProjectDir=(Resolve-Path $ProjectDir).Path
 if(-not $ConfigDir){$ConfigDir=if($env:OPENCODE_CONFIG_DIR){$env:OPENCODE_CONFIG_DIR}else{Join-Path $HOME '.config\opencode'}}

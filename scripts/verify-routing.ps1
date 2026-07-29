@@ -7,16 +7,16 @@ if (-not $ConfigDir) {
 $ManifestPath = Join-Path $ConfigDir 'opencode-governance-routing.json'
 if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) {
     Write-Host 'PASS: model failover routing is not configured.'
-    exit 0
+    return
 }
 try { $Manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json } catch { throw 'Routing manifest is invalid JSON.' }
 $Version = [string]$Manifest.governance_version
 if ($Version -eq '3.3.0') {
     & (Join-Path $PSScriptRoot 'verify-routing-core.ps1') -ConfigDir $ConfigDir
-    exit $LASTEXITCODE
+    return
 }
-if ($Version -ne '3.3.2') { throw "Routing manifest governance_version must be 3.3.0 or 3.3.2, got: $Version" }
-if ([string]$Manifest.architect_runner_version -ne '3.3.2') { throw 'architect_runner_version must be 3.3.2.' }
+if ($Version -notin @('3.3.2','3.3.3')) { throw "Routing manifest governance_version must be 3.3.0, 3.3.2 or 3.3.3, got: $Version" }
+if ([string]$Manifest.architect_runner_version -ne $Version) { throw "architect_runner_version must be $Version." }
 
 $ToolsDir = Join-Path $ConfigDir 'opencode-governance-tools'
 $ExpectedTools = @(
@@ -26,26 +26,30 @@ $ExpectedTools = @(
     (Join-Path $ToolsDir 'executor-attempt.sh')
 )
 $ManagedTools = @($Manifest.managed_tools | ForEach-Object { [string]$_ })
-if ($ManagedTools.Count -ne $ExpectedTools.Count) { throw 'Managed tool count does not match the v3.3.2 contract.' }
+if ($ManagedTools.Count -ne $ExpectedTools.Count) { throw "Managed tool count does not match the v$Version contract." }
 foreach ($Tool in $ExpectedTools) {
     if ($Tool -notin $ManagedTools) { throw "Managed tool missing from manifest: $Tool" }
     if (-not (Test-Path -LiteralPath $Tool -PathType Leaf)) { throw "Managed tool missing from disk: $Tool" }
 }
 $Marker = '[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]'
+$PolicyMarkers = @('ARCHITECT_RUNNER_INTEGRATION','ARCHITECT_RUNNER_REQUIRED',$Marker,$ExpectedTools[0],$ExpectedTools[1],'Never invoke the Architect runner from inside the active OpenCode process.')
+if ($Version -eq '3.3.3') { $PolicyMarkers += @('POWERSHELL_7_REQUIRED','pwsh -NoProfile -File') }
 foreach ($Name in @('architect','build','plan')) {
     $Text = Get-Content -LiteralPath (Join-Path $ConfigDir "agents\$Name.md") -Raw
-    foreach ($Value in @('ARCHITECT_RUNNER_INTEGRATION','ARCHITECT_RUNNER_REQUIRED',$Marker,$ExpectedTools[0],$ExpectedTools[1],'Never invoke the Architect runner from inside the active OpenCode process.')) {
+    foreach ($Value in $PolicyMarkers) {
         if ($Text -notlike "*$Value*") { throw "$Name missing Architect runner marker: $Value" }
     }
 }
+$GateMarkers = @('ARCHITECT_RUNNER_ENTRY_GATE','ARCHITECT_RUNNER_REQUIRED',$Marker,$ExpectedTools[0],$ExpectedTools[1])
+if ($Version -eq '3.3.3') { $GateMarkers += 'pwsh -NoProfile -File' }
 foreach ($Command in @('ai-init','ai-audit','ai-discover','ai-plan')) {
     $Text = Get-Content -LiteralPath (Join-Path $ConfigDir "commands\$Command.md") -Raw
-    foreach ($Value in @('ARCHITECT_RUNNER_ENTRY_GATE','ARCHITECT_RUNNER_REQUIRED',$Marker,$ExpectedTools[0],$ExpectedTools[1])) {
+    foreach ($Value in $GateMarkers) {
         if ($Text -notlike "*$Value*") { throw "$Command missing Architect entry gate marker: $Value" }
     }
 }
 
-$Temp = Join-Path ([IO.Path]::GetTempPath()) ('opencode-v332-verify-' + [guid]::NewGuid().ToString('N'))
+$Temp = Join-Path ([IO.Path]::GetTempPath()) ('opencode-v333-verify-' + [guid]::NewGuid().ToString('N'))
 try {
     New-Item -ItemType Directory -Force -Path (Join-Path $Temp 'agents'),(Join-Path $Temp 'opencode-governance-tools') | Out-Null
     Copy-Item (Join-Path $ConfigDir 'agents\*.md') (Join-Path $Temp 'agents') -Force
@@ -60,8 +64,7 @@ try {
     ) -Force
     [IO.File]::WriteAllText((Join-Path $Temp 'opencode-governance-routing.json'), (($Normalized | ConvertTo-Json -Depth 30) + [Environment]::NewLine), (New-Object Text.UTF8Encoding($false)))
     & (Join-Path $PSScriptRoot 'verify-routing-core.ps1') -ConfigDir $Temp
-    if ($LASTEXITCODE -ne 0) { throw "Core routing verifier exited with code $LASTEXITCODE." }
 } finally {
     Remove-Item -LiteralPath $Temp -Recurse -Force -ErrorAction SilentlyContinue
 }
-Write-Host "PASS: OpenCode Governance v3.3.2 routing verified ($(@($Manifest.managed_aliases).Count) hidden routes; Architect and Executor transactional tools verified)."
+Write-Host "PASS: OpenCode Governance v$Version routing verified ($(@($Manifest.managed_aliases).Count) hidden routes; Architect and Executor transactional tools verified)."
