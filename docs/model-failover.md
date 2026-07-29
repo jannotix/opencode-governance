@@ -1,21 +1,21 @@
 # Model failover
 
-OpenCode Governance can optionally route a governed role through a primary model and bounded fallback candidates.
+OpenCode Governance can optionally route a governed role through a primary model and bounded fallback candidates. The repository is provider- and model-agnostic: exact model IDs, variants, subscriptions and personal routing choices belong only in a local untracked profile.
 
 ## Runtime behavior
 
-A fallback is a complete attempt restart, not continuation of a partial answer.
+A fallback is a complete attempt restart, never continuation of partial output.
 
 ```text
 primary attempt fails with an eligible classified error
-→ partial output is rejected
-→ governed state is restored to the pre-attempt checkpoint
+→ partial output and partial state are rejected
+→ governed state or isolated execution state is restored/discarded
 → the next eligible route is selected
-→ the complete role or command starts again
-→ only completed matching output is accepted
+→ the complete role or command starts again from the same packet and target
+→ only a complete matching output can be accepted
 ```
 
-A recovering primary never interrupts a fallback already running. Primary is reconsidered only for a later invocation after `Retry-After`, an authoritative quota reset or the configured cooldown.
+A recovering primary never interrupts a fallback already running. Primary is reconsidered only on a later invocation after `Retry-After`, an authoritative quota reset or the configured cooldown.
 
 ## Execution mechanisms
 
@@ -25,14 +25,12 @@ The still-running Architect selects hidden internal subagent aliases generated b
 
 ### Architect / Build / Plan
 
-A failed top-level Architect cannot delegate to itself. v3.2 therefore provides:
+A failed top-level Architect cannot delegate to itself. Transactional runners are provided for pre-execution commands:
 
 ```text
 scripts/run-governed.ps1
 scripts/run-governed.sh
 ```
-
-The runner starts a new `opencode run` process for each route, snapshots the complete `.ai/**` tree outside the project and restores it byte-for-byte before an eligible fallback.
 
 Supported top-level commands:
 
@@ -43,7 +41,40 @@ ai-discover
 ai-plan
 ```
 
-`ai-workflow`, full governed Build execution, `ai-execute`, `ai-review` and `ai-release` are intentionally excluded from top-level automatic restart because an interrupted workflow may already contain Executor or review side effects. Reviewer/final failover still works inside those workflows.
+The runner starts a fresh `opencode run` process for each route, snapshots the complete `.ai/**` tree outside the project and restores it byte-for-byte before an eligible fallback. It also verifies that application source and governed project-documentation state did not change.
+
+`ai-workflow`, `ai-execute`, `ai-review` and `ai-release` are intentionally excluded from top-level automatic restart because an interrupted workflow may already have crossed an implementation or review side-effect boundary.
+
+### Executor
+
+Executor failover uses deterministic helpers installed under the local OpenCode configuration directory:
+
+```text
+opencode-governance-tools/executor-attempt.ps1
+opencode-governance-tools/executor-attempt.sh
+```
+
+Every attempt follows:
+
+```text
+select
+→ prepare detached worktree at the frozen target
+→ run the complete selected Executor route inside EXECUTION_ROOT
+→ finalize only a matching REPORT_COMPLETE: YES
+→ promote the verified binary patch
+```
+
+An eligible route failure follows:
+
+```text
+discard failed isolated worktree
+→ mark bounded cooldown
+→ select the next eligible route
+→ prepare a fresh worktree
+→ restart the complete Executor from the same packet and frozen target
+```
+
+The real worktree is never the write target during a routed attempt. Promotion is blocked when real `HEAD`, dirty-path content, Git status, packet/report identifiers, patch hash or path overlap no longer match the frozen attempt state. Promotion failure never selects another model.
 
 ## Profile requirements
 
@@ -56,13 +87,27 @@ Every candidate requires:
   "variant_policy": "explicit",
   "model_family": "stable-family-id",
   "priority": 1,
-  "only_on": []
+  "only_on": [],
+  "work_classes": []
 }
+```
+
+`priority` is required only for fallback candidates. `work_classes` is valid only for Executor routes; an empty array means all supported work classes.
+
+Supported Executor work classes:
+
+```text
+PATCH
+BOUNDED_FEATURE
+MAJOR_FEATURE
+EXISTING_PRODUCT_EVOLUTION
+NEW_PRODUCT
+HIGH_RISK_CHANGE
 ```
 
 `variant_policy` may be `explicit`, `provider_default` or `highest_supported`.
 
-When `variant_policy` is `highest_supported`, a local setup process must resolve and write a concrete `variant` before installation. OpenCode variants are model-specific; the installer and runners never guess `max`, `thinking`, `high` or `xhigh`.
+When `variant_policy` is `highest_supported`, local setup must resolve and write a concrete supported `variant` before installation. Variants are model-specific; the installer and runners never guess a reasoning level.
 
 An empty `only_on` means any failure already allowed by the global policy. A non-empty array narrows the candidate.
 
@@ -77,30 +122,13 @@ An empty `only_on` means any failure already allowed by the global policy. A non
 
 `MODEL_UNAVAILABLE_ON_ALL_CONFIGURED_PROVIDERS` is a derived condition used by routes that permit another model family only after every configured provider for the current family has failed.
 
-Authentication, invalid configuration, context overflow, permission denial, safety refusal, malformed packets, validation defects, low-quality output and unclassified errors do not trigger automatic fallback.
+Authentication failure, invalid configuration, context overflow, permission denial, safety refusal, malformed packets, plan or validation defects, low-quality output and unclassified errors do not trigger automatic fallback.
 
 ## Provider versus model failure
 
 Provider outage, rate limit and plan quota exhaustion prefer the same model family through another provider.
 
 Model retirement or global family unavailability skips every candidate in that family and moves to an eligible different family.
-
-## Transactional Architect recovery
-
-Before an Architect attempt, the runner records:
-
-```text
-selected route
-model and variant
-model family
-command and arguments hash
-pre-attempt .ai tree hash
-source/project-documentation Git state
-```
-
-On eligible failure it rejects partial output, restores `.ai/**`, verifies the restored hash and confirms source/project-documentation state is unchanged. Any mismatch returns `ARCHITECT_FAILOVER_BLOCKED` and requires human recovery.
-
-Failed output remains only in temporary logs and never becomes governance evidence.
 
 ## Reviewer independence
 
@@ -114,16 +142,14 @@ allow_degraded_independence: false
 
 A Final Reviewer candidate marked `requires_role_rebalance` can run only after conflicting reviewer roles are restarted from their original frozen packets using independent model families.
 
-## Personal continuous-coding target
+## Whitelabel configuration
 
-After exact local model and variant resolution:
+The tracked example uses synthetic provider and model identifiers solely to demonstrate schema shape. Before installation:
 
-| Role | Primary family | Preferred fallback strategy |
-|---|---|---|
-| Architect / Build / Plan | MiniMax M3 | MiniMax M3 on OpenCode Go, then Qwen Max through the transactional runner |
-| Executor | MiMo V2.5 Pro | MiMo through OpenCode Go; Qwen Plus for bounded work; Qwen Max for major/high-risk work |
-| Implementation Reviewer | DeepSeek V4 Pro | same model through Alibaba; Qwen Max only after global DeepSeek unavailability |
-| Architecture Reviewer | GLM-5.2 | same model through Alibaba/OpenCode Go; Qwen Max as different-family fallback |
-| Final Reviewer | GPT-5.6 Sol | Qwen Max through independent providers; GLM only with role rebalance when required |
+1. copy the example to a local file outside version control;
+2. replace every synthetic ID with an exact value from the local OpenCode catalog;
+3. resolve every `highest_supported` policy to a concrete local variant;
+4. keep credentials, subscriptions, quotas and personal routing preferences out of the repository;
+5. install and verify the resolved local profile.
 
-v3.2 activates Architect pre-execution failover and retains v3.1 reviewer/final failover. Executor failover remains disabled until v3.3 implements an isolated safe execution boundary.
+Seven public governance authorities remain unchanged. Hidden aliases and deterministic helpers are implementation transports, not additional decision-making roles. Normal evidence, review, commit and external-action gates remain mandatory after any fallback or patch promotion.
