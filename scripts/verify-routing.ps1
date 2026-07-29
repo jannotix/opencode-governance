@@ -91,8 +91,12 @@ function Verify-RenderedCandidate(
     )) {
         Require-Line $Text $Line $Agent
     }
-    foreach ($Marker in @('PACKET_SHA256','FROZEN_TARGET_SHA','REPORT_COMPLETE')) {
-        if ($Text -notlike "*$Marker*") { throw "$Agent missing route marker: $Marker" }
+    if ($Role -eq 'executor') {
+        foreach ($Marker in @('EXECUTOR_ATTEMPT_ID','PACKET_SHA256','FROZEN_TARGET_SHA','REPORT_COMPLETE')) {
+            if ($Text -notlike "*$Marker*") { throw "$Agent missing Executor route marker: $Marker" }
+        }
+    } elseif ($Text -notlike '*Require matching attempt, packet and frozen-target identifiers plus a complete report.*') {
+        throw "$Agent missing complete-role restart contract."
     }
     if ($Hidden) {
         Require-Line $Text 'mode: subagent' $Agent
@@ -136,7 +140,8 @@ foreach ($Entry in @(
 )) {
     $Name = $Entry[0]
     $Role = $Entry[1]
-    Verify-RenderedCandidate $Name $Role (Get-RoleConfig $Role).primary 0 $false
+    $RoleConfig = Get-RoleConfig $Role
+    Verify-RenderedCandidate $Name $Role $RoleConfig.primary 0 $false
 }
 
 $ArchitectConfig = Get-RoleConfig 'architect'
