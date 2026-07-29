@@ -40,8 +40,8 @@ if ($RoutingConfigPath) {
         throw 'Routing manifest is invalid after core installation.'
     }
     if ([string]$Manifest.schema_version -ne '1.0') { throw 'Routing manifest schema_version must be 1.0.' }
-    $Manifest | Add-Member -MemberType NoteProperty -Name governance_version -Value '3.3.3' -Force
-    $Manifest | Add-Member -MemberType NoteProperty -Name architect_runner_version -Value '3.3.3' -Force
+    $Manifest | Add-Member -MemberType NoteProperty -Name governance_version -Value '3.3.4' -Force
+    $Manifest | Add-Member -MemberType NoteProperty -Name architect_runner_version -Value '3.3.4' -Force
     $Manifest | Add-Member -MemberType NoteProperty -Name managed_tools -Value @(
         $ArchitectRunnerPs,
         $ArchitectRunnerSh,
@@ -61,8 +61,12 @@ WINDOWS_ARCHITECT_RUNNER: $ArchitectRunnerPs
 WINDOWS_ARCHITECT_HOST: pwsh -NoProfile -File
 UNIX_ARCHITECT_RUNNER: $ArchitectRunnerSh
 ACTIVE_CHILD_MARKER: $Marker
+PROJECT_STATE_FINGERPRINT: PROJECT_STATE_FINGERPRINT_V1
+NON_GIT_PROJECTS: NON_GIT_PROJECT_SUPPORTED
 
 The PowerShell runner requires PowerShell 7 or newer and fails before any project-state mutation with ``POWERSHELL_7_REQUIRED`` under Windows PowerShell 5.1. Invoke it through ``pwsh -NoProfile -File``.
+
+Before and after every routed attempt, both runners fingerprint all project entries outside root ``.ai/**`` and Git metadata. Git projects also bind the fingerprint to HEAD, the Git index and recursive submodule state. Non-Git directories are supported with the same content-integrity contract. Any source or project-documentation change returns ``PROJECT_STATE_CHANGED`` and blocks fallback.
 
 When the marker is absent, do not write ``.ai/**``; return ``ARCHITECT_RUNNER_REQUIRED`` with the exact installed runner path and command. Never invent ``architect-attempt`` at another path. Never invoke the Architect runner from inside the active OpenCode process. A routed child invocation containing the marker continues normally.
 "@
@@ -99,6 +103,8 @@ UNIX_RUNNER: $ArchitectRunnerSh
 PROJECT_DIR: <CURRENT_PROJECT_ROOT>
 ``````
 
+The external runner supports Git and non-Git project directories. It fingerprints all source and project-documentation content outside root ``.ai/**`` before and after each attempt and returns ``PROJECT_STATE_CHANGED`` on any delta.
+
 Do not create, edit or delete ``.ai/**``. Do not invoke the runner from inside this OpenCode process. Tell the owner to run ``pwsh -NoProfile -File "$ArchitectRunnerPs"`` with the current project root and ``-Command $Command`` on Windows, or the installed Unix runner with ``--command $Command``. Do not invent another runner path.
 
 When the exact marker is present, this is already a transactional child attempt; continue with the command contract below.
@@ -112,5 +118,5 @@ When the exact marker is present, this is already a transactional child attempt;
     & (Join-Path $PSScriptRoot 'verify-routing.ps1') -ConfigDir $ConfigDir
 }
 
-Write-Host 'Installed OpenCode Governance v3.3.3 — PowerShell Host & Verifier Reliability.'
-Write-Host 'Architect PowerShell failover now requires pwsh 7+ explicitly; PowerShell child-script failures propagate through exceptions rather than stale native exit codes.'
+Write-Host 'Installed OpenCode Governance v3.3.4 — Project State Integrity.'
+Write-Host 'Architect failover now fingerprints project contents and supports both Git and non-Git workspaces.'

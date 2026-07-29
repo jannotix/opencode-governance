@@ -19,8 +19,8 @@ PY
 if [[ "$version" == "3.3.0" ]]; then
   exec "$SCRIPT_DIR/verify-routing-core.sh" "$CONFIG_DIR"
 fi
-if [[ "$version" != "3.3.2" && "$version" != "3.3.3" ]]; then
-  echo "Routing manifest governance_version must be 3.3.0, 3.3.2 or 3.3.3, got: $version" >&2
+if [[ "$version" != "3.3.2" && "$version" != "3.3.3" && "$version" != "3.3.4" ]]; then
+  echo "Routing manifest governance_version must be 3.3.0, 3.3.2, 3.3.3 or 3.3.4, got: $version" >&2
   exit 1
 fi
 
@@ -36,18 +36,27 @@ for path in expected:
     if not path.is_file(): raise SystemExit(f'Missing managed tool: {path}')
 marker='[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]'
 policy=['ARCHITECT_RUNNER_INTEGRATION','ARCHITECT_RUNNER_REQUIRED',marker,str(expected[0]),str(expected[1]),'Never invoke the Architect runner from inside the active OpenCode process.']
-if version=='3.3.3': policy += ['POWERSHELL_7_REQUIRED','pwsh -NoProfile -File']
+if version in {'3.3.3','3.3.4'}: policy += ['POWERSHELL_7_REQUIRED','pwsh -NoProfile -File']
+if version=='3.3.4': policy += ['PROJECT_STATE_FINGERPRINT_V1','NON_GIT_PROJECT_SUPPORTED','PROJECT_STATE_CHANGED']
 for name in ['architect','build','plan']:
     text=(root/'agents'/f'{name}.md').read_text(encoding='utf-8')
     for value in policy:
         if value not in text: raise SystemExit(f'{name} missing Architect runner marker: {value}')
 gate=['ARCHITECT_RUNNER_ENTRY_GATE','ARCHITECT_RUNNER_REQUIRED',marker,str(expected[0]),str(expected[1])]
-if version=='3.3.3': gate += ['pwsh -NoProfile -File']
+if version in {'3.3.3','3.3.4'}: gate += ['pwsh -NoProfile -File']
+if version=='3.3.4': gate += ['PROJECT_STATE_CHANGED']
 for command in ['ai-init','ai-audit','ai-discover','ai-plan']:
     text=(root/'commands'/f'{command}.md').read_text(encoding='utf-8')
     for value in gate:
         if value not in text: raise SystemExit(f'{command} missing Architect entry gate marker: {value}')
-with tempfile.TemporaryDirectory(prefix='opencode-v333-verify-') as td:
+if version=='3.3.4':
+    ps_text=expected[0].read_text(encoding='utf-8')
+    sh_text=expected[1].read_text(encoding='utf-8')
+    for value in ['PROJECT_STATE_FINGERPRINT_V1','PROJECT_STATE_CHANGED','Get-ProjectStateFingerprint']:
+        if value not in ps_text: raise SystemExit(f'PowerShell Architect runner missing project-state marker: {value}')
+    for value in ['PROJECT_STATE_FINGERPRINT_V1','PROJECT_STATE_CHANGED','project_state_fingerprint']:
+        if value not in sh_text: raise SystemExit(f'Unix Architect runner missing project-state marker: {value}')
+with tempfile.TemporaryDirectory(prefix='opencode-v334-verify-') as td:
     temp=pathlib.Path(td)
     shutil.copytree(root/'agents',temp/'agents')
     (temp/'opencode-governance-tools').mkdir(parents=True)

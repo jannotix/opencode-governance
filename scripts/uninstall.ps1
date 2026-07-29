@@ -7,7 +7,7 @@ if (-not $ConfigDir) {
 $ManifestPath = Join-Path $ConfigDir 'opencode-governance-routing.json'
 if (Test-Path -LiteralPath $ManifestPath -PathType Leaf) {
     try { $Manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json } catch { throw 'Routing manifest is invalid; refusing to remove unknown managed files.' }
-    if ([string]$Manifest.governance_version -in @('3.3.2','3.3.3')) {
+    if ([string]$Manifest.governance_version -in @('3.3.2','3.3.3','3.3.4')) {
         $ToolsDir = Join-Path $ConfigDir 'opencode-governance-tools'
         $Expected = @(
             (Join-Path $ToolsDir 'architect-attempt.ps1'),

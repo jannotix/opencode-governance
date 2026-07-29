@@ -1,0 +1,40 @@
+name: Verify Project State Integrity v3.3.4
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux-project-state:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          show-progress: false
+
+      - name: Validate scripts
+        run: bash -n scripts/run-governed.sh tests/test-project-state-integrity.sh
+
+      - name: Run Unix project-state regressions
+        shell: bash
+        run: bash tests/test-project-state-integrity.sh
+
+  windows-project-state:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          show-progress: false
+
+      - name: Validate PowerShell scripts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          foreach($path in 'scripts/run-governed.ps1','tests/test-project-state-integrity.ps1'){
+            $errors=$null
+            [Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path),[ref]$null,[ref]$errors)|Out-Null
+            if($errors){throw ($errors|Out-String)}
+          }
+
+      - name: Run Windows project-state regressions
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/test-project-state-integrity.ps1

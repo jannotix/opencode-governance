@@ -54,15 +54,55 @@ function Load-Cooldowns(){
 function Save-Cooldowns([hashtable]$Map){$lines=@();foreach($key in ($Map.Keys|Sort-Object)){$lines+="$key`t$($Map[$key])"};[IO.File]::WriteAllLines($StatePath,$lines,(New-Object Text.UTF8Encoding($false)))}
 $Cooldowns=Load-Cooldowns
 
+function Get-TextHash([string]$Text){
+ $bytes=[Text.Encoding]::UTF8.GetBytes($Text);$sha=[Security.Cryptography.SHA256]::Create();try{return ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}
+}
+function Encode-StateField([string]$Value){return [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Value))}
 function Get-FileTreeHash([string]$Path){
  if(-not(Test-Path $Path)){return 'ABSENT'}
  $rows=@();foreach($file in Get-ChildItem $Path -File -Recurse|Sort-Object FullName){$rel=[IO.Path]::GetRelativePath($Path,$file.FullName).Replace('\','/');$hash=(Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant();$rows+="$rel`t$hash"}
- $bytes=[Text.Encoding]::UTF8.GetBytes(($rows -join "`n"));$sha=[Security.Cryptography.SHA256]::Create();try{return ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}
+ return Get-TextHash ($rows -join "`n")
 }
-function Get-SourceState(){
- $git=& git -C $ProjectDir status --porcelain=v1 --untracked-files=all 2>$null
- if($LASTEXITCODE -ne 0){throw 'ProjectDir must be a readable Git repository.'}
- return (($git|Where-Object{$_ -notmatch '^..\s+"?\.ai([\\/]|"?$)'}) -join "`n")
+function Test-GitMetadataAbove([string]$Path){
+ $current=[IO.DirectoryInfo]::new($Path)
+ while($null-ne$current){if(Test-Path -LiteralPath (Join-Path $current.FullName '.git')){return $true};$current=$current.Parent}
+ return $false
+}
+function Get-ProjectTreeHash([string]$Root){
+ $rows=[Collections.Generic.List[string]]::new();$stack=[Collections.Generic.Stack[string]]::new();$stack.Push($Root)
+ while($stack.Count -gt 0){
+  $directory=$stack.Pop()
+  foreach($item in Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop){
+   $rel=[IO.Path]::GetRelativePath($Root,$item.FullName).Replace('\','/')
+   if($item.Name -ieq '.git'){continue}
+   if($rel -ieq '.ai' -or $rel.StartsWith('.ai/',[StringComparison]::OrdinalIgnoreCase)){continue}
+   $pathField=Encode-StateField $rel;$attributes=[int]$item.Attributes;$isLink=($item.Attributes-band[IO.FileAttributes]::ReparsePoint)-ne 0
+   if($isLink){$target=if($null-ne$item.LinkTarget){[string]$item.LinkTarget}else{''};$rows.Add("L|$pathField|$attributes|$(Encode-StateField $target)");continue}
+   if($item.PSIsContainer){$rows.Add("D|$pathField|$attributes");$stack.Push($item.FullName);continue}
+   $hash=(Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant();$rows.Add("F|$pathField|$attributes|$($item.Length)|$hash")
+  }
+ }
+ return Get-TextHash (($rows|Sort-Object)-join"`n")
+}
+function Invoke-GitProbe([string[]]$GitArguments){
+ $output=& git -C $ProjectDir @GitArguments 2>$null;$code=$LASTEXITCODE
+ return [pscustomobject]@{code=$code;text=(($output|ForEach-Object{[string]$_})-join"`n")}
+}
+function Get-ProjectStateFingerprint(){
+ $treeHash=Get-ProjectTreeHash $ProjectDir;$mode='NON_GIT';$head='N/A';$indexHash='N/A';$submoduleHash='N/A'
+ $gitCommand=Get-Command git -ErrorAction SilentlyContinue
+ if($gitCommand){
+  $inside=Invoke-GitProbe @('rev-parse','--is-inside-work-tree')
+  if($inside.code-eq 0 -and $inside.text.Trim()-eq'true'){
+   $mode='GIT';$headProbe=Invoke-GitProbe @('rev-parse','--verify','HEAD');$head=if($headProbe.code-eq 0){$headProbe.text.Trim()}else{'UNBORN'}
+   $indexProbe=Invoke-GitProbe @('rev-parse','--git-path','index');if($indexProbe.code-ne 0){throw 'Unable to resolve Git index for project-state fingerprinting.'}
+   $indexPath=$indexProbe.text.Trim();if(-not[IO.Path]::IsPathRooted($indexPath)){$indexPath=[IO.Path]::GetFullPath((Join-Path $ProjectDir $indexPath))}
+   $indexHash=if(Test-Path -LiteralPath $indexPath -PathType Leaf){(Get-FileHash -LiteralPath $indexPath -Algorithm SHA256).Hash.ToLowerInvariant()}else{'ABSENT'}
+   $submoduleProbe=Invoke-GitProbe @('submodule','status','--recursive');if($submoduleProbe.code-ne 0){throw 'Unable to read recursive submodule state for project-state fingerprinting.'};$submoduleHash=Get-TextHash $submoduleProbe.text
+  }
+ }elseif(Test-GitMetadataAbove $ProjectDir){throw 'Git metadata exists but the git executable is unavailable; project state cannot be fingerprinted safely.'}
+ $manifest="PROJECT_STATE_FINGERPRINT_V1`nMODE=$mode`nTREE=$treeHash`nHEAD=$head`nINDEX=$indexHash`nSUBMODULES=$submoduleHash"
+ return Get-TextHash $manifest
 }
 function Restore-Ai([string]$AiPath,[string]$Backup,[bool]$Existed,[string]$ExpectedHash){
  if(Test-Path $AiPath){Remove-Item $AiPath -Recurse -Force}
@@ -112,7 +152,7 @@ function Candidate-Allowed([object]$Route,[string]$Failure,[string]$FailedFamily
 }
 
 $AiPath=Join-Path $ProjectDir '.ai';$Temp=Join-Path ([IO.Path]::GetTempPath()) ("opencode-governance-"+[guid]::NewGuid().ToString('N'));$Backup=Join-Path $Temp 'ai-snapshot';$Logs=Join-Path $Temp 'logs';New-Item -ItemType Directory -Force -Path $Logs|Out-Null
-$AiExisted=Test-Path $AiPath;if($AiExisted){Copy-Item $AiPath $Backup -Recurse -Force};$AiHash=Get-FileTreeHash $AiPath;$SourceState=Get-SourceState
+$AiExisted=Test-Path $AiPath;if($AiExisted){Copy-Item $AiPath $Backup -Recurse -Force};$AiHash=Get-FileTreeHash $AiPath;$ProjectState=Get-ProjectStateFingerprint
 $Attempted=@{};$Failure=$null;$FailedFamily=$null;$attempt=0
 try{
  while($true){
@@ -123,8 +163,8 @@ try{
   $route=$ordered[0];$Attempted[$route.route]=$true;$attempt++
   Write-Host "ARCHITECT_ROUTE_ATTEMPT $attempt $($route.route) $($route.candidate.model)"
   $result=Invoke-Route $route $attempt $Logs
-  $afterSource=Get-SourceState
-  if($afterSource -ne $SourceState){throw 'ARCHITECT_FAILOVER_BLOCKED: source or project-documentation state changed during a pre-execution command. HUMAN_RECOVERY_REQUIRED'}
+  $afterState=Get-ProjectStateFingerprint
+  if($afterState -ne $ProjectState){throw 'ARCHITECT_FAILOVER_BLOCKED: PROJECT_STATE_CHANGED: source or project-documentation content changed during a pre-execution command. HUMAN_RECOVERY_REQUIRED'}
   if($result.exit -eq 0 -and -not $result.timed_out){
    $Cooldowns.Remove([string]$route.candidate.model);Save-Cooldowns $Cooldowns
    Write-Host "ARCHITECT_FAILOVER_COMPLETE route=$($route.route) attempts=$attempt ai_tree=$(Get-FileTreeHash $AiPath)"
@@ -138,7 +178,7 @@ try{
   Restore-Ai $AiPath $Backup $AiExisted $AiHash
  }
 }catch{
- try{if((Get-SourceState)-eq $SourceState){Restore-Ai $AiPath $Backup $AiExisted $AiHash}}catch{}
+ try{if((Get-ProjectStateFingerprint)-eq $ProjectState){Restore-Ai $AiPath $Backup $AiExisted $AiHash}}catch{}
  Write-Error $_
  Write-Host "ATTEMPT_LOGS $Logs"
  exit 1

@@ -18,7 +18,7 @@ if [[ -f "$MANIFEST" ]]; then
 import json,pathlib,sys
 root=pathlib.Path(sys.argv[1]); manifest=root/'opencode-governance-routing.json'
 data=json.loads(manifest.read_text(encoding='utf-8-sig'))
-if data.get('governance_version') in {'3.3.2','3.3.3'}:
+if data.get('governance_version') in {'3.3.2','3.3.3','3.3.4'}:
     version=data.get('governance_version')
     tools=root/'opencode-governance-tools'
     allowed={tools/name for name in ['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh']}

@@ -42,8 +42,8 @@ data = json.loads(manifest_path.read_text(encoding='utf-8-sig'))
 if data.get('schema_version') != '1.0':
     raise SystemExit('Routing manifest schema_version must be 1.0.')
 
-data['governance_version'] = '3.3.3'
-data['architect_runner_version'] = '3.3.3'
+data['governance_version'] = '3.3.4'
+data['architect_runner_version'] = '3.3.4'
 data['managed_tools'] = [
     str(tools / 'architect-attempt.ps1'),
     str(tools / 'architect-attempt.sh'),
@@ -55,7 +55,25 @@ manifest_path.write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
 marker = '[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]'
 ps_runner = str(tools / 'architect-attempt.ps1')
 sh_runner = str(tools / 'architect-attempt.sh')
-policy = f'''\n\n## ARCHITECT_RUNNER_INTEGRATION\n\nArchitect pre-execution commands `ai-init|ai-audit|ai-discover|ai-plan` require the installed transactional runner.\n\nWINDOWS_ARCHITECT_RUNNER: {ps_runner}\nWINDOWS_ARCHITECT_HOST: pwsh -NoProfile -File\nUNIX_ARCHITECT_RUNNER: {sh_runner}\nACTIVE_CHILD_MARKER: {marker}\n\nThe PowerShell runner requires PowerShell 7 or newer and fails before any project-state mutation with `POWERSHELL_7_REQUIRED` under Windows PowerShell 5.1. Invoke it through `pwsh -NoProfile -File`.\n\nWhen the marker is absent, do not write `.ai/**`; return `ARCHITECT_RUNNER_REQUIRED` with the exact installed runner path and command. Never invent `architect-attempt` at another path. Never invoke the Architect runner from inside the active OpenCode process. A routed child invocation containing the marker continues normally.\n'''
+policy = f'''
+
+## ARCHITECT_RUNNER_INTEGRATION
+
+Architect pre-execution commands `ai-init|ai-audit|ai-discover|ai-plan` require the installed transactional runner.
+
+WINDOWS_ARCHITECT_RUNNER: {ps_runner}
+WINDOWS_ARCHITECT_HOST: pwsh -NoProfile -File
+UNIX_ARCHITECT_RUNNER: {sh_runner}
+ACTIVE_CHILD_MARKER: {marker}
+PROJECT_STATE_FINGERPRINT: PROJECT_STATE_FINGERPRINT_V1
+NON_GIT_PROJECTS: NON_GIT_PROJECT_SUPPORTED
+
+The PowerShell runner requires PowerShell 7 or newer and fails before any project-state mutation with `POWERSHELL_7_REQUIRED` under Windows PowerShell 5.1. Invoke it through `pwsh -NoProfile -File`.
+
+Before and after every routed attempt, both runners fingerprint all project entries outside root `.ai/**` and Git metadata. Git projects also bind the fingerprint to HEAD, the Git index and recursive submodule state. Non-Git directories are supported with the same content-integrity contract. Any source or project-documentation change returns `PROJECT_STATE_CHANGED` and blocks fallback.
+
+When the marker is absent, do not write `.ai/**`; return `ARCHITECT_RUNNER_REQUIRED` with the exact installed runner path and command. Never invent `architect-attempt` at another path. Never invoke the Architect runner from inside the active OpenCode process. A routed child invocation containing the marker continues normally.
+'''
 for name in ['architect', 'build', 'plan']:
     path = root / 'agents' / f'{name}.md'
     text = path.read_text(encoding='utf-8')
@@ -70,7 +88,29 @@ for command in ['ai-init', 'ai-audit', 'ai-discover', 'ai-plan']:
     path = root / 'commands' / f'{command}.md'
     text = path.read_text(encoding='utf-8')
     text = re.sub(r'\n## ARCHITECT_RUNNER_ENTRY_GATE\n.*?(?=\n## |\Z)', '', text, count=1, flags=re.S)
-    gate = f'''\n\n## ARCHITECT_RUNNER_ENTRY_GATE\n\nBefore any `.ai/**` write, require the exact invocation marker `{marker}` in the command arguments.\n\nWhen the marker is absent, stop immediately with:\n\n```text\nARCHITECT_RUNNER_REQUIRED\nCOMMAND: {command}\nWINDOWS_HOST: pwsh -NoProfile -File\nWINDOWS_RUNNER: {ps_runner}\nUNIX_RUNNER: {sh_runner}\nPROJECT_DIR: <CURRENT_PROJECT_ROOT>\n```\n\nDo not create, edit or delete `.ai/**`. Do not invoke the runner from inside this OpenCode process. Tell the owner to run `pwsh -NoProfile -File "{ps_runner}"` with the current project root and `-Command {command}` on Windows, or the installed Unix runner with `--command {command}`. Do not invent another runner path.\n\nWhen the exact marker is present, this is already a transactional child attempt; continue with the command contract below.\n'''
+    gate = f'''
+
+## ARCHITECT_RUNNER_ENTRY_GATE
+
+Before any `.ai/**` write, require the exact invocation marker `{marker}` in the command arguments.
+
+When the marker is absent, stop immediately with:
+
+```text
+ARCHITECT_RUNNER_REQUIRED
+COMMAND: {command}
+WINDOWS_HOST: pwsh -NoProfile -File
+WINDOWS_RUNNER: {ps_runner}
+UNIX_RUNNER: {sh_runner}
+PROJECT_DIR: <CURRENT_PROJECT_ROOT>
+```
+
+The external runner supports Git and non-Git project directories. It fingerprints all source and project-documentation content outside root `.ai/**` before and after each attempt and returns `PROJECT_STATE_CHANGED` on any delta.
+
+Do not create, edit or delete `.ai/**`. Do not invoke the runner from inside this OpenCode process. Tell the owner to run `pwsh -NoProfile -File "{ps_runner}"` with the current project root and `-Command {command}` on Windows, or the installed Unix runner with `--command {command}`. Do not invent another runner path.
+
+When the exact marker is present, this is already a transactional child attempt; continue with the command contract below.
+'''
     match = re.match(r'\A(---\r?\n.*?\r?\n---\r?\n)', text, flags=re.S)
     if not match:
         raise SystemExit(f'Command front matter not found: {path}')
@@ -81,5 +121,5 @@ PY
   "$SCRIPT_DIR/verify-routing.sh" "$CONFIG_DIR"
 fi
 
-echo "Installed OpenCode Governance v3.3.3 — PowerShell Host & Verifier Reliability."
-echo "Architect PowerShell failover requires pwsh 7+ explicitly; Unix failover behavior is unchanged."
+echo "Installed OpenCode Governance v3.3.4 — Project State Integrity."
+echo "Architect failover now fingerprints project contents and supports both Git and non-Git workspaces."

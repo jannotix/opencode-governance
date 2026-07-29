@@ -2,7 +2,7 @@
 set -euo pipefail
 export OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1
 python3 - "$@" <<'PY'
-import argparse,hashlib,json,os,pathlib,re,shutil,subprocess,sys,tempfile,time
+import argparse,base64,hashlib,json,os,pathlib,re,shutil,stat,subprocess,sys,tempfile,time
 p=argparse.ArgumentParser()
 p.add_argument('--project-dir',required=True)
 p.add_argument('--command',required=True,choices=['ai-init','ai-audit','ai-discover','ai-plan'])
@@ -59,10 +59,55 @@ def tree_hash(path):
  rows=[]
  for f in sorted(x for x in path.rglob('*') if x.is_file()):rows.append(f'{f.relative_to(path).as_posix()}\t{hashlib.sha256(f.read_bytes()).hexdigest()}')
  return hashlib.sha256('\n'.join(rows).encode()).hexdigest()
-def source_state():
- r=subprocess.run(['git','-C',str(project),'status','--porcelain=v1','--untracked-files=all'],capture_output=True,text=True)
- if r.returncode:raise RuntimeError('Project directory must be a readable Git repository.')
- return '\n'.join(x for x in r.stdout.splitlines() if not re.match(r'^..\s+"?\.ai([\\/]|"?$)',x))
+def field(value):return base64.b64encode(str(value).encode('utf-8','surrogateescape')).decode('ascii')
+def hash_file(path):
+ h=hashlib.sha256()
+ with open(path,'rb') as stream:
+  while True:
+   chunk=stream.read(1024*1024)
+   if not chunk:break
+   h.update(chunk)
+ return h.hexdigest()
+def project_tree_hash(root):
+ rows=[];stack=[root]
+ while stack:
+  directory=stack.pop()
+  with os.scandir(directory) as entries:
+   for entry in entries:
+    path=pathlib.Path(entry.path);rel=path.relative_to(root)
+    if entry.name=='.git':continue
+    if rel.parts and rel.parts[0]=='.ai':continue
+    st=os.lstat(path);mode=stat.S_IMODE(st.st_mode);rel_field=field(rel.as_posix())
+    if stat.S_ISLNK(st.st_mode):rows.append(f'L|{rel_field}|{mode}|{field(os.readlink(path))}')
+    elif stat.S_ISDIR(st.st_mode):rows.append(f'D|{rel_field}|{mode}');stack.append(path)
+    elif stat.S_ISREG(st.st_mode):rows.append(f'F|{rel_field}|{mode}|{st.st_size}|{hash_file(path)}')
+    else:rows.append(f'O|{rel_field}|{mode}|{st.st_mode}')
+ return hashlib.sha256('\n'.join(sorted(rows)).encode()).hexdigest()
+def git_metadata_above(path):
+ current=path
+ while True:
+  if (current/'.git').exists() or (current/'.git').is_symlink():return True
+  if current.parent==current:return False
+  current=current.parent
+def git_probe(args):return subprocess.run(['git','-C',str(project),*args],capture_output=True)
+def project_state_fingerprint():
+ tree=project_tree_hash(project);mode='NON_GIT';head='N/A';index_hash='N/A';submodules='N/A'
+ git=shutil.which('git')
+ if git:
+  inside=git_probe(['rev-parse','--is-inside-work-tree'])
+  if inside.returncode==0 and inside.stdout.strip()==b'true':
+   mode='GIT';head_probe=git_probe(['rev-parse','--verify','HEAD']);head=head_probe.stdout.decode('utf-8','surrogateescape').strip() if head_probe.returncode==0 else 'UNBORN'
+   index_probe=git_probe(['rev-parse','--git-path','index'])
+   if index_probe.returncode:raise RuntimeError('Unable to resolve Git index for project-state fingerprinting.')
+   index_path=pathlib.Path(index_probe.stdout.decode('utf-8','surrogateescape').strip())
+   if not index_path.is_absolute():index_path=(project/index_path).resolve()
+   index_hash=hash_file(index_path) if index_path.is_file() else 'ABSENT'
+   submodule_probe=git_probe(['submodule','status','--recursive'])
+   if submodule_probe.returncode:raise RuntimeError('Unable to read recursive submodule state for project-state fingerprinting.')
+   submodules=hashlib.sha256(submodule_probe.stdout).hexdigest()
+ elif git_metadata_above(project):raise RuntimeError('Git metadata exists but the git executable is unavailable; project state cannot be fingerprinted safely.')
+ manifest=f'PROJECT_STATE_FINGERPRINT_V1\nMODE={mode}\nTREE={tree}\nHEAD={head}\nINDEX={index_hash}\nSUBMODULES={submodules}'
+ return hashlib.sha256(manifest.encode()).hexdigest()
 def restore_ai(ai,backup,existed,expected):
  if ai.exists():shutil.rmtree(ai)
  if existed:shutil.copytree(backup,ai)
@@ -88,7 +133,7 @@ def allowed(route,failure,failed_family,attempted):
 ai=project/'.ai';tmp=pathlib.Path(tempfile.mkdtemp(prefix='opencode-governance-'));backup=tmp/'ai-snapshot';logs=tmp/'logs';logs.mkdir()
 existed=ai.exists()
 if existed:shutil.copytree(ai,backup)
-ai_hash=tree_hash(ai);src_state=source_state();attempted=set();failure=None;failed_family=None;attempt=0
+ai_hash=tree_hash(ai);project_state=project_state_fingerprint();attempted=set();failure=None;failed_family=None;attempt=0
 try:
  while True:
   candidates=[r for r in routes if allowed(r,failure or 'PROVIDER_UNAVAILABLE',failed_family or '',attempted)]
@@ -107,7 +152,7 @@ try:
    class R:pass
    r=R();r.returncode=124;r.stdout=e.stdout or '';r.stderr=e.stderr or ''
   (logs/f'attempt-{attempt}.stdout.log').write_text(r.stdout or '',encoding='utf-8');(logs/f'attempt-{attempt}.stderr.log').write_text(r.stderr or '',encoding='utf-8')
-  if source_state()!=src_state:raise RuntimeError('ARCHITECT_FAILOVER_BLOCKED: source or project-documentation state changed during a pre-execution command. HUMAN_RECOVERY_REQUIRED')
+  if project_state_fingerprint()!=project_state:raise RuntimeError('ARCHITECT_FAILOVER_BLOCKED: PROJECT_STATE_CHANGED: source or project-documentation content changed during a pre-execution command. HUMAN_RECOVERY_REQUIRED')
   if r.returncode==0 and not timed:
    cooldowns.pop(c['model'],None);save_cooldowns(cooldowns);print(f"ARCHITECT_FAILOVER_COMPLETE route={route['route']} attempts={attempt} ai_tree={tree_hash(ai)}")
    if not a.keep_attempt_logs:shutil.rmtree(tmp)
@@ -118,7 +163,7 @@ try:
 except SystemExit:raise
 except Exception as e:
  try:
-  if source_state()==src_state:restore_ai(ai,backup,existed,ai_hash)
+  if project_state_fingerprint()==project_state:restore_ai(ai,backup,existed,ai_hash)
  except Exception:pass
  print(str(e),file=sys.stderr);print(f'ATTEMPT_LOGS {logs}');raise SystemExit(1)
 PY
