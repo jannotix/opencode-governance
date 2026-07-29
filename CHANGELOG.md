@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.3.0 - 2026-07-29
+
+- Added optional work-class-aware Executor failover with hidden, locally configured routing aliases while preserving exactly seven public governance agents.
+- Added isolated Executor attempts in detached linked Git worktrees rooted at the same frozen target and governed by the same canonical execution packet.
+- Added deterministic `select`, `prepare`, `finalize`, `promote` and `discard` helpers for Windows and Unix, installed and removed conservatively from the local OpenCode configuration.
+- Added complete-role restart after eligible provider/model failures; failed partial output and source changes never enter the real worktree.
+- Added binary-safe patch finalization, matching complete-report validation, frozen-target checks, dirty-path fingerprinting and fail-closed overlap or concurrent-change detection before promotion.
+- Added Executor fallback filtering by `PATCH`, `BOUNDED_FEATURE`, `MAJOR_FEATURE`, `EXISTING_PRODUCT_EVOLUTION`, `NEW_PRODUCT` and `HIGH_RISK_CHANGE`.
+- Preserved Evidence-Driven Verification, Operational Assurance, independent dual review, Final Reviewer adjudication, commit authorization and no automatic push, merge or deployment.
+- Kept the repository fully whitelabel: tracked templates, examples and fixtures use synthetic identifiers only; real providers, models, variants, subscriptions and routing preferences remain local untracked configuration.
+- Added Windows and Linux CI coverage for installation, uninstall, routing selection, isolated discard, binary promotion, forbidden-path rejection, overlap blocking and same-status dirty-file drift detection.
+
 ## 3.2.0 - 2026-07-28
 
 - Added real top-level Architect failover for `/ai-init`, `/ai-audit`, `/ai-discover` and `/ai-plan` through cross-platform transactional `run-governed` runners.
