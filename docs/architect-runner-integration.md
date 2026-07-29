@@ -1,6 +1,6 @@
 # Architect Runner Integration
 
-OpenCode Governance 3.3.2 fixes the `ARCHITECT_RUNNER_UNAVAILABLE` installation defect for Architect pre-execution failover.
+OpenCode Governance 3.3.2 fixed the `ARCHITECT_RUNNER_UNAVAILABLE` installation defect for Architect pre-execution failover. Version 3.3.3 adds an explicit PowerShell host contract and reliable PowerShell child-script result propagation.
 
 ## Scope
 
@@ -28,7 +28,23 @@ opencode-governance-tools/executor-attempt.ps1
 opencode-governance-tools/executor-attempt.sh
 ```
 
-The routing manifest records `governance_version: 3.3.2`, `architect_runner_version: 3.3.2` and the exact four managed tool paths.
+The routing manifest records `governance_version: 3.3.3`, `architect_runner_version: 3.3.3` and the exact four managed tool paths.
+
+## PowerShell host contract
+
+The PowerShell Architect runner requires PowerShell 7 or newer because its process-isolation implementation relies on modern .NET process APIs. Run it through:
+
+```text
+pwsh -NoProfile -File
+```
+
+Windows PowerShell 5.1 is rejected before the runner resolves project state, creates temporary snapshots or modifies `.ai/**`. The deterministic error is:
+
+```text
+POWERSHELL_7_REQUIRED
+```
+
+The Unix runner remains available independently through `architect-attempt.sh`.
 
 ## Direct command gate
 
@@ -39,6 +55,7 @@ The deterministic stop result is:
 ```text
 ARCHITECT_RUNNER_REQUIRED
 COMMAND: <ai-init|ai-audit|ai-discover|ai-plan>
+WINDOWS_HOST: pwsh -NoProfile -File
 WINDOWS_RUNNER: <exact-installed-path>
 UNIX_RUNNER: <exact-installed-path>
 PROJECT_DIR: <CURRENT_PROJECT_ROOT>
@@ -78,7 +95,8 @@ Any source/project-documentation change, restoration mismatch, ineligible failur
 ## Windows example
 
 ```powershell
-& "$env:OPENCODE_CONFIG_DIR\opencode-governance-tools\architect-attempt.ps1" `
+pwsh -NoProfile -File `
+  "$env:OPENCODE_CONFIG_DIR\opencode-governance-tools\architect-attempt.ps1" `
   -ProjectDir "C:\path\to\project" `
   -Command ai-init `
   -Arguments "Initialize and validate the project baseline." `
@@ -98,10 +116,10 @@ Any source/project-documentation change, restoration mismatch, ineligible failur
 bash ./scripts/verify-routing.sh <config-dir>
 ```
 
-The routing verifier checks exact managed tool paths, installed files, Architect/Build/Plan policy markers, command entry gates, hidden-route consistency and the preserved Executor routing contract.
+The routing verifier checks exact managed tool paths, installed files, Architect/Build/Plan policy markers, command entry gates, hidden-route consistency and the preserved Executor routing contract. PowerShell wrappers rely on terminating errors from PowerShell child scripts and never infer their outcome from a pre-existing native `$LASTEXITCODE` value.
 
 ## Distinguishing workspace errors
 
-`ARCHITECT_RUNNER_UNAVAILABLE` or `ARCHITECT_RUNNER_REQUIRED` concerns Architect runner installation or invocation.
+`ARCHITECT_RUNNER_UNAVAILABLE`, `ARCHITECT_RUNNER_REQUIRED` or `POWERSHELL_7_REQUIRED` concern Architect runner installation or invocation.
 
-`DISCOVERY_BLOCKED_WRONG_WORKSPACE` is a different, correct fail-closed condition: a prompt intended for the Governance repository was executed inside an application repository, or vice versa. Version 3.3.2 does not weaken workspace validation.
+`DISCOVERY_BLOCKED_WRONG_WORKSPACE` is a different, correct fail-closed condition: a prompt intended for the Governance repository was executed inside an application repository, or vice versa. Version 3.3.3 does not weaken workspace validation.
