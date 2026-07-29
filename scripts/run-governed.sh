@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1
 python3 - "$@" <<'PY'
-import argparse,datetime,hashlib,json,os,pathlib,re,shutil,subprocess,sys,tempfile,time,uuid
+import argparse,hashlib,json,os,pathlib,re,shutil,subprocess,sys,tempfile,time
 p=argparse.ArgumentParser()
 p.add_argument('--project-dir',required=True)
 p.add_argument('--command',required=True,choices=['ai-init','ai-audit','ai-discover','ai-plan'])
@@ -13,6 +14,8 @@ p.add_argument('--opencode-prefix-argument',action='append',default=[])
 p.add_argument('--timeout-seconds',type=int,default=3600)
 p.add_argument('--keep-attempt-logs',action='store_true')
 a=p.parse_args(sys.argv[1:])
+marker='[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]'
+if marker not in a.arguments:a.arguments=(a.arguments+'\n\n'+marker).strip()
 project=pathlib.Path(a.project_dir).resolve()
 if not project.is_dir():raise SystemExit('Project directory does not exist.')
 config=pathlib.Path(a.config_dir or os.environ.get('OPENCODE_CONFIG_DIR') or pathlib.Path.home()/'.config'/'opencode')
@@ -97,7 +100,8 @@ try:
   if c.get('variant'):cmd+=['--variant',c['variant']]
   cmd+=['--command',a.command,'--format','json',a.arguments]
   timed=False
-  try:r=subprocess.run(cmd,capture_output=True,text=True,timeout=a.timeout_seconds)
+  env=dict(os.environ);env['OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE']='1'
+  try:r=subprocess.run(cmd,capture_output=True,text=True,timeout=a.timeout_seconds,env=env)
   except subprocess.TimeoutExpired as e:
    timed=True
    class R:pass
