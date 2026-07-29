@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.3.4 - 2026-07-30
+
+- Replaced Architect runner `git status --porcelain` equality with `PROJECT_STATE_FINGERPRINT_V1`, a content-aware project manifest that detects changes to files that were already dirty, staged or untracked.
+- Added path, entry type, mode/attributes, length, SHA-256 and symlink-target fingerprinting for every project entry outside root `.ai/**`; Git projects additionally bind the state to HEAD, the index and recursive submodule state.
+- Added fail-closed `PROJECT_STATE_CHANGED` handling before accepting either failed or successful routed attempts, preventing source or project-documentation mutations from escaping through unchanged Git status classifications.
+- Added Architect failover support for non-Git directories while preserving the same `.ai/**` rollback and project-content immutability contract.
+- Added Windows and Linux regression coverage for dirty tracked content, existing untracked content, staged replacement, safe non-Git retry and non-Git source mutation.
+- Preserved every provider/model route, variant, hidden alias, Executor work class, reviewer-independence rule, Local Configuration Durability and no-push/no-deploy contract.
+
 ## 3.3.3 - 2026-07-29
 
 - Added an explicit PowerShell 7+ host contract for `architect-attempt.ps1`; Windows PowerShell 5.1 now stops before project inspection or `.ai/**` mutation with `POWERSHELL_7_REQUIRED`.
