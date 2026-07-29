@@ -41,7 +41,9 @@ ai-discover
 ai-plan
 ```
 
-The runner starts a fresh `opencode run` process for each route, snapshots the complete `.ai/**` tree outside the project and restores it byte-for-byte before an eligible fallback. It also verifies that application source and governed project-documentation state did not change.
+The runner starts a fresh `opencode run` process for each route, snapshots the complete `.ai/**` tree outside the project and restores it byte-for-byte before an eligible fallback. Version 3.3.4 uses `PROJECT_STATE_FINGERPRINT_V1` before and after every attempt to verify the complete project tree outside root `.ai/**`, including paths, entry types, mode/attributes, lengths, SHA-256 digests and symlink targets. Git workspaces additionally bind HEAD, the index and recursive submodule state; non-Git directories use the same full-tree integrity check without requiring repository initialization.
+
+Any source or governed project-documentation mutation returns `PROJECT_STATE_CHANGED` and blocks fallback, even when the changed file was already dirty, staged or untracked and `git status` would remain textually identical. The same block applies when a nominally successful child attempt changes protected project content.
 
 `ai-workflow`, `ai-execute`, `ai-review` and `ai-release` are intentionally excluded from top-level automatic restart because an interrupted workflow may already have crossed an implementation or review side-effect boundary.
 
@@ -122,7 +124,7 @@ An empty `only_on` means any failure already allowed by the global policy. A non
 
 `MODEL_UNAVAILABLE_ON_ALL_CONFIGURED_PROVIDERS` is a derived condition used by routes that permit another model family only after every configured provider for the current family has failed.
 
-Authentication failure, invalid configuration, context overflow, permission denial, safety refusal, malformed packets, plan or validation defects, low-quality output and unclassified errors do not trigger automatic fallback.
+Authentication failure, invalid configuration, context overflow, permission denial, safety refusal, malformed packets, plan or validation defects, low-quality output and unclassified errors do not trigger automatic fallback. `PROJECT_STATE_CHANGED` is also never eligible: it is an integrity violation that requires human recovery.
 
 ## Provider versus model failure
 
