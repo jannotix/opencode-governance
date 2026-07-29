@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.3.1 - 2026-07-29
+
+- Added Windows-first local configuration durability tooling for owner-triggered OpenCode desktop application updates.
+- Added external configuration snapshots with non-secret manifests containing normalized relative paths, file lengths and SHA-256 hashes only.
+- Added exact drift detection for added, removed and changed files across the complete protected configuration tree.
+- Added fail-closed path validation that rejects overlapping configuration/durability roots and reparse points.
+- Added an explicit safe-update wrapper that gates running OpenCode processes, executes only an owner-supplied updater command and verifies configuration after the updater exits.
+- Added quarantine snapshots and automatic pre-update restoration when an updater changes configuration, including after updater failure.
+- Added user-scoped `OPENCODE_CONFIG_DIR` persistence without hardcoding personal paths in the repository.
+- Added Windows CI coverage for snapshot, verification, restore, excluded recovery directories, secret-safe manifests, update drift recovery and failed-updater recovery.
+- Preserved all v3.3 Executor isolation, routing, review, commit and external-action contracts; no provider/model configuration or credential is tracked.
+
 ## 3.3.0 - 2026-07-29
 
 - Added optional work-class-aware Executor failover with hidden, locally configured routing aliases while preserving exactly seven public governance agents.

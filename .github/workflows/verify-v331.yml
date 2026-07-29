@@ -1,0 +1,179 @@
+name: Verify Local Configuration Durability v3.3.1
+on:
+  push:
+  pull_request:
+
+jobs:
+  windows-durability:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          show-progress: false
+
+      - name: Validate release metadata and PowerShell syntax
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((Get-Content VERSION -Raw).Trim() -ne '3.3.1') { throw 'VERSION must be 3.3.1' }
+          if ((Get-Content README.md -Raw) -notmatch '3\.3\.1 — Local Configuration Durability') { throw 'README release marker missing' }
+          if ((Get-Content CHANGELOG.md -Raw) -notmatch '(?m)^## 3\.3\.1 - 2026-07-29\r?$') { throw 'CHANGELOG 3.3.1 entry missing' }
+          foreach ($path in 'scripts/config-durability.ps1','scripts/update-opencode-safely.ps1') {
+            $tokens = $null
+            $errors = $null
+            [Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count) { throw "$path parse failed: $($errors -join '; ')" }
+          }
+
+      - name: Verify snapshot, drift, restore and secret-safe manifest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 'durability-engine'
+          $config = Join-Path $root 'config'
+          $store = Join-Path $root 'store'
+          $external = Join-Path $root 'external.txt'
+          New-Item -ItemType Directory -Force -Path (Join-Path $config 'agents'),(Join-Path $config 'commands'),(Join-Path $config 'backups') | Out-Null
+          '{"default_agent":"architect"}' | Set-Content -NoNewline (Join-Path $config 'opencode.jsonc')
+          'agent-secret-DO-NOT-LOG' | Set-Content -NoNewline (Join-Path $config 'agents/architect.md')
+          'command' | Set-Content -NoNewline (Join-Path $config 'commands/ai-plan.md')
+          'excluded' | Set-Content -NoNewline (Join-Path $config 'backups/old.txt')
+          'outside' | Set-Content -NoNewline $external
+
+          $snapshot = ./scripts/config-durability.ps1 -Action Snapshot -ConfigDir $config -DurabilityRoot $store -PassThru
+          if (-not $snapshot.snapshot_id) { throw 'Snapshot ID missing' }
+          $manifestPath = Join-Path $store "snapshots/$($snapshot.snapshot_id)/manifest.json"
+          $manifestRaw = Get-Content $manifestPath -Raw
+          if ($manifestRaw -match 'DO-NOT-LOG') { throw 'Manifest leaked file content' }
+          if ($manifestRaw -match '(?i)backups[/\\]old\.txt') { throw 'Excluded backups directory was captured' }
+
+          $clean = ./scripts/config-durability.ps1 -Action Verify -ConfigDir $config -DurabilityRoot $store -SnapshotId $snapshot.snapshot_id -PassThru
+          if (-not $clean.match) { throw 'Unchanged configuration did not verify' }
+
+          'changed' | Set-Content -NoNewline (Join-Path $config 'agents/architect.md')
+          Remove-Item (Join-Path $config 'commands/ai-plan.md')
+          'new' | Set-Content -NoNewline (Join-Path $config 'new-setting.txt')
+          $drift = ./scripts/config-durability.ps1 -Action Verify -ConfigDir $config -DurabilityRoot $store -SnapshotId $snapshot.snapshot_id -PassThru
+          if ($drift.match) { throw 'Drift was not detected' }
+          if ($drift.changed -notcontains 'agents/architect.md') { throw 'Changed file not reported' }
+          if ($drift.removed -notcontains 'commands/ai-plan.md') { throw 'Removed file not reported' }
+          if ($drift.added -notcontains 'new-setting.txt') { throw 'Added file not reported' }
+
+          $restored = ./scripts/config-durability.ps1 -Action Restore -ConfigDir $config -DurabilityRoot $store -SnapshotId $snapshot.snapshot_id -PassThru
+          if (-not $restored.match) { throw 'Restore did not verify' }
+          if ((Get-Content (Join-Path $config 'agents/architect.md') -Raw) -ne 'agent-secret-DO-NOT-LOG') { throw 'Changed file was not restored' }
+          if (-not (Test-Path (Join-Path $config 'commands/ai-plan.md'))) { throw 'Removed file was not restored' }
+          if (Test-Path (Join-Path $config 'new-setting.txt')) { throw 'Added file survived exact restore' }
+          if ((Get-Content $external -Raw) -ne 'outside') { throw 'External file was modified' }
+          if ((Get-Content (Join-Path $config 'backups/old.txt') -Raw) -ne 'excluded') { throw 'Excluded backup file was modified' }
+
+      - name: Verify path, manifest and reparse-point fail-closed guards
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 'durability-guards'
+          $config = Join-Path $root 'config'
+          $outside = Join-Path $root 'outside'
+          New-Item -ItemType Directory -Force -Path $config,$outside | Out-Null
+          'x' | Set-Content (Join-Path $config 'file.txt')
+
+          $failed = $false
+          try { ./scripts/config-durability.ps1 -Action Snapshot -ConfigDir $config -DurabilityRoot (Join-Path $config 'store') -PassThru | Out-Null } catch { $failed = $true }
+          if (-not $failed) { throw 'Overlapping durability root was accepted' }
+
+          New-Item -ItemType Junction -Path (Join-Path $config 'linked') -Target $outside | Out-Null
+          $failed = $false
+          try { ./scripts/config-durability.ps1 -Action Snapshot -ConfigDir $config -DurabilityRoot (Join-Path $root 'store') -PassThru | Out-Null } catch { $failed = $true }
+          if (-not $failed) { throw 'Reparse point was accepted' }
+
+          $tamperRoot = Join-Path $env:RUNNER_TEMP 'durability-tamper'
+          $tamperConfig = Join-Path $tamperRoot 'config'
+          $tamperStore = Join-Path $tamperRoot 'store'
+          $victim = Join-Path $tamperRoot 'outside.txt'
+          New-Item -ItemType Directory -Force -Path $tamperConfig | Out-Null
+          'safe' | Set-Content -NoNewline (Join-Path $tamperConfig 'file.txt')
+          'outside' | Set-Content -NoNewline $victim
+          $snapshot = ./scripts/config-durability.ps1 -Action Snapshot -ConfigDir $tamperConfig -DurabilityRoot $tamperStore -PassThru
+          $manifestPath = Join-Path $tamperStore "snapshots/$($snapshot.snapshot_id)/manifest.json"
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          $manifest.files[0].path = '../outside.txt'
+          $manifest | ConvertTo-Json -Depth 20 | Set-Content $manifestPath
+          $failed = $false
+          try { ./scripts/config-durability.ps1 -Action Restore -ConfigDir $tamperConfig -DurabilityRoot $tamperStore -SnapshotId $snapshot.snapshot_id -PassThru | Out-Null } catch { $failed = $true }
+          if (-not $failed) { throw 'Tampered manifest path traversal was accepted' }
+          if ((Get-Content $victim -Raw) -ne 'outside') { throw 'Tampered manifest modified an external file' }
+          if ((Get-Content (Join-Path $tamperConfig 'file.txt') -Raw) -ne 'safe') { throw 'Tampered manifest modified protected state before rejection' }
+
+      - name: Verify enable persists the explicit configuration directory
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $previous = [Environment]::GetEnvironmentVariable('OPENCODE_CONFIG_DIR','User')
+          try {
+            $root = Join-Path $env:RUNNER_TEMP 'durability-enable'
+            $config = Join-Path $root 'custom-config'
+            $store = Join-Path $root 'store'
+            New-Item -ItemType Directory -Force -Path $config | Out-Null
+            'x' | Set-Content (Join-Path $config 'file.txt')
+            $enabled = ./scripts/config-durability.ps1 -Action Enable -ConfigDir $config -DurabilityRoot $store -PassThru
+            $persisted = [Environment]::GetEnvironmentVariable('OPENCODE_CONFIG_DIR','User')
+            if ([IO.Path]::GetFullPath($persisted) -ne [IO.Path]::GetFullPath($config)) { throw 'User-scope OPENCODE_CONFIG_DIR was not persisted' }
+            if (-not $enabled.snapshot_id) { throw 'Enable did not create a baseline snapshot' }
+          } finally {
+            [Environment]::SetEnvironmentVariable('OPENCODE_CONFIG_DIR',$previous,'User')
+          }
+
+      - name: Verify successful updater drift is quarantined and restored
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 'safe-update-success'
+          $config = Join-Path $root 'config'
+          $store = Join-Path $root 'store'
+          $mock = Join-Path $root 'mock-update.ps1'
+          New-Item -ItemType Directory -Force -Path $config | Out-Null
+          'original' | Set-Content -NoNewline (Join-Path $config 'opencode.jsonc')
+          @'
+          param([string]$ConfigDir)
+          'mutated' | Set-Content -NoNewline (Join-Path $ConfigDir 'opencode.jsonc')
+          'added' | Set-Content -NoNewline (Join-Path $ConfigDir 'updater-added.txt')
+          exit 0
+          '@ | Set-Content $mock
+          $result = ./scripts/update-opencode-safely.ps1 -ConfigDir $config -DurabilityRoot $store -UpdateExecutable pwsh -UpdateArguments @('-NoProfile','-File',$mock,$config) -SkipEnvironmentPersistence -SkipGovernanceVerification -PassThru
+          if ($result.configuration_state -ne 'RESTORED') { throw 'Successful updater drift was not restored' }
+          if (-not $result.quarantine_snapshot_id) { throw 'Drift was not quarantined' }
+          if ((Get-Content (Join-Path $config 'opencode.jsonc') -Raw) -ne 'original') { throw 'Original configuration was not restored' }
+          if (Test-Path (Join-Path $config 'updater-added.txt')) { throw 'Updater-added file survived restore' }
+
+      - name: Verify failed updater still restores configuration
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 'safe-update-failure'
+          $config = Join-Path $root 'config'
+          $store = Join-Path $root 'store'
+          $mock = Join-Path $root 'mock-update.ps1'
+          New-Item -ItemType Directory -Force -Path $config | Out-Null
+          'original' | Set-Content -NoNewline (Join-Path $config 'opencode.jsonc')
+          @'
+          param([string]$ConfigDir)
+          'mutated' | Set-Content -NoNewline (Join-Path $ConfigDir 'opencode.jsonc')
+          exit 7
+          '@ | Set-Content $mock
+          $failed = $false
+          try {
+            ./scripts/update-opencode-safely.ps1 -ConfigDir $config -DurabilityRoot $store -UpdateExecutable pwsh -UpdateArguments @('-NoProfile','-File',$mock,$config) -SkipEnvironmentPersistence -SkipGovernanceVerification -PassThru | Out-Null
+          } catch { $failed = $true }
+          if (-not $failed) { throw 'Failed updater was reported as success' }
+          if ((Get-Content (Join-Path $config 'opencode.jsonc') -Raw) -ne 'original') { throw 'Failed updater drift was not restored' }
+          if (-not (Get-ChildItem (Join-Path $store 'quarantine') -Directory -ErrorAction SilentlyContinue)) { throw 'Failed updater drift was not quarantined' }
+
+      - name: Verify repository remains whitelabel
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $paths = @('scripts/config-durability.ps1','scripts/update-opencode-safely.ps1','docs/local-configuration-durability.md','docs/superpowers/specs/2026-07-29-local-configuration-durability-design.md','docs/superpowers/plans/2026-07-29-local-configuration-durability.md')
+          $pattern = '(?i)(minimax|mimo|deepseek|qwen|glm-?5|gpt-?5\.6|alibaba-token|xiaomi/|zai/|openai/gpt)'
+          foreach ($path in $paths) {
+            if ((Get-Content $path -Raw) -match $pattern) { throw "Commercial provider or model identifier found in $path" }
+          }

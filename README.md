@@ -4,7 +4,7 @@ Provider- and model-agnostic product-lifecycle and engineering governance for Op
 
 > Community project. Not affiliated with or maintained by the OpenCode team.
 
-Current release: **3.3.0 — Isolated Executor Failover**.
+Current release: **3.3.1 — Local Configuration Durability**.
 
 v3 guides an idea through adaptive product discovery, constructive technical challenge, approved product definition, vertical delivery, evidence-driven implementation, independent review, product-completeness reconciliation and production-readiness assessment.
 
@@ -55,6 +55,31 @@ Optional failover routing:
    - macOS/Linux: `./scripts/install.sh --routing-config <profile.json>`
 
 The installer renders seven public agents and twelve commands, preserves unrelated configuration and creates a timestamped backup. With a routing profile it writes the non-secret `opencode-governance-routing.json` manifest, renders only the enabled hidden fallback aliases and installs managed Executor isolation helpers. No hidden Architect alias is created.
+
+## Local configuration durability
+
+Windows desktop application updates are outside the control of this repository. Version 3.3.1 adds an explicit fail-closed wrapper that preserves the external OpenCode configuration directory before an owner-triggered update.
+
+Enable persistence and create a baseline snapshot:
+
+```powershell
+./scripts/config-durability.ps1 `
+  -Action Enable `
+  -ConfigDir <opencode-config-directory>
+```
+
+Run an update through the protective wrapper:
+
+```powershell
+./scripts/update-opencode-safely.ps1 `
+  -ConfigDir <opencode-config-directory> `
+  -UpdateExecutable <updater-executable> `
+  -UpdateArguments @(<argument-list>)
+```
+
+The wrapper snapshots all protected configuration files to a separate user-local durability store, runs only the supplied updater command, detects additions/removals/content drift, quarantines changed post-update state and restores the pre-update snapshot by default. Manifests contain paths, lengths and SHA-256 hashes only; configuration contents and credentials remain local.
+
+Automatic vendor updates are not intercepted. Use the wrapper when byte-for-byte configuration preservation is required. Configuration preservation does not prove schema compatibility with a newer OpenCode release. See [Local Configuration Durability](docs/local-configuration-durability.md).
 
 ## Architect failover runner
 
@@ -141,7 +166,7 @@ Discovery is always `LIGHT`, `STANDARD` or `DEEP`. Domain evidence and recommend
 
 ## Documentation
 
-Focused references: [Product Lifecycle Governance](docs/product-lifecycle-governance.md), [Model Failover](docs/model-failover.md), [Workflow](docs/workflow.md), [Requirement Provenance](docs/requirement-provenance.md), [Context Efficiency and Resume](docs/context-efficiency-resume.md), [Evidence-Driven Verification](docs/evidence-driven-verification.md), [Operational Assurance](docs/operational-assurance.md), [Permissions](docs/permissions.md), [Project Documentation](docs/project-documentation.md) and [Troubleshooting](docs/troubleshooting.md).
+Focused references: [Product Lifecycle Governance](docs/product-lifecycle-governance.md), [Model Failover](docs/model-failover.md), [Local Configuration Durability](docs/local-configuration-durability.md), [Workflow](docs/workflow.md), [Requirement Provenance](docs/requirement-provenance.md), [Context Efficiency and Resume](docs/context-efficiency-resume.md), [Evidence-Driven Verification](docs/evidence-driven-verification.md), [Operational Assurance](docs/operational-assurance.md), [Permissions](docs/permissions.md), [Project Documentation](docs/project-documentation.md) and [Troubleshooting](docs/troubleshooting.md).
 
 ## Verification
 
@@ -154,6 +179,10 @@ Optional routing contract:
 
 - Windows: `./scripts/verify-routing.ps1`
 - macOS/Linux: `bash ./scripts/verify-routing.sh`
+
+Local configuration durability:
+
+- Windows: `./scripts/config-durability.ps1 -Action Status`
 
 ## License
 
