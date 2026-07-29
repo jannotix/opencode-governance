@@ -54,6 +54,7 @@ jobs:
           $global:LASTEXITCODE = 73
           & ./scripts/verify-routing.ps1 -ConfigDir $config
           if (-not $?) { throw 'Verifier reported failure after a successful PowerShell core verifier.' }
+          $global:LASTEXITCODE = 0
 
       - name: Ignore stale LASTEXITCODE for v3.3.0 compatibility verification
         shell: pwsh
@@ -76,6 +77,7 @@ jobs:
           $global:LASTEXITCODE = 74
           & ./scripts/verify-routing.ps1 -ConfigDir $config
           if (-not $?) { throw 'v3.3.0 compatibility verifier inherited a stale native exit code.' }
+          $global:LASTEXITCODE = 0
 
       - name: Ignore stale LASTEXITCODE across install wrapper
         shell: pwsh
@@ -87,7 +89,13 @@ jobs:
           $command = @"
           `$ErrorActionPreference = 'Stop'
           `$global:LASTEXITCODE = 75
-          & '$installer' -ConfigDir '$config' -NonInteractive -RoutingConfigPath '$profile'
+          try {
+            & '$installer' -ConfigDir '$config' -NonInteractive -RoutingConfigPath '$profile'
+            exit 0
+          } catch {
+            Write-Host `$_
+            exit 1
+          }
           "@
           & pwsh -NoProfile -Command $command
           if ($LASTEXITCODE -ne 0) { throw "Install wrapper inherited stale native exit code: $LASTEXITCODE" }
@@ -105,7 +113,13 @@ jobs:
           $command = @"
           `$ErrorActionPreference = 'Stop'
           `$global:LASTEXITCODE = 76
-          & '$uninstaller' -ConfigDir '$config'
+          try {
+            & '$uninstaller' -ConfigDir '$config'
+            exit 0
+          } catch {
+            Write-Host `$_
+            exit 1
+          }
           "@
           & pwsh -NoProfile -Command $command
           if ($LASTEXITCODE -ne 0) { throw "Uninstall wrapper inherited stale native exit code: $LASTEXITCODE" }
