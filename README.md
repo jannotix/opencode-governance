@@ -14,8 +14,9 @@ v3 guides an idea through adaptive product discovery, constructive technical cha
 - Final Reviewer controls baseline, discovery, task, product and release adjudication.
 - Requirement provenance and evidence outrank summaries and assertions.
 - No automatic push, merge, deployment or production rollback.
-- Provider/model IDs and concrete variants are supplied during setup.
-- Optional fallback aliases are hidden routing transports, not additional governance authorities.
+- Provider/model IDs and concrete variants are supplied only during local setup.
+- Tracked examples use synthetic identifiers; personal routing profiles remain untracked.
+- Optional fallback aliases and deterministic helpers are transports, not additional governance authorities.
 
 ## Commands
 
@@ -41,15 +42,17 @@ Legacy single-model routing:
 - Windows: `./scripts/install.ps1`
 - macOS/Linux: `chmod +x scripts/install.sh && ./scripts/install.sh`
 
-Model failover routing:
+Optional failover routing:
 
-- copy `examples/routing/continuous-coding.template.json` to a local untracked file;
-- replace every model ID with the exact value returned by the local OpenCode catalog;
-- resolve every `variant_policy: highest_supported` to a concrete supported `variant`;
-- Windows: `./scripts/install.ps1 -NonInteractive -RoutingConfigPath <profile.json>`;
-- macOS/Linux: `./scripts/install.sh --routing-config <profile.json>`.
+1. copy `examples/routing/continuous-coding.template.json` to a local untracked file;
+2. replace every synthetic provider/model ID with an exact value from the local OpenCode catalog;
+3. resolve every `variant_policy: highest_supported` to a concrete supported local `variant`;
+4. keep credentials, subscriptions, quotas and personal routing preferences outside the repository;
+5. install the resolved local profile:
+   - Windows: `./scripts/install.ps1 -NonInteractive -RoutingConfigPath <profile.json>`
+   - macOS/Linux: `./scripts/install.sh --routing-config <profile.json>`
 
-The installer renders seven public agents and twelve commands, preserves unrelated configuration and creates a timestamped backup. With a routing profile it also renders hidden reviewer/final fallback aliases and writes the non-secret `opencode-governance-routing.json` manifest. Architect routes remain in the manifest for the external transactional runner; no hidden Architect alias is created.
+The installer renders seven public agents and twelve commands, preserves unrelated configuration and creates a timestamped backup. With a routing profile it writes the non-secret `opencode-governance-routing.json` manifest, renders only the enabled hidden fallback aliases and installs managed Executor isolation helpers. No hidden Architect alias is created.
 
 ## Architect failover runner
 
@@ -84,7 +87,30 @@ macOS/Linux:
 
 The runner starts a fresh `opencode run` process for each route, snapshots the complete `.ai/**` tree and restores it before an eligible retry. A fallback never continues partial output and a recovered primary never interrupts an active fallback.
 
-Top-level automatic restart is intentionally unavailable for `ai-workflow`, `ai-execute`, `ai-review` and `ai-release`, because those flows may already have crossed an implementation or review side-effect boundary. Reviewer/final failover remains available inside those workflows.
+Top-level automatic restart remains unavailable for `ai-workflow`, `ai-execute`, `ai-review` and `ai-release`, because those flows may already have crossed an implementation or review side-effect boundary.
+
+## Executor failover
+
+When enabled in the local routing profile, `/ai-execute` and the implementation phase of `/ai-workflow` use isolated Executor attempts:
+
+```text
+select route
+→ prepare detached worktree at frozen HEAD
+→ run complete Executor inside EXECUTION_ROOT
+→ finalize matching complete report into binary patch
+→ promote only if real worktree state is unchanged and non-overlapping
+```
+
+Eligible route failure discards the isolated worktree and restarts the complete Executor from the same packet and frozen target on the next eligible route. Failed partial changes never enter the real worktree.
+
+Managed helpers are installed under the local OpenCode configuration directory:
+
+```text
+opencode-governance-tools/executor-attempt.ps1
+opencode-governance-tools/executor-attempt.sh
+```
+
+Promotion is not validation. Evidence-Driven Verification, Operational Assurance, independent dual review, Final Reviewer adjudication and explicit commit/push authorization remain unchanged.
 
 ## Project state
 
@@ -126,6 +152,8 @@ Optional routing contract:
 
 - Windows: `./scripts/verify-routing.ps1`
 - macOS/Linux: `bash ./scripts/verify-routing.sh`
+
+GitHub Actions verify legacy installation, routed installation, cross-platform script parsing, route selection, isolated attempt discard, binary patch promotion, changed-state blocking and conservative uninstall.
 
 ## License
 
