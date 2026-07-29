@@ -12,11 +12,11 @@
       "fallbacks": [{"model": "test/architect-fallback", "variant": "thinking", "variant_policy": "explicit", "model_family": "architect-family", "priority": 1, "only_on": []}]
     },
     "executor": {
-      "primary": {"model": "test/mimo-primary", "variant": "thinking", "variant_policy": "explicit", "model_family": "mimo-v2.5", "only_on": [], "work_classes": []},
+      "primary": {"model": "test/executor-primary", "variant": "thinking", "variant_policy": "explicit", "model_family": "executor-family", "only_on": [], "work_classes": []},
       "fallbacks": [
-        {"model": "test/mimo-alt", "variant": "thinking", "variant_policy": "explicit", "model_family": "mimo-v2.5", "priority": 1, "only_on": [], "work_classes": []},
-        {"model": "test/qwen-plus", "variant": "high", "variant_policy": "highest_supported", "model_family": "qwen3.7", "priority": 2, "only_on": [], "work_classes": ["PATCH", "BOUNDED_FEATURE"]},
-        {"model": "test/qwen-max", "variant": "max", "variant_policy": "highest_supported", "model_family": "qwen3.7", "priority": 3, "only_on": [], "work_classes": ["MAJOR_FEATURE", "EXISTING_PRODUCT_EVOLUTION", "NEW_PRODUCT", "HIGH_RISK_CHANGE"]}
+        {"model": "test/executor-same-family", "variant": "thinking", "variant_policy": "explicit", "model_family": "executor-family", "priority": 1, "only_on": [], "work_classes": []},
+        {"model": "test/executor-bounded", "variant": "high", "variant_policy": "highest_supported", "model_family": "executor-bounded-family", "priority": 2, "only_on": [], "work_classes": ["PATCH", "BOUNDED_FEATURE"]},
+        {"model": "test/executor-major", "variant": "max", "variant_policy": "highest_supported", "model_family": "executor-major-family", "priority": 3, "only_on": [], "work_classes": ["MAJOR_FEATURE", "EXISTING_PRODUCT_EVOLUTION", "NEW_PRODUCT", "HIGH_RISK_CHANGE"]}
       ]
     },
     "reviewer": {
@@ -29,7 +29,7 @@
     },
     "final-reviewer": {
       "primary": {"model": "test/final-primary", "variant": "max", "variant_policy": "explicit", "model_family": "final-family", "only_on": []},
-      "fallbacks": [{"model": "test/final-alt", "variant": "high", "variant_policy": "highest_supported", "model_family": "final-other", "priority": 1, "only_on": []}]
+      "fallbacks": [{"model": "test/final-alt", "variant": "high", "variant_policy": "highest_supported", "model_family": "final-other-family", "priority": 1, "only_on": []}]
     }
   }
 }
