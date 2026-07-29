@@ -4,7 +4,7 @@ Provider- and model-agnostic product-lifecycle and engineering governance for Op
 
 > Community project. Not affiliated with or maintained by the OpenCode team.
 
-Current release: **3.3.1 — Local Configuration Durability**.
+Current release: **3.3.2 — Architect Runner Integration Fix**.
 
 v3 guides an idea through adaptive product discovery, constructive technical challenge, approved product definition, vertical delivery, evidence-driven implementation, independent review, product-completeness reconciliation and production-readiness assessment.
 
@@ -54,11 +54,11 @@ Optional failover routing:
    - Windows: `./scripts/install.ps1 -NonInteractive -RoutingConfigPath <profile.json>`
    - macOS/Linux: `./scripts/install.sh --routing-config <profile.json>`
 
-The installer renders seven public agents and twelve commands, preserves unrelated configuration and creates a timestamped backup. With a routing profile it writes the non-secret `opencode-governance-routing.json` manifest, renders only the enabled hidden fallback aliases and installs managed Executor isolation helpers. No hidden Architect alias is created.
+The installer renders seven public agents and twelve commands, preserves unrelated configuration and creates a timestamped backup. With a routing profile it writes the non-secret `opencode-governance-routing.json` manifest, renders only enabled hidden fallback aliases and installs managed Architect and Executor transactional helpers. No hidden Architect alias is created.
 
 ## Local configuration durability
 
-Windows desktop application updates are outside the control of this repository. Version 3.3.1 adds an explicit fail-closed wrapper that preserves the external OpenCode configuration directory before an owner-triggered update.
+Windows desktop application updates are outside the control of this repository. Version 3.3.1 added an explicit fail-closed wrapper that preserves the external OpenCode configuration directory before an owner-triggered update.
 
 Enable persistence and create a baseline snapshot:
 
@@ -83,7 +83,7 @@ Automatic vendor updates are not intercepted. Use the wrapper when byte-for-byte
 
 ## Architect failover runner
 
-Top-level Architect failover is available for pre-execution commands only:
+Top-level Architect failover is available only for pre-execution commands:
 
 ```text
 ai-init
@@ -92,25 +92,36 @@ ai-discover
 ai-plan
 ```
 
+With Architect failover enabled, version 3.3.2 installs deterministic entrypoints inside the active OpenCode configuration directory:
+
+```text
+opencode-governance-tools/architect-attempt.ps1
+opencode-governance-tools/architect-attempt.sh
+```
+
 Windows:
 
 ```powershell
-./scripts/run-governed.ps1 `
-  -ProjectDir <project> `
+& "<config-dir>\opencode-governance-tools\architect-attempt.ps1" `
+  -ProjectDir "<project>" `
   -Command ai-plan `
   -Arguments "<request>" `
-  -RoutingConfigPath <resolved-profile-or-installed-manifest>
+  -RoutingConfigPath "<config-dir>\opencode-governance-routing.json" `
+  -ConfigDir "<config-dir>"
 ```
 
 macOS/Linux:
 
 ```bash
-./scripts/run-governed.sh \
-  --project-dir <project> \
+"<config-dir>/opencode-governance-tools/architect-attempt.sh" \
+  --project-dir "<project>" \
   --command ai-plan \
   --arguments "<request>" \
-  --routing-config <resolved-profile-or-installed-manifest>
+  --routing-config "<config-dir>/opencode-governance-routing.json" \
+  --config-dir "<config-dir>"
 ```
+
+Direct `/ai-init`, `/ai-audit`, `/ai-discover` or `/ai-plan` invocation inside an existing OpenCode process now fails closed before `.ai/**` writes with `ARCHITECT_RUNNER_REQUIRED` and the exact installed runner path. The external runner marks child attempts with `[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]`; marked children continue normally and never recursively launch another runner.
 
 The runner starts a fresh `opencode run` process for each route, snapshots the complete `.ai/**` tree and restores it before an eligible retry. A fallback never continues partial output and a recovered primary never interrupts an active fallback.
 
@@ -166,7 +177,7 @@ Discovery is always `LIGHT`, `STANDARD` or `DEEP`. Domain evidence and recommend
 
 ## Documentation
 
-Focused references: [Product Lifecycle Governance](docs/product-lifecycle-governance.md), [Model Failover](docs/model-failover.md), [Local Configuration Durability](docs/local-configuration-durability.md), [Workflow](docs/workflow.md), [Requirement Provenance](docs/requirement-provenance.md), [Context Efficiency and Resume](docs/context-efficiency-resume.md), [Evidence-Driven Verification](docs/evidence-driven-verification.md), [Operational Assurance](docs/operational-assurance.md), [Permissions](docs/permissions.md), [Project Documentation](docs/project-documentation.md) and [Troubleshooting](docs/troubleshooting.md).
+Focused references: [Product Lifecycle Governance](docs/product-lifecycle-governance.md), [Model Failover](docs/model-failover.md), [Architect Runner Integration](docs/architect-runner-integration.md), [Local Configuration Durability](docs/local-configuration-durability.md), [Workflow](docs/workflow.md), [Requirement Provenance](docs/requirement-provenance.md), [Context Efficiency and Resume](docs/context-efficiency-resume.md), [Evidence-Driven Verification](docs/evidence-driven-verification.md), [Operational Assurance](docs/operational-assurance.md), [Permissions](docs/permissions.md), [Project Documentation](docs/project-documentation.md) and [Troubleshooting](docs/troubleshooting.md).
 
 ## Verification
 

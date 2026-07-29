@@ -4,221 +4,64 @@ $ErrorActionPreference = 'Stop'
 if (-not $ConfigDir) {
     $ConfigDir = if ($env:OPENCODE_CONFIG_DIR) { $env:OPENCODE_CONFIG_DIR } else { Join-Path $HOME '.config\opencode' }
 }
-
 $ManifestPath = Join-Path $ConfigDir 'opencode-governance-routing.json'
-if (-not (Test-Path $ManifestPath -PathType Leaf)) {
+if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) {
     Write-Host 'PASS: model failover routing is not configured.'
     exit 0
 }
+try { $Manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json } catch { throw 'Routing manifest is invalid JSON.' }
+$Version = [string]$Manifest.governance_version
+if ($Version -eq '3.3.0') {
+    & (Join-Path $PSScriptRoot 'verify-routing-core.ps1') -ConfigDir $ConfigDir
+    exit $LASTEXITCODE
+}
+if ($Version -ne '3.3.2') { throw "Routing manifest governance_version must be 3.3.0 or 3.3.2, got: $Version" }
+if ([string]$Manifest.architect_runner_version -ne '3.3.2') { throw 'architect_runner_version must be 3.3.2.' }
 
-try {
-    $Manifest = Get-Content $ManifestPath -Raw | ConvertFrom-Json
-} catch {
-    throw 'Routing manifest is invalid JSON.'
-}
-if ([string]$Manifest.schema_version -ne '1.0') { throw 'Routing manifest schema_version must be 1.0.' }
-if ([string]$Manifest.governance_version -ne '3.3.0') { throw 'Routing manifest governance_version must be 3.3.0.' }
-
-$EnabledRoles = @('architect','executor','reviewer','reviewer-architecture','final-reviewer')
-$AliasRoles = @('executor','reviewer','reviewer-architecture','final-reviewer')
-$AllowedFailures = @('PROVIDER_UNAVAILABLE','RATE_LIMIT','PLAN_QUOTA_EXHAUSTED','MODEL_RETIRED','MODEL_TEMPORARILY_UNAVAILABLE','BOUNDED_TIMEOUT')
-$WorkClasses = @('PATCH','BOUNDED_FEATURE','MAJOR_FEATURE','EXISTING_PRODUCT_EVOLUTION','NEW_PRODUCT','HIGH_RISK_CHANGE')
-$ExpectedAliases = @{}
-
-function Require-Line([string]$Text, [string]$Line, [string]$Context) {
-    if (($Text -split "`r?`n") -cnotcontains $Line) {
-        throw "$Context missing exact line: $Line"
-    }
-}
-
-function Get-RoleConfig([string]$Role) {
-    $Property = $Manifest.roles.PSObject.Properties[$Role]
-    if (-not $Property) { throw "Routing manifest missing role: $Role" }
-    return $Property.Value
-}
-
-function Get-OnlyOn([object]$Candidate, [string]$Context) {
-    if (-not $Candidate.PSObject.Properties['only_on']) { throw "$Context missing only_on" }
-    return @($Candidate.only_on | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
-}
-
-function Get-WorkClasses([object]$Candidate, [string]$Role, [string]$Context) {
-    $Values = @()
-    if ($Candidate.PSObject.Properties['work_classes']) {
-        $Values = @($Candidate.work_classes | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
-    }
-    if ($Role -ne 'executor' -and $Values.Count -gt 0) { throw "$Context uses work_classes outside Executor." }
-    foreach ($Value in $Values) {
-        if ([string]$Value -notin $WorkClasses) { throw "$Context contains an invalid work class: $Value" }
-    }
-    return $Values
-}
-
-function Verify-RenderedCandidate(
-    [string]$Agent,
-    [string]$Role,
-    [object]$Candidate,
-    [int]$Priority,
-    [bool]$Hidden
-) {
-    $Path = Join-Path $ConfigDir "agents\$Agent.md"
-    if (-not (Test-Path $Path -PathType Leaf)) { throw "Missing routed agent: $Agent" }
-    $Text = Get-Content $Path -Raw
-    $Variant = if ([string]::IsNullOrWhiteSpace([string]$Candidate.variant)) { 'PROVIDER_DEFAULT' } else { [string]$Candidate.variant }
-    $OnlyValues = Get-OnlyOn $Candidate "$Agent route"
-    $Only = if ($OnlyValues.Count -eq 0) { 'ANY_ELIGIBLE_FAILURE' } else { $OnlyValues -join '|' }
-    $ClassValues = Get-WorkClasses $Candidate $Role "$Agent route"
-    $Classes = if ($ClassValues.Count -eq 0) { 'ALL' } else { $ClassValues -join '|' }
-    $Rebalance = if ($Candidate.requires_role_rebalance -eq $true) { 'YES' } else { 'NO' }
-
-    Require-Line $Text "model: $($Candidate.model)" $Agent
-    if ([string]::IsNullOrWhiteSpace([string]$Candidate.variant)) {
-        if ($Text -match '(?m)^variant:\s*\S+') { throw "$Agent rendered an unconfigured variant." }
-    } else {
-        Require-Line $Text "variant: $($Candidate.variant)" $Agent
-    }
-    foreach ($Line in @(
-        '## MODEL_ROUTE_METADATA',
-        "AUTHORITATIVE_ROLE: $Role",
-        "ROUTE_AGENT: $Agent",
-        "SELECTED_MODEL: $($Candidate.model)",
-        "SELECTED_VARIANT: $Variant",
-        "MODEL_FAMILY: $($Candidate.model_family)",
-        "ROUTE_PRIORITY: $Priority",
-        "ROUTE_ONLY_ON: $Only",
-        "ROUTE_WORK_CLASSES: $Classes",
-        "REQUIRES_ROLE_REBALANCE: $Rebalance"
-    )) {
-        Require-Line $Text $Line $Agent
-    }
-    if ($Role -eq 'executor') {
-        foreach ($Marker in @('EXECUTOR_ATTEMPT_ID','PACKET_SHA256','FROZEN_TARGET_SHA','REPORT_COMPLETE')) {
-            if ($Text -notlike "*$Marker*") { throw "$Agent missing Executor route marker: $Marker" }
-        }
-    } elseif ($Text -notlike '*Require matching attempt, packet and frozen-target identifiers plus a complete report.*') {
-        throw "$Agent missing complete-role restart contract."
-    }
-    if ($Hidden) {
-        Require-Line $Text 'mode: subagent' $Agent
-        Require-Line $Text 'hidden: true' $Agent
-        Require-Line $Text '  task: deny' $Agent
-    }
-}
-
-foreach ($Role in @($Manifest.settings.enabled_roles)) {
-    if ([string]$Role -notin $EnabledRoles) { throw "Unsupported enabled failover role: $Role" }
-}
-foreach ($Failure in @($Manifest.settings.eligible_failures)) {
-    if ([string]$Failure -notin $AllowedFailures) { throw "Unsupported eligible failure: $Failure" }
-}
-if ($Manifest.settings.allow_degraded_independence -ne $false) {
-    throw 'Default routing must fail closed on degraded independence.'
-}
-
-foreach ($Role in $AliasRoles) {
-    $Config = Get-RoleConfig $Role
-    Verify-RenderedCandidate $Role $Role $Config.primary 0 $false
-    $Priorities = @()
-    foreach ($Candidate in @($Config.fallbacks)) {
-        $Priority = [int]$Candidate.priority
-        if ($Priority -lt 1 -or $Priorities -contains $Priority) {
-            throw "$Role fallback priorities must be unique positive integers."
-        }
-        $Priorities += $Priority
-        if ($Role -in @($Manifest.settings.enabled_roles)) {
-            $Alias = "$Role-fallback-$Priority"
-            $ExpectedAliases[$Alias] = $true
-            Verify-RenderedCandidate $Alias $Role $Candidate $Priority $true
-        }
-    }
-}
-
-foreach ($Entry in @(
-    @('architect','architect'),
-    @('build','architect'),
-    @('plan','architect')
-)) {
-    $Name = $Entry[0]
-    $Role = $Entry[1]
-    $RoleConfig = Get-RoleConfig $Role
-    Verify-RenderedCandidate $Name $Role $RoleConfig.primary 0 $false
-}
-
-$ArchitectConfig = Get-RoleConfig 'architect'
-if ('architect' -in @($Manifest.settings.enabled_roles)) {
-    if (@($ArchitectConfig.fallbacks).Count -eq 0) { throw 'Architect routing enabled without fallbacks.' }
-    foreach ($Name in @('architect','build')) {
-        $Text = Get-Content (Join-Path $ConfigDir "agents\$Name.md") -Raw
-        foreach ($Marker in @('ai-init|ai-audit|ai-discover|ai-plan','external transactional runner')) {
-            if ($Text -notlike "*$Marker*") { throw "$Name missing Architect runner policy: $Marker" }
-        }
-    }
-}
-
-if ('executor' -in @($Manifest.settings.enabled_roles)) {
-    $ExecutorConfig = Get-RoleConfig 'executor'
-    if (@($ExecutorConfig.fallbacks).Count -eq 0) { throw 'Executor routing enabled without fallbacks.' }
-    foreach ($Name in @('architect','build')) {
-        $Text = Get-Content (Join-Path $ConfigDir "agents\$Name.md") -Raw
-        foreach ($Marker in @(
-            'select -> prepare -> delegate selected route -> finalize -> promote',
-            'discard',
-            'same canonical packet and frozen target',
-            'Never delegate a routed Executor against the real project root',
-            '"executor-fallback-*": allow',
-            'opencode-governance-tools/executor-attempt.sh',
-            'opencode-governance-tools\executor-attempt.ps1'
-        )) {
-            if ($Text -notlike "*$Marker*") { throw "$Name missing Executor failover policy marker: $Marker" }
-        }
-    }
-}
-
-$ManagedAliases = @($Manifest.managed_aliases)
-if ($ManagedAliases.Count -ne $ExpectedAliases.Count) {
-    throw 'Managed alias count does not match enabled fallback candidates.'
-}
-foreach ($Alias in $ManagedAliases) {
-    $AliasName = [string]$Alias
-    if ($AliasName -notmatch '^(executor|reviewer|reviewer-architecture|final-reviewer)-fallback-[0-9]+$') {
-        throw "Unsafe managed alias name: $AliasName"
-    }
-    if (-not $ExpectedAliases.ContainsKey($AliasName)) { throw "Unexpected managed alias: $AliasName" }
-}
-$RenderedAliases = @(Get-ChildItem (Join-Path $ConfigDir 'agents') -Filter '*-fallback-*.md' | ForEach-Object BaseName)
-foreach ($Alias in $RenderedAliases) {
-    if ($Alias -notin $ManagedAliases) { throw "Unmanaged fallback alias present: $Alias" }
-    if ($Alias -like 'architect-fallback-*') { throw 'Architect fallback aliases are forbidden.' }
-}
-if ($RenderedAliases.Count -ne $ManagedAliases.Count) {
-    throw 'Rendered fallback aliases do not exactly match manifest.'
-}
-
-$ExpectedToolPaths = @(
-    (Join-Path $ConfigDir 'opencode-governance-tools\executor-attempt.ps1'),
-    (Join-Path $ConfigDir 'opencode-governance-tools\executor-attempt.sh')
+$ToolsDir = Join-Path $ConfigDir 'opencode-governance-tools'
+$ExpectedTools = @(
+    (Join-Path $ToolsDir 'architect-attempt.ps1'),
+    (Join-Path $ToolsDir 'architect-attempt.sh'),
+    (Join-Path $ToolsDir 'executor-attempt.ps1'),
+    (Join-Path $ToolsDir 'executor-attempt.sh')
 )
-$ManagedToolPaths = @($Manifest.managed_tools | ForEach-Object { [string]$_ })
-if ($ManagedToolPaths.Count -ne $ExpectedToolPaths.Count) {
-    throw 'Managed Executor tool count is invalid.'
+$ManagedTools = @($Manifest.managed_tools | ForEach-Object { [string]$_ })
+if ($ManagedTools.Count -ne $ExpectedTools.Count) { throw 'Managed tool count does not match the v3.3.2 contract.' }
+foreach ($Tool in $ExpectedTools) {
+    if ($Tool -notin $ManagedTools) { throw "Managed tool missing from manifest: $Tool" }
+    if (-not (Test-Path -LiteralPath $Tool -PathType Leaf)) { throw "Managed tool missing from disk: $Tool" }
 }
-foreach ($ToolPath in $ExpectedToolPaths) {
-    if ($ToolPath -notin $ManagedToolPaths) { throw "Managed Executor tool missing from manifest: $ToolPath" }
-    if (-not (Test-Path $ToolPath -PathType Leaf)) { throw "Managed Executor tool missing from disk: $ToolPath" }
+$Marker = '[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]'
+foreach ($Name in @('architect','build','plan')) {
+    $Text = Get-Content -LiteralPath (Join-Path $ConfigDir "agents\$Name.md") -Raw
+    foreach ($Value in @('ARCHITECT_RUNNER_INTEGRATION','ARCHITECT_RUNNER_REQUIRED',$Marker,$ExpectedTools[0],$ExpectedTools[1],'Never invoke the Architect runner from inside the active OpenCode process.')) {
+        if ($Text -notlike "*$Value*") { throw "$Name missing Architect runner marker: $Value" }
+    }
 }
-
-foreach ($Name in @('architect','build')) {
-    $Text = Get-Content (Join-Path $ConfigDir "agents\$Name.md") -Raw
-    foreach ($Marker in @(
-        'ROLE_FAILOVER_POLICY',
-        'Never retry the same route',
-        'Executor promotion is not validation',
-        '"reviewer-fallback-*": allow',
-        '"reviewer-architecture-fallback-*": allow',
-        '"final-reviewer-fallback-*": allow'
-    )) {
-        if ($Text -notlike "*$Marker*") { throw "$Name missing failover policy marker: $Marker" }
+foreach ($Command in @('ai-init','ai-audit','ai-discover','ai-plan')) {
+    $Text = Get-Content -LiteralPath (Join-Path $ConfigDir "commands\$Command.md") -Raw
+    foreach ($Value in @('ARCHITECT_RUNNER_ENTRY_GATE','ARCHITECT_RUNNER_REQUIRED',$Marker,$ExpectedTools[0],$ExpectedTools[1])) {
+        if ($Text -notlike "*$Value*") { throw "$Command missing Architect entry gate marker: $Value" }
     }
 }
 
-Write-Host "PASS: OpenCode Governance v3.3 routing verified ($($ManagedAliases.Count) hidden routes; Executor isolation tools verified)."
+$Temp = Join-Path ([IO.Path]::GetTempPath()) ('opencode-v332-verify-' + [guid]::NewGuid().ToString('N'))
+try {
+    New-Item -ItemType Directory -Force -Path (Join-Path $Temp 'agents'),(Join-Path $Temp 'opencode-governance-tools') | Out-Null
+    Copy-Item (Join-Path $ConfigDir 'agents\*.md') (Join-Path $Temp 'agents') -Force
+    Copy-Item (Join-Path $ToolsDir 'executor-attempt.ps1') (Join-Path $Temp 'opencode-governance-tools\executor-attempt.ps1') -Force
+    Copy-Item (Join-Path $ToolsDir 'executor-attempt.sh') (Join-Path $Temp 'opencode-governance-tools\executor-attempt.sh') -Force
+    $Normalized = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
+    $Normalized | Add-Member -MemberType NoteProperty -Name governance_version -Value '3.3.0' -Force
+    $Normalized.PSObject.Properties.Remove('architect_runner_version')
+    $Normalized | Add-Member -MemberType NoteProperty -Name managed_tools -Value @(
+        (Join-Path $Temp 'opencode-governance-tools\executor-attempt.ps1'),
+        (Join-Path $Temp 'opencode-governance-tools\executor-attempt.sh')
+    ) -Force
+    [IO.File]::WriteAllText((Join-Path $Temp 'opencode-governance-routing.json'), (($Normalized | ConvertTo-Json -Depth 30) + [Environment]::NewLine), (New-Object Text.UTF8Encoding($false)))
+    & (Join-Path $PSScriptRoot 'verify-routing-core.ps1') -ConfigDir $Temp
+    if ($LASTEXITCODE -ne 0) { throw "Core routing verifier exited with code $LASTEXITCODE." }
+} finally {
+    Remove-Item -LiteralPath $Temp -Recurse -Force -ErrorAction SilentlyContinue
+}
+Write-Host "PASS: OpenCode Governance v3.3.2 routing verified ($(@($Manifest.managed_aliases).Count) hidden routes; Architect and Executor transactional tools verified)."
