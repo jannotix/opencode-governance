@@ -11,12 +11,12 @@ for ((i=0; i<${#ARGS[@]}; i++)); do
     --config-dir)
       ((i+1 < ${#ARGS[@]})) || { echo '--config-dir requires a value.' >&2; exit 1; }
       CONFIG_DIR="${ARGS[$((i+1))]}"
-      ((i++))
+      i=$((i+1))
       ;;
     --routing-config)
       ((i+1 < ${#ARGS[@]})) || { echo '--routing-config requires a value.' >&2; exit 1; }
       ROUTING_CONFIG="${ARGS[$((i+1))]}"
-      ((i++))
+      i=$((i+1))
       ;;
   esac
 done
