@@ -28,7 +28,7 @@ def invoke(*arguments: object) -> subprocess.CompletedProcess[str]:
 
 
 def main() -> None:
-    with tempfile.TemporaryDirectory(prefix="opencode-v360-unified-") as directory:
+    with tempfile.TemporaryDirectory(prefix="opencode-unified-release-") as directory:
         config = pathlib.Path(directory) / "config"
         invoke(INSTALL, "--config-dir", config, "--routing-config", VALID_PROFILE)
         manifest_path = config / "opencode-governance-routing.json"
