@@ -12,34 +12,37 @@ jobs:
           show-progress: false
       - name: Validate Python and shell scripts
         run: |
-          python3 -m py_compile scripts/context-intelligence.py tests/test-context-intelligence.py scripts/normalize-jsonc.py scripts/workflow-continuation.py tests/test-workflow-continuation.py tests/test-command-contracts.py
-          bash -n scripts/context-intelligence.sh scripts/install.sh scripts/uninstall.sh scripts/verify-routing.sh tests/test-workflow-continuation.sh
+          python3 -m py_compile scripts/context-intelligence.py tests/test-context-intelligence.py scripts/normalize-jsonc.py scripts/workflow-continuation.py tests/test-workflow-continuation.py tests/test-command-contracts.py scripts/governance-capabilities.py scripts/governance-install-transaction.py
+          bash -n scripts/context-intelligence.sh scripts/install.sh scripts/install-base.sh scripts/uninstall.sh scripts/uninstall-base.sh scripts/verify-routing.sh tests/test-workflow-continuation.sh
       - name: Run Python context and continuation regressions
         run: |
           python3 tests/test-context-intelligence.py
           python3 tests/test-workflow-continuation.py
           bash tests/test-workflow-continuation.sh
           python3 tests/test-command-contracts.py
-      - name: Install verify and uninstall current 3.4 release
+      - name: Install verify and uninstall current 3.6 release
         run: |
           set -euo pipefail
-          config="$RUNNER_TEMP/opencode-v34-linux"
+          config="$RUNNER_TEMP/opencode-v36-linux"
           cache="$RUNNER_TEMP/context-cache-preserve"
           mkdir -p "$cache"; printf 'preserve\n' > "$cache/sentinel.txt"
           ./scripts/install.sh --config-dir "$config" --routing-config "$GITHUB_WORKSPACE/tests/fixtures/routing/architect-failover.valid.json"
           python3 - "$config" <<'PY'
           import json,pathlib,sys
           root=pathlib.Path(sys.argv[1]);tools=root/'opencode-governance-tools';data=json.loads((root/'opencode-governance-routing.json').read_text())
-          assert data['governance_version']=='3.4.4'
-          assert data['architect_runner_version']=='3.4.4'
-          assert data['context_intelligence_version']=='3.4.4'
-          assert data['workflow_continuation_version']=='3.4.4'
-          names=['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','workflow-continuation.ps1','workflow-continuation.py']
-          assert set(data['managed_tools'])=={str(tools/name) for name in names}
+          assert data['governance_version']=='3.6.0'
+          assert data['architect_runner_version']=='3.6.0'
+          assert data['context_intelligence_version']=='3.6.0'
+          assert data['workflow_continuation_version']=='3.6.0'
+          assert data['candidate_authority_version']=='1.0'
+          assert data['governed_memory_version']=='2.0'
+          names=['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','workflow-continuation.ps1','workflow-continuation.py','governance-authority.py','governance-memory.py','governance-evidence.py','governance-simulation.py','governance-pre-commit.py']
+          assert data['managed_tools']==[str(tools/name) for name in names]
           assert all((tools/name).is_file() for name in names)
+          assert not (root/'opencode-governance-runtime.json').exists()
           for name in ['architect','build','plan']:
               text=(root/'agents'/f'{name}.md').read_text()
-              for marker in ['CONTEXT_INTELLIGENCE_V1','CONTEXT_BUDGET.json','SKILL_CAPABILITY_MANIFEST_V1','CONTEXT_SUFFICIENT','BLOCKED_CONTEXT_GAP','Governance state paths may not traverse symbolic links or reparse points.',str(tools/'context-intelligence.sh'),'WORKFLOW_CONTINUATION_GATE_V1']: assert marker in text
+              for marker in ['CONTEXT_INTELLIGENCE_V1','CONTEXT_BUDGET.json','SKILL_CAPABILITY_MANIFEST_V1','CONTEXT_SUFFICIENT','BLOCKED_CONTEXT_GAP','Governance state paths may not traverse symbolic links or reparse points.',str(tools/'context-intelligence.sh'),'WORKFLOW_CONTINUATION_GATE_V1','GOVERNANCE_AUTHORITY_V1','GOVERNED_ENGINEERING_MEMORY_V2','EVIDENCE_REUSE_LEDGER_V1']: assert marker in text
           for name in ['ai-workflow','ai-resume','ai-metrics']:
               text=(root/'commands'/f'{name}.md').read_text()
               assert 'CONTEXT_INTELLIGENCE_ENTRY' in text and 'BLOCKED_CONTEXT_GAP' in text
@@ -49,24 +52,24 @@ jobs:
           PY
           python3 tests/test-command-contracts.py --config-dir "$config"
           ./scripts/verify-routing.sh "$config"
-          project="$RUNNER_TEMP/v34-installed-project";mkdir -p "$project"
-          "$config/opencode-governance-tools/context-intelligence.sh" initialize-budget --project-dir "$project" --task-id INSTALLED --work-class PATCH --cache-root "$RUNNER_TEMP/v34-installed-cache" >/dev/null
-          printf '%s\n' '{"top_level_command":"ai-workflow","current_phase":"AUDIT_PASS","next_required_phase":"IDEA_INTAKE","terminal_reason":null}' > "$RUNNER_TEMP/v34-run-state.json"
+          project="$RUNNER_TEMP/v36-installed-project";mkdir -p "$project"
+          "$config/opencode-governance-tools/context-intelligence.sh" initialize-budget --project-dir "$project" --task-id INSTALLED --work-class PATCH --cache-root "$RUNNER_TEMP/v36-installed-cache" >/dev/null
+          printf '%s\n' '{"top_level_command":"ai-workflow","current_phase":"AUDIT_PASS","next_required_phase":"IDEA_INTAKE","terminal_reason":null}' > "$RUNNER_TEMP/v36-run-state.json"
           set +e
-          "$config/opencode-governance-tools/workflow-continuation.py" --run-state "$RUNNER_TEMP/v34-run-state.json" --expected-command ai-workflow >/dev/null
+          "$config/opencode-governance-tools/workflow-continuation.py" --run-state "$RUNNER_TEMP/v36-run-state.json" --expected-command ai-workflow >/dev/null
           continuation_code=$?
           set -e
           test "$continuation_code" -eq 3
-          mkdir -p "$config/opencode-governance-tools";printf 'preserve\n' > "$config/opencode-governance-tools/unrelated.txt"
+          printf 'preserve\n' > "$config/opencode-governance-tools/unrelated.txt"
           ./scripts/uninstall.sh --config-dir "$config" >/dev/null
           test -f "$config/opencode-governance-tools/unrelated.txt"
           test -f "$cache/sentinel.txt"
-          for name in architect-attempt.ps1 architect-attempt.sh executor-attempt.ps1 executor-attempt.sh context-intelligence.ps1 context-intelligence.sh context-intelligence.py workflow-continuation.ps1 workflow-continuation.py; do test ! -e "$config/opencode-governance-tools/$name";done
+          for name in architect-attempt.ps1 architect-attempt.sh executor-attempt.ps1 executor-attempt.sh context-intelligence.ps1 context-intelligence.sh context-intelligence.py workflow-continuation.ps1 workflow-continuation.py governance-authority.py governance-memory.py governance-evidence.py governance-simulation.py governance-pre-commit.py; do test ! -e "$config/opencode-governance-tools/$name";done
       - name: Verify release metadata
         run: |
-          test "$(cat VERSION)" = '3.4.4'
-          grep -q '3.4.4 — Deterministic Workflow Continuation' README.md
-          grep -q '^## 3.4.4 - 2026-07-30$' CHANGELOG.md
+          test "$(cat VERSION)" = '3.6.0'
+          grep -q '3.6.0 — Governed Authority, Memory & Evidence' README.md
+          grep -q '^## 3.6.0 - 2026-07-30$' CHANGELOG.md
 
   windows-context-intelligence:
     runs-on: windows-latest
@@ -78,7 +81,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          foreach($path in 'scripts/context-intelligence.ps1','scripts/workflow-continuation.ps1','tests/test-context-intelligence.ps1','tests/test-workflow-continuation.ps1','scripts/install.ps1','scripts/uninstall.ps1','scripts/verify-routing.ps1','scripts/normalize-jsonc.ps1'){
+          foreach($path in 'scripts/context-intelligence.ps1','scripts/workflow-continuation.ps1','tests/test-context-intelligence.ps1','tests/test-workflow-continuation.ps1','scripts/install.ps1','scripts/install-base.ps1','scripts/uninstall.ps1','scripts/uninstall-base.ps1','scripts/verify-routing.ps1','scripts/normalize-jsonc.ps1'){
             $errors=$null
             [Management.Automation.Language.Parser]::ParseFile((Join-Path $env:GITHUB_WORKSPACE $path),[ref]$null,[ref]$errors)|Out-Null
             if($errors.Count){throw "$path`n$($errors|Out-String)"}
@@ -89,32 +92,31 @@ jobs:
           ./tests/test-context-intelligence.ps1
           ./tests/test-workflow-continuation.ps1
           python tests/test-command-contracts.py
-      - name: Install verify and uninstall current 3.4 release
+      - name: Install verify and uninstall current 3.6 release
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          $config=Join-Path $env:RUNNER_TEMP 'opencode-v34-windows';$cache=Join-Path $env:RUNNER_TEMP 'context-cache-preserve'
+          $config=Join-Path $env:RUNNER_TEMP 'opencode-v36-windows';$cache=Join-Path $env:RUNNER_TEMP 'context-cache-preserve'
           New-Item -ItemType Directory -Force -Path $cache|Out-Null;'preserve'|Set-Content (Join-Path $cache 'sentinel.txt')
           ./scripts/install.ps1 -ConfigDir $config -NonInteractive -RoutingConfigPath (Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/architect-failover.valid.json')
           $tools=Join-Path $config 'opencode-governance-tools';$manifest=Get-Content (Join-Path $config 'opencode-governance-routing.json') -Raw|ConvertFrom-Json
-          if($manifest.governance_version-ne'3.4.4'){throw 'Governance version mismatch'}
-          if($manifest.architect_runner_version-ne'3.4.4'){throw 'Architect runner version mismatch'}
-          if($manifest.context_intelligence_version-ne'3.4.4'){throw 'Context Intelligence version mismatch'}
-          if($manifest.workflow_continuation_version-ne'3.4.4'){throw 'Workflow continuation version mismatch'}
-          $names=@('architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','workflow-continuation.ps1','workflow-continuation.py')
-          if(@($manifest.managed_tools).Count-ne9){throw 'Expected nine managed tools'}
+          foreach($field in 'governance_version','architect_runner_version','context_intelligence_version','workflow_continuation_version'){if($manifest.$field-ne'3.6.0'){throw "$field mismatch"}}
+          if($manifest.candidate_authority_version-ne'1.0'-or$manifest.governed_memory_version-ne'2.0'){throw 'Capability version mismatch'}
+          $names=@('architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','workflow-continuation.ps1','workflow-continuation.py','governance-authority.py','governance-memory.py','governance-evidence.py','governance-simulation.py','governance-pre-commit.py')
+          if(@($manifest.managed_tools).Count-ne14){throw 'Expected fourteen managed tools'}
           foreach($name in $names){if(-not(Test-Path (Join-Path $tools $name) -PathType Leaf)){throw "Missing tool: $name"}}
+          if(Test-Path (Join-Path $config 'opencode-governance-runtime.json')){throw 'Legacy runtime manifest survived canonical install'}
           foreach($name in 'architect','build','plan'){
             $text=Get-Content (Join-Path $config "agents/$name.md") -Raw
-            foreach($marker in 'CONTEXT_INTELLIGENCE_V1','CONTEXT_BUDGET.json','SKILL_CAPABILITY_MANIFEST_V1','CONTEXT_SUFFICIENT','BLOCKED_CONTEXT_GAP','Governance state paths may not traverse symbolic links or reparse points.',(Join-Path $tools 'context-intelligence.ps1'),'WORKFLOW_CONTINUATION_GATE_V1'){if($text-notlike"*$marker*"){throw "$name missing $marker"}}
+            foreach($marker in 'CONTEXT_INTELLIGENCE_V1','CONTEXT_BUDGET.json','SKILL_CAPABILITY_MANIFEST_V1','CONTEXT_SUFFICIENT','BLOCKED_CONTEXT_GAP','Governance state paths may not traverse symbolic links or reparse points.',(Join-Path $tools 'context-intelligence.ps1'),'WORKFLOW_CONTINUATION_GATE_V1','GOVERNANCE_AUTHORITY_V1','GOVERNED_ENGINEERING_MEMORY_V2','EVIDENCE_REUSE_LEDGER_V1'){if($text-notlike"*$marker*"){throw "$name missing $marker"}}
           }
           foreach($name in 'ai-workflow','ai-resume','ai-metrics'){$text=Get-Content (Join-Path $config "commands/$name.md") -Raw;if($text-notlike'*CONTEXT_INTELLIGENCE_ENTRY*'-or$text-notlike'*BLOCKED_CONTEXT_GAP*'){throw "$name context entry missing"}}
           foreach($name in 'ai-workflow','ai-resume'){$text=Get-Content (Join-Path $config "commands/$name.md") -Raw;foreach($marker in 'WORKFLOW_CONTINUATION_GATE_V1','WINDOWS_WORKFLOW_CONTINUATION_CORE','UNIX_WORKFLOW_CONTINUATION_CORE','CONTINUE_REQUIRED','TERMINAL_ALLOWED',(Join-Path $tools 'workflow-continuation.ps1'),(Join-Path $tools 'workflow-continuation.py')){if($text-notlike"*$marker*"){throw "$name workflow continuation marker missing: $marker"}}}
           python tests/test-command-contracts.py --config-dir $config
           ./scripts/verify-routing.ps1 -ConfigDir $config
-          $project=Join-Path $env:RUNNER_TEMP 'v34-installed-project';New-Item -ItemType Directory -Force -Path $project|Out-Null
-          & (Join-Path $tools 'context-intelligence.ps1') -Action InitializeBudget -ProjectDir $project -TaskId INSTALLED -WorkClass PATCH -CacheRoot (Join-Path $env:RUNNER_TEMP 'v34-installed-cache')|Out-Null
-          $runState=Join-Path $env:RUNNER_TEMP 'v34-run-state.json';@{top_level_command='ai-workflow';current_phase='AUDIT_PASS';next_required_phase='IDEA_INTAKE';terminal_reason=$null}|ConvertTo-Json|Set-Content $runState -Encoding utf8
+          $project=Join-Path $env:RUNNER_TEMP 'v36-installed-project';New-Item -ItemType Directory -Force -Path $project|Out-Null
+          & (Join-Path $tools 'context-intelligence.ps1') -Action InitializeBudget -ProjectDir $project -TaskId INSTALLED -WorkClass PATCH -CacheRoot (Join-Path $env:RUNNER_TEMP 'v36-installed-cache')|Out-Null
+          $runState=Join-Path $env:RUNNER_TEMP 'v36-run-state.json';@{top_level_command='ai-workflow';current_phase='AUDIT_PASS';next_required_phase='IDEA_INTAKE';terminal_reason=$null}|ConvertTo-Json|Set-Content $runState -Encoding utf8
           & pwsh -NoProfile -File (Join-Path $tools 'workflow-continuation.ps1') -RunStatePath $runState -ExpectedCommand ai-workflow|Out-Null
           if($LASTEXITCODE-ne3){throw "Expected continuation exit 3, got $LASTEXITCODE"}
           $global:LASTEXITCODE=0
@@ -125,6 +127,6 @@ jobs:
       - name: Verify release metadata
         shell: pwsh
         run: |
-          if((Get-Content VERSION -Raw).Trim()-ne'3.4.4'){throw 'VERSION must be 3.4.4'}
-          if((Get-Content README.md -Raw)-notmatch'3\.4\.4 — Deterministic Workflow Continuation'){throw 'README marker missing'}
-          if((Get-Content CHANGELOG.md -Raw)-notmatch'(?m)^## 3\.4\.4 - 2026-07-30\r?$'){throw 'CHANGELOG marker missing'}
+          if((Get-Content VERSION -Raw).Trim()-ne'3.6.0'){throw 'VERSION must be 3.6.0'}
+          if((Get-Content README.md -Raw)-notmatch'3\.6\.0 — Governed Authority, Memory & Evidence'){throw 'README marker missing'}
+          if((Get-Content CHANGELOG.md -Raw)-notmatch'(?m)^## 3\.6\.0 - 2026-07-30\r?$'){throw 'CHANGELOG marker missing'}
