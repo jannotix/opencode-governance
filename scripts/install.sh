@@ -99,20 +99,21 @@ if [[ -n "$JSONC_BACKUP" && -f "$JSONC_BACKUP" ]]; then cp -p "$JSONC_BACKUP" "$
 
 if [[ -n "$ROUTING_CONFIG" ]]; then
   tools="$CONFIG_DIR/opencode-governance-tools"
-  for name in architect-attempt.ps1 architect-attempt.sh context-intelligence.ps1 context-intelligence.sh context-intelligence.py; do [[ ! -f "$tools/$name" ]] || cp -p "$tools/$name" "$backup_dir/$name";done
+  for name in architect-attempt.ps1 architect-attempt.sh context-intelligence.ps1 context-intelligence.sh context-intelligence.py workflow-continuation.py; do [[ ! -f "$tools/$name" ]] || cp -p "$tools/$name" "$backup_dir/$name";done
   cp "$SCRIPT_DIR/run-governed.ps1" "$tools/architect-attempt.ps1";cp "$SCRIPT_DIR/run-governed.sh" "$tools/architect-attempt.sh"
   cp "$SCRIPT_DIR/context-intelligence.ps1" "$tools/context-intelligence.ps1";cp "$SCRIPT_DIR/context-intelligence.sh" "$tools/context-intelligence.sh";cp "$SCRIPT_DIR/context-intelligence.py" "$tools/context-intelligence.py"
-  chmod +x "$tools/architect-attempt.sh" "$tools/context-intelligence.sh" "$tools/context-intelligence.py"
+  cp "$SCRIPT_DIR/workflow-continuation.py" "$tools/workflow-continuation.py"
+  chmod +x "$tools/architect-attempt.sh" "$tools/context-intelligence.sh" "$tools/context-intelligence.py" "$tools/workflow-continuation.py"
 
   python3 - "$CONFIG_DIR" <<'PY'
 import json,pathlib,re,sys
 root=pathlib.Path(sys.argv[1]);tools=root/'opencode-governance-tools';manifest_path=root/'opencode-governance-routing.json'
 data=json.loads(manifest_path.read_text(encoding='utf-8-sig'))
 if data.get('schema_version')!='1.0': raise SystemExit('Routing manifest schema_version must be 1.0.')
-data['governance_version']='3.4.3';data['architect_runner_version']='3.4.3';data['context_intelligence_version']='3.4.3'
-data['managed_tools']=[str(tools/name) for name in ['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py']]
+data['governance_version']='3.4.4';data['architect_runner_version']='3.4.4';data['context_intelligence_version']='3.4.4';data['workflow_continuation_version']='3.4.4'
+data['managed_tools']=[str(tools/name) for name in ['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','workflow-continuation.py']]
 manifest_path.write_text(json.dumps(data,indent=2)+'\n',encoding='utf-8')
-marker='[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]';ps_runner=str(tools/'architect-attempt.ps1');sh_runner=str(tools/'architect-attempt.sh');ps_context=str(tools/'context-intelligence.ps1');sh_context=str(tools/'context-intelligence.sh');py_context=str(tools/'context-intelligence.py')
+marker='[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]';ps_runner=str(tools/'architect-attempt.ps1');sh_runner=str(tools/'architect-attempt.sh');ps_context=str(tools/'context-intelligence.ps1');sh_context=str(tools/'context-intelligence.sh');py_context=str(tools/'context-intelligence.py');workflow_gate=str(tools/'workflow-continuation.py')
 architect_policy=f'''
 
 ## ARCHITECT_RUNNER_INTEGRATION
@@ -168,6 +169,8 @@ WINDOWS_HOST: pwsh -NoProfile -File
 WINDOWS_RUNNER: {ps_runner}
 UNIX_RUNNER: {sh_runner}
 PROJECT_DIR: <CURRENT_PROJECT_ROOT>
+WINDOWS_COMMAND: pwsh -NoProfile -File "{ps_runner}" -ProjectDir "<CURRENT_PROJECT_ROOT>" -Command {command} -Arguments "<ORIGINAL_ARGUMENTS>"
+UNIX_COMMAND: "{sh_runner}" --project-dir "<CURRENT_PROJECT_ROOT>" --command {command} --arguments "<ORIGINAL_ARGUMENTS>"
 ```
 
 The external runner supports Git and non-Git project directories. It fingerprints all source and project-documentation content outside root `.ai/**` before and after each attempt and returns `PROJECT_STATE_CHANGED` on any delta.
@@ -191,8 +194,26 @@ for command in ['ai-workflow','ai-resume','ai-metrics']:
     if not match: raise SystemExit(f'Command front matter not found: {path}')
     path.write_text(text[:match.end()]+entry+text[match.end():],encoding='utf-8')
 PY
+  python3 - "$CONFIG_DIR" <<'PY'
+import pathlib,re,sys
+root=pathlib.Path(sys.argv[1]);tools=root/'opencode-governance-tools';workflow_gate=str(tools/'workflow-continuation.py')
+
+workflow_entry=f'''
+
+## WORKFLOW_CONTINUATION_GATE_V1
+
+WORKFLOW_CONTINUATION_CORE: {workflow_gate}
+
+Persist `top_level_command`, `current_phase`, `next_required_phase` and `terminal_reason` in the authoritative task `RUN_STATE.json`. Before a final response, invoke `python3 "{workflow_gate}" --run-state "<AUTHORITATIVE_RUN_STATE_PATH>" --expected-command <EXPECTED_COMMAND>`. Exit 3/`CONTINUE_REQUIRED` requires continuation at the recorded next phase. Exit 0/`TERMINAL_ALLOWED` permits only `LOCAL_COMMITTED` or an explicit blocker. Exit 2/`INVALID_RUN_STATE` blocks completion.
+'''
+for command in ['ai-workflow','ai-resume']:
+    path=root/'commands'/f'{command}.md';text=path.read_text(encoding='utf-8');text=re.sub(r'\n## WORKFLOW_CONTINUATION_GATE_V1\n.*?(?=\n## |\Z)','',text,count=1,flags=re.S)
+    match=re.match(r'\A(---\r?\n.*?\r?\n---\r?\n)',text,flags=re.S)
+    if not match: raise SystemExit(f'Command front matter not found: {path}')
+    text=text[:match.end()]+workflow_entry.replace('<EXPECTED_COMMAND>',command)+text[match.end():];path.write_text(text,encoding='utf-8')
+PY
   "$SCRIPT_DIR/verify-routing.sh" "$CONFIG_DIR"
-  echo 'Installed OpenCode Governance v3.4.3 — Release Integrity & JSONC Readability.'
+  echo 'Installed OpenCode Governance v3.4.4 — Deterministic Workflow Continuation.'
   echo 'Routing preflight, complete managed-tool backup and hardened context paths are enabled without changing model selection.'
 fi
 if [[ -n "$JSONC_NORMALIZED" && -f "$JSONC_NORMALIZED" ]]; then

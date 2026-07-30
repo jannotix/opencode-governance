@@ -183,7 +183,7 @@ text = text.replace(
     "PROJECT_DIR: <CURRENT_PROJECT_ROOT>\n```",
     "PROJECT_DIR: <CURRENT_PROJECT_ROOT>\nWINDOWS_COMMAND: pwsh -NoProfile -File \"{ps_runner}\" -ProjectDir \"<CURRENT_PROJECT_ROOT>\" -Command {command} -Arguments \"<ORIGINAL_ARGUMENTS>\"\nUNIX_COMMAND: \"{sh_runner}\" --project-dir \"<CURRENT_PROJECT_ROOT>\" --command {command} --arguments \"<ORIGINAL_ARGUMENTS>\"\n```",
 )
-workflow_entry_sh = r'''
+workflow_entry_sh = r"""
 workflow_entry=f'''
 
 ## WORKFLOW_CONTINUATION_GATE_V1
@@ -197,7 +197,7 @@ for command in ['ai-workflow','ai-resume']:
     match=re.match(r'\A(---\r?\n.*?\r?\n---\r?\n)',text,flags=re.S)
     if not match: raise SystemExit(f'Command front matter not found: {path}')
     text=text[:match.end()]+workflow_entry.replace('<EXPECTED_COMMAND>',command)+text[match.end():];path.write_text(text,encoding='utf-8')
-'''
+"""
 needle = "\n  ./scripts/verify-routing.sh \"$CONFIG_DIR\""
 if needle not in text:
     needle = "\n  \"$SCRIPT_DIR/verify-routing.sh\" \"$CONFIG_DIR\""

@@ -23,3 +23,9 @@ Verify current Git target and every evidence dependency before selecting the nex
 Resume never installs tools, broadens permissions or performs external actions merely to recover progress.
 
 When the frozen target changed, `REVIEW_FREEZE` evidence is stale and a new review cycle is required.
+
+## WORKFLOW_CONTINUATION_GATE_V1
+
+Resume preserves the original `top_level_command` recorded in `RUN_STATE.json`; an interrupted `/ai-workflow` remains `top_level_command: ai-workflow`. Require `current_phase`, `next_required_phase` and `terminal_reason` and never replace the original authority with `ai-resume`.
+
+Before emitting a final response, execute the installed `workflow-continuation.py` with `--expected-command ai-resume`. Decision `CONTINUE_REQUIRED` resumes the original workflow at `next_required_phase` from authoritative persisted evidence. `TERMINAL_ALLOWED` is valid only for `LOCAL_COMMITTED` or an explicit blocker with a non-empty `terminal_reason`. `INVALID_RUN_STATE` blocks completion. Do not restart from zero, create a second task, or ask the owner to invoke an internal phase command when continuation is safe.

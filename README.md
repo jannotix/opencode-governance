@@ -4,9 +4,9 @@ Provider- and model-agnostic product-lifecycle and engineering governance for Op
 
 > Community project. Not affiliated with or maintained by the OpenCode team.
 
-Current release: **3.4.3 — Release Integrity & JSONC Readability**.
+Current release: **3.4.4 — Deterministic Workflow Continuation**.
 
-Version 3.4.3 preserves readable URL literals during Windows and Unix JSONC normalization, cleans the routing compatibility matrix and adds fail-closed release publication checks without changing local model routing.
+Version 3.4.4 prevents `/ai-workflow` and `/ai-resume` from reporting completion at intermediate checkpoints, validates terminal state through an installed fail-closed helper and makes Architect runner handoffs directly executable without changing local model routing.
 
 OpenCode Governance turns an ordinary AI coding session into a controlled engineering workflow. It does not replace OpenCode and it does not provide an AI model. It installs a set of specialized agents, commands, state contracts and deterministic helpers that force planning, implementation, verification and review to use the same approved requirements and current repository evidence.
 

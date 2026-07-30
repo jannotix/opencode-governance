@@ -1,6 +1,6 @@
 # Architect Runner Integration
 
-OpenCode Governance 3.3.2 fixed the `ARCHITECT_RUNNER_UNAVAILABLE` installation defect for Architect pre-execution failover. Version 3.3.3 added the PowerShell 7 host contract, and 3.3.4 added content-aware project-state integrity plus non-Git workspace support. Version 3.4.1 hardens routing validation, cooldown parity, managed-tool backup and retained-log privacy. Version 3.4.2 enforces identical JSON array and integer types across Windows and Unix entrypoints. Version 3.4.3 preserves readable JSONC URL literals and publishes releases through verified repository metadata.
+OpenCode Governance 3.3.2 fixed the `ARCHITECT_RUNNER_UNAVAILABLE` installation defect for Architect pre-execution failover. Version 3.3.3 added the PowerShell 7 host contract, and 3.3.4 added content-aware project-state integrity plus non-Git workspace support. Version 3.4.1 hardens routing validation, cooldown parity, managed-tool backup and retained-log privacy. Version 3.4.2 enforces identical JSON array and integer types across Windows and Unix entrypoints. Version 3.4.4 preserves readable JSONC URL literals and publishes releases through verified repository metadata.
 
 ## Scope
 
@@ -31,12 +31,12 @@ opencode-governance-tools/context-intelligence.sh
 opencode-governance-tools/context-intelligence.py
 ```
 
-The 3.4.3 routing manifest records:
+The 3.4.4 routing manifest records:
 
 ```text
-governance_version: 3.4.3
-architect_runner_version: 3.4.3
-context_intelligence_version: 3.4.3
+governance_version: 3.4.4
+architect_runner_version: 3.4.4
+context_intelligence_version: 3.4.4
 ```
 
 Before replacing an existing routing installation, the wrapper validates the complete new profile. An invalid profile cannot remove the current manifest, aliases or managed tools. Every existing managed tool is copied into the timestamped installation backup before replacement.
@@ -188,3 +188,5 @@ The routing verifier checks exact managed tool paths, installed files, Architect
 `PROJECT_STATE_CHANGED` means a child attempt changed source or project documentation outside root `.ai/**`; this is a hard integrity block, not an eligible provider/model fallback condition.
 
 `DISCOVERY_BLOCKED_WRONG_WORKSPACE` is a different, correct fail-closed condition: a prompt intended for the Governance repository was executed inside an application repository, or vice versa. Version 3.4.1 does not weaken workspace validation.
+
+Version 3.4.4 also installs `workflow-continuation.py`; `/ai-workflow` and `/ai-resume` must obtain `TERMINAL_ALLOWED` before reporting completion. `CONTINUE_REQUIRED` preserves the current lifecycle and `INVALID_RUN_STATE` fails closed.

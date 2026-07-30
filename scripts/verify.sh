@@ -70,6 +70,7 @@ for marker in BASELINE_DUAL_AUDIT REQUIREMENT_PROVENANCE; do grep -Fq "$marker" 
 for marker in REQUIREMENT_PROVENANCE NO_AUTOMATIC_EXTERNAL_ACTION; do grep -Fq "$marker" "$CONFIG_DIR/agents/plan.md" || fail "plan missing semantic contract $marker"; done
 for marker in EVIDENCE_FRESHNESS REVIEW_FREEZE NO_AUTOMATIC_EXTERNAL_ACTION PLAN_CONFLICT; do grep -Fq "$marker" "$CONFIG_DIR/agents/executor.md" || fail "executor missing semantic contract $marker"; done
 for cmd in ai-init ai-discover ai-plan ai-workflow ai-execute ai-review ai-release; do grep -Fq 'NO_AUTOMATIC_EXTERNAL_ACTION' "$CONFIG_DIR/commands/$cmd.md" || fail "$cmd missing external-action boundary"; done
+for marker in WORKFLOW_CONTINUATION_GATE_V1 CONTINUE_REQUIRED TERMINAL_ALLOWED; do grep -Fq "$marker" "$CONFIG_DIR/commands/ai-workflow.md" || fail "ai-workflow missing $marker"; grep -Fq "$marker" "$CONFIG_DIR/commands/ai-resume.md" || fail "ai-resume missing $marker"; done
 for cmd in ai-workflow ai-review ai-resume; do grep -Fq 'REVIEW_FREEZE' "$CONFIG_DIR/commands/$cmd.md" || fail "$cmd missing review-freeze contract"; done
 if grep -RInE 'DISCOVERY_DEPTH[^[:alnum:]\n]{0,30}NONE|NONE[[:space:]]*\|[[:space:]]*LIGHT' "$CONFIG_DIR/agents" "$CONFIG_DIR/commands" >/dev/null; then fail 'Discovery depth NONE is forbidden in v3'; fi
 python3 - "$CONFIG_DIR" <<'PY'
