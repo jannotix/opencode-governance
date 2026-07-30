@@ -21,6 +21,13 @@ MANAGED_TOOLS = [
     "context-intelligence.ps1",
     "context-intelligence.sh",
     "context-intelligence.py",
+    "workflow-continuation.ps1",
+    "workflow-continuation.py",
+    "governance-authority.py",
+    "governance-memory.py",
+    "governance-evidence.py",
+    "governance-simulation.py",
+    "governance-pre-commit.py",
 ]
 
 
@@ -78,41 +85,28 @@ def test_required_skill_section_must_exist(temp: pathlib.Path) -> None:
         "MAJOR_FEATURE",
     )
     catalog = temp / "section-catalog.json"
-    criteria = temp / "section-criteria.json"
     write_json(
         catalog,
-        [
-            {
-                "schema": "SKILL_CAPABILITY_MANIFEST_V1",
-                "skill_id": "section-skill",
-                "version": "1",
-                "content_sha256": "a" * 64,
-                "source": "project",
-                "trust_class": "PROJECT_AUTHORITATIVE",
-                "triggers": ["review"],
-                "supported_work_classes": ["MAJOR_FEATURE"],
-                "languages": ["python"],
-                "frameworks": [],
-                "required_tools": [],
-                "external_dependencies": [],
-                "conflicts_with": [],
-                "overlaps_with": [],
-                "estimated_context_tokens": 100,
-                "sections": [{"id": "available", "heading": "Available"}],
-            }
-        ],
-    )
-    write_json(
-        criteria,
         {
-            "triggers": ["review"],
-            "languages": ["python"],
-            "frameworks": [],
-            "required_sections": ["missing"],
-            "available_tools": [],
+            "schema": "SKILL_CAPABILITY_MANIFEST_V1",
+            "skills": [
+                {
+                    "id": "trusted-skill",
+                    "source": "OFFICIAL_PROJECT",
+                    "path": str(ROOT / "tests" / "fixtures" / "context-intelligence" / "skills" / "trusted.md"),
+                    "work_classes": ["MAJOR_FEATURE"],
+                    "technologies": [],
+                    "capabilities": ["security"],
+                    "conflicts": [],
+                    "sections": ["Security", "Missing"],
+                    "estimated_tokens": 200,
+                }
+            ],
         },
     )
-    selected = context(
+    result = invoke(
+        sys.executable,
+        CONTEXT,
         "select-skills",
         "--project-dir",
         project,
@@ -120,13 +114,13 @@ def test_required_skill_section_must_exist(temp: pathlib.Path) -> None:
         "SECTION-1",
         "--catalog",
         catalog,
-        "--input-json",
-        criteria,
+        "--work-class",
+        "MAJOR_FEATURE",
+        "--capability",
+        "security",
+        expect=2,
     )
-    assert selected["selected"] == []
-    assert selected["rejected"] == [
-        {"skill_id": "section-skill", "reason": "REQUIRED_SECTION_UNAVAILABLE"}
-    ]
+    assert "REQUIRED_SECTION_UNAVAILABLE" in result.stderr
 
 
 def test_context_validation_requires_terminal_state(temp: pathlib.Path) -> None:
@@ -139,67 +133,23 @@ def test_context_validation_requires_terminal_state(temp: pathlib.Path) -> None:
         "--task-id",
         "TERMINAL-1",
         "--work-class",
-        "MAJOR_FEATURE",
+        "PATCH",
     )
-    cycle = temp / "cycle.json"
-    base = {
-        "query": "entry points",
-        "reason": "initial dispatch",
-        "candidate_paths": ["src/a.py"],
-        "admitted_paths": ["src/a.py"],
-        "rejected_paths": [],
-        "dependency_edges": [],
-        "trust_boundaries": [],
-        "tests": [],
-        "context_gaps": [],
-        "stop_reason": "REFINE",
-    }
-    write_json(cycle, base)
-    context(
-        "record-cycle",
+    result = invoke(
+        sys.executable,
+        CONTEXT,
+        "validate",
         "--project-dir",
         project,
         "--task-id",
         "TERMINAL-1",
-        "--cycle",
-        "1",
-        "--input-json",
-        cycle,
+        expect=2,
     )
-    invalid = context(
-        "validate-task",
-        "--project-dir",
-        project,
-        "--task-id",
-        "TERMINAL-1",
-    )
-    assert invalid["valid"] is False
-    assert "TERMINAL_STATE_REQUIRED" in invalid["errors"]
-
-    write_json(cycle, {**base, "stop_reason": "CONTEXT_SUFFICIENT"})
-    context(
-        "record-cycle",
-        "--project-dir",
-        project,
-        "--task-id",
-        "TERMINAL-1",
-        "--cycle",
-        "2",
-        "--input-json",
-        cycle,
-    )
-    valid = context(
-        "validate-task",
-        "--project-dir",
-        project,
-        "--task-id",
-        "TERMINAL-1",
-    )
-    assert valid["valid"] is True
+    assert "TERMINAL_STATE_REQUIRED" in result.stderr
 
 
 def test_invalid_reinstall_preserves_current_routing(temp: pathlib.Path) -> None:
-    config = temp / "routing-config"
+    config = temp / "rollback-config"
     invoke(INSTALL, "--config-dir", config, "--routing-config", VALID_PROFILE)
     manifest = config / "opencode-governance-routing.json"
     before_manifest = manifest.read_bytes()
@@ -238,7 +188,7 @@ def test_reinstall_backup_contains_every_managed_tool(temp: pathlib.Path) -> Non
 def main() -> None:
     if os.name == "nt":
         raise SystemExit("This test is intended for the Unix CI job.")
-    with tempfile.TemporaryDirectory(prefix="opencode-v341-hardening-") as directory:
+    with tempfile.TemporaryDirectory(prefix="opencode-v360-hardening-") as directory:
         temp = pathlib.Path(directory)
         test_governance_state_symlink_is_rejected(temp)
         test_required_skill_section_must_exist(temp)
