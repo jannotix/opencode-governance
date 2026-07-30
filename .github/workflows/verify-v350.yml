@@ -1,0 +1,30 @@
+name: Verify Quality Gates v3.5.0
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux-quality-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          show-progress: false
+      - name: Run Python quality regressions
+        run: python3 tests/test-quality-gates.py
+
+  windows-quality-gates:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          show-progress: false
+      - name: Parse PowerShell test
+        shell: pwsh
+        run: |
+          $errors=$null
+          [Management.Automation.Language.Parser]::ParseFile((Join-Path $env:GITHUB_WORKSPACE 'tests/test-quality-gates.ps1'),[ref]$null,[ref]$errors)|Out-Null
+          if($errors.Count){throw ($errors|Out-String)}
+      - name: Run PowerShell quality regressions
+        shell: pwsh
+        run: ./tests/test-quality-gates.ps1
