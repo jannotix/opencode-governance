@@ -1,0 +1,385 @@
+name: Apply v3.4.2 schema parity patch
+
+on:
+  push:
+    branches:
+      - fix/v3.4.2-routing-schema-parity
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-v342-schema-parity
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v3.4.2-routing-schema-parity
+          fetch-depth: 0
+
+      - name: Apply strict cross-platform schema validation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_between(path, start_marker, end_marker, replacement):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              start = text.index(start_marker)
+              end = text.index(end_marker, start)
+              p.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if text.count(old) != 1:
+                  raise SystemExit(f'{path}: expected replacement target exactly once: {old!r}')
+              p.write_text(text.replace(old, new), encoding='utf-8')
+
+          install_ps = r'''function Test-RoutingProfile([string]$Path){
+              if(-not(Test-Path -LiteralPath $Path -PathType Leaf)){throw "Routing profile not found: $Path"}
+              try{$Profile=Get-Content -LiteralPath $Path -Raw|ConvertFrom-Json}catch{throw "Invalid routing profile JSON: $Path"}
+              if([string]$Profile.schema_version-ne'1.0'){throw 'Routing schema_version must be 1.0.'}
+              if($null-eq$Profile.settings-or$null-eq$Profile.roles){throw 'Routing profile must contain settings and roles objects.'}
+              $RoleNames=@('architect','executor','reviewer','reviewer-architecture','final-reviewer')
+              $Failures=@('PROVIDER_UNAVAILABLE','RATE_LIMIT','PLAN_QUOTA_EXHAUSTED','MODEL_RETIRED','MODEL_TEMPORARILY_UNAVAILABLE','BOUNDED_TIMEOUT')
+              $OnlyOnAllowed=$Failures+@('MODEL_UNAVAILABLE_ON_ALL_CONFIGURED_PROVIDERS')
+              $WorkClasses=@('PATCH','BOUNDED_FEATURE','MAJOR_FEATURE','EXISTING_PRODUCT_EVOLUTION','NEW_PRODUCT','HIGH_RISK_CHANGE')
+
+              function Get-JsonArray([object]$Owner,[string]$Name,[string]$Context,[bool]$Required=$true){
+                  $Property=$Owner.PSObject.Properties[$Name]
+                  if($null-eq$Property){if($Required){throw "$Context must be an array."};return}
+                  $Value=$Property.Value
+                  if($Value-is[string]-or$Value-isnot[System.Collections.IEnumerable]){throw "$Context must be an array."}
+                  @($Value)
+              }
+              function Test-JsonInteger([object]$Value){($Value-is[int])-or($Value-is[long])}
+
+              $Enabled=@(Get-JsonArray $Profile.settings 'enabled_roles' 'settings.enabled_roles')
+              $Eligible=@(Get-JsonArray $Profile.settings 'eligible_failures' 'settings.eligible_failures')
+              if(@($Enabled|Where-Object{$_-isnot[string]-or[string]::IsNullOrWhiteSpace([string]$_)-or([string]$_-notin$RoleNames)}).Count-gt0){throw 'Routing profile contains an unsupported enabled role.'}
+              if(@($Eligible|Where-Object{$_-isnot[string]-or[string]::IsNullOrWhiteSpace([string]$_)-or([string]$_-notin$Failures)}).Count-gt0){throw 'Routing profile contains an unsupported eligible failure.'}
+              if($Profile.settings.allow_degraded_independence-isnot[bool]-or$Profile.settings.allow_degraded_independence-ne$false){throw 'Routing must fail closed on degraded model independence.'}
+              $CooldownValue=$Profile.settings.default_cooldown_seconds
+              if(-not(Test-JsonInteger $CooldownValue)-or[long]$CooldownValue-lt60-or[long]$CooldownValue-gt86400){throw 'default_cooldown_seconds must be an integer between 60 and 86400.'}
+
+              function Test-Candidate([object]$Candidate,[string]$Role,[string]$Context,[bool]$NeedsPriority){
+                  if($null-eq$Candidate-or[string]$Candidate.model-notmatch'^[^/\s]+/\S+$'){throw "$Context model must use concrete provider/model format."}
+                  if([string]::IsNullOrWhiteSpace([string]$Candidate.model_family)){throw "$Context model_family is required."}
+                  $Policy=[string]$Candidate.variant_policy
+                  if($Policy-notin@('explicit','provider_default','highest_supported')){throw "$Context variant_policy is invalid."}
+                  if($Policy-eq'explicit'-and[string]::IsNullOrWhiteSpace([string]$Candidate.variant)){throw "$Context explicit variant is required."}
+                  if($Policy-eq'provider_default'-and-not[string]::IsNullOrWhiteSpace([string]$Candidate.variant)){throw "$Context provider_default must use a blank variant."}
+                  if($Policy-eq'highest_supported'-and[string]::IsNullOrWhiteSpace([string]$Candidate.variant)){throw "$Context highest_supported must be resolved locally before installation."}
+                  if([string]$Candidate.variant-eq'highest_supported'){throw "$Context cannot use highest_supported as a literal variant."}
+
+                  $OnlyOn=@(Get-JsonArray $Candidate 'only_on' "$Context only_on")
+                  if(@($OnlyOn|Where-Object{$_-isnot[string]-or[string]::IsNullOrWhiteSpace([string]$_)-or([string]$_-notin$OnlyOnAllowed)}).Count-gt0){throw "$Context contains an unsupported only_on value."}
+
+                  $Classes=@(Get-JsonArray $Candidate 'work_classes' "$Context work_classes" $false)
+                  if(@($Classes|Where-Object{$_-isnot[string]-or[string]::IsNullOrWhiteSpace([string]$_)-or([string]$_-notin$WorkClasses)}).Count-gt0){throw "$Context contains an invalid work class."}
+                  if($Role-ne'executor'-and$Classes.Count-gt0){throw "$Context work_classes is valid only for Executor routes."}
+
+                  if($NeedsPriority){
+                      $PriorityValue=$Candidate.priority
+                      if(-not(Test-JsonInteger $PriorityValue)-or[long]$PriorityValue-lt1){throw "$Context priority must be a positive integer."}
+                  }
+                  if($Candidate.PSObject.Properties['requires_role_rebalance']-and$Candidate.requires_role_rebalance-isnot[bool]){throw "$Context requires_role_rebalance must be boolean."}
+              }
+
+              foreach($Role in $RoleNames){
+                  $RoleConfig=$Profile.roles.$Role
+                  if($null-eq$RoleConfig){throw "Routing profile missing role: $Role"}
+                  Test-Candidate $RoleConfig.primary $Role "$Role primary" $false
+                  $Fallbacks=@(Get-JsonArray $RoleConfig 'fallbacks' "$Role fallbacks" $false)
+                  $Priorities=@()
+                  foreach($Candidate in $Fallbacks){
+                      Test-Candidate $Candidate $Role "$Role fallback" $true
+                      $Priority=[long]$Candidate.priority
+                      if($Priority-in$Priorities){throw "$Role fallback priorities must be unique."}
+                      $Priorities+=$Priority
+                  }
+                  if($Role-in$Enabled-and$Fallbacks.Count-eq0){throw "$Role failover is enabled but no fallback is configured."}
+              }
+          }'''
+          replace_between('scripts/install.ps1','function Test-RoutingProfile([string]$Path){','\nif($RoutingConfigPath){Test-RoutingProfile $RoutingConfigPath}',install_ps)
+
+          runner_ps_settings = r'''if([string]$Routing.schema_version -ne '1.0'){throw 'Routing schema_version must be 1.0.'}
+          if($null-eq$Routing.settings-or$null-eq$Routing.roles){throw 'Routing profile is missing settings or roles.'}
+          $AllowedFailures=@('PROVIDER_UNAVAILABLE','RATE_LIMIT','PLAN_QUOTA_EXHAUSTED','MODEL_RETIRED','MODEL_TEMPORARILY_UNAVAILABLE','BOUNDED_TIMEOUT')
+          $AllowedOnlyOn=$AllowedFailures+@('MODEL_UNAVAILABLE_ON_ALL_CONFIGURED_PROVIDERS')
+          function Get-JsonArray([object]$Owner,[string]$Name,[string]$Context,[bool]$Required=$true){
+            $Property=$Owner.PSObject.Properties[$Name]
+            if($null-eq$Property){if($Required){throw "$Context must be an array."};return}
+            $Value=$Property.Value
+            if($Value-is[string]-or$Value-isnot[System.Collections.IEnumerable]){throw "$Context must be an array."}
+            @($Value)
+          }
+          function Test-JsonInteger([object]$Value){($Value-is[int])-or($Value-is[long])}
+          $Enabled=@(Get-JsonArray $Routing.settings 'enabled_roles' 'settings.enabled_roles')
+          if(@($Enabled|Where-Object{$_-isnot[string]-or[string]::IsNullOrWhiteSpace([string]$_)}).Count-gt0){throw 'settings.enabled_roles contains an invalid value.'}
+          if('architect'-notin@($Enabled|ForEach-Object{[string]$_})){throw 'Architect failover is not enabled in the routing profile.'}
+          $Eligible=@(Get-JsonArray $Routing.settings 'eligible_failures' 'settings.eligible_failures')
+          if(@($Eligible|Where-Object{$_-isnot[string]-or[string]::IsNullOrWhiteSpace([string]$_)-or([string]$_-notin$AllowedFailures)}).Count-gt0){throw 'Routing profile contains an unsupported eligible failure.'}
+          if($Routing.settings.allow_degraded_independence-isnot[bool]-or$Routing.settings.allow_degraded_independence-ne$false){throw 'Routing must fail closed on degraded model independence.'}
+          $CooldownValue=$Routing.settings.default_cooldown_seconds
+          if(-not(Test-JsonInteger $CooldownValue)-or[long]$CooldownValue-lt60-or[long]$CooldownValue-gt86400){throw 'default cooldown must be an integer between 60 and 86400 seconds.'}
+          $DefaultCooldown=[long]$CooldownValue
+          $Architect=$Routing.roles.architect
+          if($null-eq$Architect){throw 'Architect role is missing from the routing profile.'}
+          $Fallbacks=@(Get-JsonArray $Architect 'fallbacks' 'architect fallbacks' $false)
+          if($Fallbacks.Count-eq0){throw 'Architect failover requires at least one fallback.'}
+          '''
+          replace_between('scripts/run-governed.ps1',"if([string]$Routing.schema_version -ne '1.0')",'$StatePath=',runner_ps_settings)
+
+          runner_ps_helpers = r'''function Get-OnlyOn([object]$Candidate){
+            $OnlyOn=@(Get-JsonArray $Candidate 'only_on' 'Every route candidate only_on')
+            if(@($OnlyOn|Where-Object{$_-isnot[string]-or[string]::IsNullOrWhiteSpace([string]$_)-or([string]$_-notin$AllowedOnlyOn)}).Count-gt0){throw 'Every route candidate only_on contains an unsupported value.'}
+            @($OnlyOn|ForEach-Object{[string]$_})
+          }
+          function Get-RoutePriority([object]$Route){
+            $PriorityValue=$Route.priority
+            if(-not(Test-JsonInteger $PriorityValue)-or[long]$PriorityValue-lt1){throw 'Architect fallback priority must be a positive integer.'}
+            [long]$PriorityValue
+          }
+          '''
+          replace_between('scripts/run-governed.ps1','function Get-OnlyOn([object]$Candidate){','function Validate-Route',runner_ps_helpers)
+          replace_once('scripts/run-governed.ps1','foreach($route in @($Architect.fallbacks)){','foreach($route in $Fallbacks){')
+          replace_once('scripts/run-governed.ps1',"$Routes=@([pscustomobject]@{candidate=$Architect.primary;priority=0;route='architect-primary'})+@($Architect.fallbacks|Sort-Object{Get-RoutePriority $_}|ForEach-Object{$priority=Get-RoutePriority $_;[pscustomobject]@{candidate=$_;priority=$priority;route=\"architect-fallback-$priority\"}})","$Routes=@([pscustomobject]@{candidate=$Architect.primary;priority=0;route='architect-primary'})+@($Fallbacks|Sort-Object{Get-RoutePriority $_}|ForEach-Object{$priority=Get-RoutePriority $_;[pscustomobject]@{candidate=$_;priority=$priority;route=\"architect-fallback-$priority\"}})")
+
+          runner_sh = r'''if routing.get('schema_version')!='1.0':raise SystemExit('Routing schema_version must be 1.0.')
+          settings=routing.get('settings');roles=routing.get('roles')
+          if not isinstance(settings,dict) or not isinstance(roles,dict):raise SystemExit('Routing profile is missing settings or roles.')
+          allowed_failures={'PROVIDER_UNAVAILABLE','RATE_LIMIT','PLAN_QUOTA_EXHAUSTED','MODEL_RETIRED','MODEL_TEMPORARILY_UNAVAILABLE','BOUNDED_TIMEOUT'}
+          allowed_only_on=allowed_failures|{'MODEL_UNAVAILABLE_ON_ALL_CONFIGURED_PROVIDERS'}
+          enabled=settings.get('enabled_roles');eligible=settings.get('eligible_failures')
+          if not isinstance(enabled,list) or any(not isinstance(value,str) or not value.strip() for value in enabled):raise SystemExit('settings.enabled_roles must be an array of non-empty strings.')
+          if 'architect' not in enabled:raise SystemExit('Architect failover is not enabled in the routing profile.')
+          if not isinstance(eligible,list) or any(value not in allowed_failures for value in eligible):raise SystemExit('Routing profile contains an unsupported eligible failure.')
+          if settings.get('allow_degraded_independence') is not False:raise SystemExit('Routing must fail closed on degraded model independence.')
+          cooldown=settings.get('default_cooldown_seconds')
+          if not isinstance(cooldown,int) or isinstance(cooldown,bool) or not 60<=cooldown<=86400:raise SystemExit('default cooldown must be an integer between 60 and 86400 seconds.')
+          architect=roles.get('architect')
+          if not isinstance(architect,dict):raise SystemExit('Architect role is missing from the routing profile.')
+          fallbacks=architect.get('fallbacks',[])
+          if not isinstance(fallbacks,list):raise SystemExit('architect fallbacks must be an array.')
+          if not fallbacks:raise SystemExit('Architect failover requires at least one fallback.')
+          def only(candidate):
+           if 'only_on' not in candidate or not isinstance(candidate['only_on'],list):raise SystemExit('Every route candidate only_on must be an array.')
+           if any(not isinstance(value,str) or not value.strip() or value not in allowed_only_on for value in candidate['only_on']):raise SystemExit('Every route candidate only_on contains an unsupported value.')
+           return candidate['only_on']
+          def validate(candidate,priority=False):
+           if not isinstance(candidate,dict) or not re.fullmatch(r'[^/\s]+/\S+',str(candidate.get('model') or '')):raise SystemExit(f"Invalid Architect route model: {candidate.get('model') if isinstance(candidate,dict) else None}")
+           if not str(candidate.get('model_family') or '').strip():raise SystemExit('Architect route model_family is required.')
+           policy=candidate.get('variant_policy');variant=candidate.get('variant')
+           if policy not in {'explicit','provider_default','highest_supported'}:raise SystemExit('Architect route variant_policy is invalid.')
+           if policy=='explicit' and not str(variant or '').strip():raise SystemExit('Explicit Architect variant is required.')
+           if policy=='provider_default' and variant not in {None,''}:raise SystemExit('provider_default must use a blank variant.')
+           if policy=='highest_supported' and not str(variant or '').strip():raise SystemExit('highest_supported must be resolved to a concrete variant before running.')
+           if variant=='highest_supported':raise SystemExit('highest_supported cannot be used as a literal variant.')
+           only(candidate)
+           if priority and (not isinstance(candidate.get('priority'),int) or isinstance(candidate.get('priority'),bool) or candidate['priority']<1):raise SystemExit('Architect fallback priority must be a positive integer.')
+          validate(architect.get('primary'))
+          priorities=set()
+          for candidate in fallbacks:
+           validate(candidate,True)
+           if candidate['priority'] in priorities:raise SystemExit('Architect fallback priorities must be unique.')
+           priorities.add(candidate['priority'])
+          routes=[{'candidate':architect['primary'],'priority':0,'route':'architect-primary'}]+[{'candidate':candidate,'priority':candidate['priority'],'route':f"architect-fallback-{candidate['priority']}"} for candidate in sorted(fallbacks,key=lambda value:value['priority'])]
+          '''
+          replace_between('scripts/run-governed.sh',"if routing.get('schema_version')!='1.0'",'config.mkdir(',runner_sh)
+
+          context=Path('scripts/context-intelligence.ps1')
+          text=context.read_text(encoding='utf-8')
+          old="""        $tokenEstimate=0
+          if(-not[int]::TryParse([string]$skill.estimated_context_tokens,[ref]$tokenEstimate)-or$tokenEstimate-lt0){throw 'SKILL_TOKEN_ESTIMATE_INVALID'}"""
+          new="""        $tokenEstimateValue=$skill.estimated_context_tokens
+          if(($tokenEstimateValue-isnot[int]-and$tokenEstimateValue-isnot[long])-or[long]$tokenEstimateValue-lt0-or[long]$tokenEstimateValue-gt[int]::MaxValue){throw 'SKILL_TOKEN_ESTIMATE_INVALID'}
+          $tokenEstimate=[int]$tokenEstimateValue"""
+          if text.count(old)!=1:raise SystemExit('context-intelligence.ps1 token validation target not found exactly once')
+          text=text.replace(old,new).replace('estimated_context_tokens=[int]$skill.estimated_context_tokens','estimated_context_tokens=$tokenEstimate')
+          context.write_text(text,encoding='utf-8')
+
+          ps_test=r'''$ErrorActionPreference='Stop'
+          $Root=Split-Path -Parent $PSScriptRoot
+          $Install=Join-Path $Root 'scripts/install.ps1'
+          $Runner=Join-Path $Root 'scripts/run-governed.ps1'
+          $Context=Join-Path $Root 'scripts/context-intelligence.ps1'
+          $Fixture=Join-Path $Root 'tests/fixtures/routing/architect-failover.valid.json'
+          $Temp=Join-Path ([IO.Path]::GetTempPath()) ('opencode-v342-schema-'+[guid]::NewGuid().ToString('N'))
+
+          function Write-Json([string]$Path,[object]$Value){
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Path)|Out-Null
+            [IO.File]::WriteAllText($Path,(($Value|ConvertTo-Json -Depth 40)+[Environment]::NewLine),(New-Object Text.UTF8Encoding($false)))
+          }
+          function Invoke-Failure([string]$Script,[string[]]$Arguments,[string]$Expected){
+            $Output=& pwsh -NoProfile -File $Script @Arguments 2>&1;$Code=$LASTEXITCODE;$Text=$Output-join"`n";$global:LASTEXITCODE=0
+            if($Code-eq0){throw "Expected failure from $Script. Output: $Text"}
+            if($Text-notlike"*$Expected*"){throw "Expected '$Expected'. Output: $Text"}
+          }
+          function Load-Profile{Get-Content -LiteralPath $Fixture -Raw|ConvertFrom-Json}
+
+          try{
+            New-Item -ItemType Directory -Force -Path $Temp|Out-Null
+            $InstallCases=@(
+              @{Name='enabled-scalar';Expected='settings.enabled_roles must be an array.';Mutate={param($p)$p.settings.enabled_roles='architect'}},
+              @{Name='eligible-scalar';Expected='settings.eligible_failures must be an array.';Mutate={param($p)$p.settings.eligible_failures='RATE_LIMIT'}},
+              @{Name='only-on-scalar';Expected='architect primary only_on must be an array.';Mutate={param($p)$p.roles.architect.primary.only_on='RATE_LIMIT'}},
+              @{Name='work-class-scalar';Expected='executor primary work_classes must be an array.';Mutate={param($p)$p.roles.executor.primary|Add-Member NoteProperty work_classes 'PATCH' -Force}},
+              @{Name='priority-string';Expected='reviewer fallback priority must be a positive integer.';Mutate={param($p)$p.roles.reviewer.fallbacks[0].priority='1'}},
+              @{Name='fallback-scalar';Expected='reviewer fallbacks must be an array.';Mutate={param($p)$p.roles.reviewer.fallbacks=$p.roles.reviewer.fallbacks[0]}}
+            )
+            foreach($Case in $InstallCases){
+              $Profile=Load-Profile;& $Case.Mutate $Profile;$Path=Join-Path $Temp "$($Case.Name).json";Write-Json $Path $Profile
+              Invoke-Failure $Install @('-ConfigDir',(Join-Path $Temp "config-$($Case.Name)"),'-NonInteractive','-RoutingConfigPath',$Path) $Case.Expected
+            }
+
+            $Project=Join-Path $Temp 'project';New-Item -ItemType Directory -Force -Path $Project|Out-Null
+            $RunnerCases=@(
+              @{Name='runner-enabled-scalar';Expected='settings.enabled_roles must be an array.';Mutate={param($p)$p.settings.enabled_roles='architect'}},
+              @{Name='runner-eligible-scalar';Expected='settings.eligible_failures must be an array.';Mutate={param($p)$p.settings.eligible_failures='RATE_LIMIT'}},
+              @{Name='runner-cooldown-string';Expected='default cooldown must be an integer';Mutate={param($p)$p.settings.default_cooldown_seconds='300'}},
+              @{Name='runner-only-on-scalar';Expected='only_on must be an array.';Mutate={param($p)$p.roles.architect.fallbacks[0].only_on='RATE_LIMIT'}},
+              @{Name='runner-priority-string';Expected='priority must be a positive integer.';Mutate={param($p)$p.roles.architect.fallbacks[0].priority='1'}},
+              @{Name='runner-fallback-scalar';Expected='architect fallbacks must be an array.';Mutate={param($p)$p.roles.architect.fallbacks=$p.roles.architect.fallbacks[0]}}
+            )
+            foreach($Case in $RunnerCases){
+              $Profile=Load-Profile;& $Case.Mutate $Profile;$Path=Join-Path $Temp "$($Case.Name).json";Write-Json $Path $Profile
+              Invoke-Failure $Runner @('-ProjectDir',$Project,'-Command','ai-plan','-Arguments','test','-RoutingConfigPath',$Path,'-ConfigDir',(Join-Path $Temp 'runner-config'),'-OpenCodeCommand','definitely-not-opencode') $Case.Expected
+            }
+
+            & $Context -Action InitializeBudget -ProjectDir $Project -TaskId TOKEN-STRING -WorkClass PATCH -CacheRoot (Join-Path $Temp 'cache')|Out-Null
+            $Catalog=Join-Path $Temp 'catalog.json';$Criteria=Join-Path $Temp 'criteria.json'
+            Write-Json $Catalog @([ordered]@{schema='SKILL_CAPABILITY_MANIFEST_V1';skill_id='token-skill';version='1';content_sha256=('a'*64);source='project';trust_class='PROJECT_AUTHORITATIVE';triggers=@('test');supported_work_classes=@('PATCH');languages=@();frameworks=@();required_tools=@();external_dependencies=@();conflicts_with=@();overlaps_with=@();estimated_context_tokens='100';sections=@()})
+            Write-Json $Criteria ([ordered]@{triggers=@('test');languages=@();frameworks=@();required_sections=@();available_tools=@()})
+            Invoke-Failure $Context @('-Action','SelectSkills','-ProjectDir',$Project,'-TaskId','TOKEN-STRING','-CatalogPath',$Catalog,'-InputJsonPath',$Criteria,'-CacheRoot',(Join-Path $Temp 'cache')) 'SKILL_TOKEN_ESTIMATE_INVALID'
+            Write-Host 'PASS: PowerShell routing schema parity regressions'
+          }finally{Remove-Item -LiteralPath $Temp -Recurse -Force -ErrorAction SilentlyContinue;$global:LASTEXITCODE=0}
+          '''
+          Path('tests/test-powershell-schema-parity.ps1').write_text(ps_test,encoding='utf-8')
+
+          py_test=r'''#!/usr/bin/env python3
+          from __future__ import annotations
+          import copy,json,pathlib,subprocess,tempfile
+
+          ROOT=pathlib.Path(__file__).resolve().parents[1]
+          INSTALL=ROOT/'scripts/install.sh';RUNNER=ROOT/'scripts/run-governed.sh';CONTEXT=ROOT/'scripts/context-intelligence.py'
+          FIXTURE=ROOT/'tests/fixtures/routing/architect-failover.valid.json'
+
+          def write(path,value):path.write_text(json.dumps(value,indent=2)+'\n',encoding='utf-8')
+          def fail(command,expected):
+              result=subprocess.run([str(value) for value in command],text=True,capture_output=True)
+              text=result.stdout+'\n'+result.stderr
+              assert result.returncode!=0,(command,text)
+              assert expected in text,(expected,text)
+          def profile():return json.loads(FIXTURE.read_text(encoding='utf-8'))
+
+          def main():
+              with tempfile.TemporaryDirectory(prefix='opencode-v342-schema-') as directory:
+                  temp=pathlib.Path(directory);project=temp/'project';project.mkdir()
+                  cases=[
+                      ('enabled-scalar','settings.enabled_roles',lambda p:p['settings'].__setitem__('enabled_roles','architect')),
+                      ('eligible-scalar','settings.eligible_failures',lambda p:p['settings'].__setitem__('eligible_failures','RATE_LIMIT')),
+                      ('only-on-scalar','only_on must be an array',lambda p:p['roles']['architect']['primary'].__setitem__('only_on','RATE_LIMIT')),
+                      ('work-class-scalar','invalid work class',lambda p:p['roles']['executor']['primary'].__setitem__('work_classes','PATCH')),
+                      ('priority-string','positive integer',lambda p:p['roles']['reviewer']['fallbacks'][0].__setitem__('priority','1')),
+                      ('fallback-scalar','fallbacks must be an array',lambda p:p['roles']['reviewer'].__setitem__('fallbacks',p['roles']['reviewer']['fallbacks'][0])),
+                  ]
+                  for name,expected,mutate in cases:
+                      value=profile();mutate(value);path=temp/f'{name}.json';write(path,value)
+                      fail([INSTALL,'--config-dir',temp/f'config-{name}','--routing-config',path],expected)
+                  runner_cases=[
+                      ('runner-enabled-scalar','settings.enabled_roles',lambda p:p['settings'].__setitem__('enabled_roles','architect')),
+                      ('runner-eligible-scalar','unsupported eligible failure',lambda p:p['settings'].__setitem__('eligible_failures','RATE_LIMIT')),
+                      ('runner-cooldown-string','integer between 60 and 86400',lambda p:p['settings'].__setitem__('default_cooldown_seconds','300')),
+                      ('runner-only-on-scalar','only_on must be an array',lambda p:p['roles']['architect']['fallbacks'][0].__setitem__('only_on','RATE_LIMIT')),
+                      ('runner-priority-string','positive integer',lambda p:p['roles']['architect']['fallbacks'][0].__setitem__('priority','1')),
+                      ('runner-fallback-scalar','fallbacks must be an array',lambda p:p['roles']['architect'].__setitem__('fallbacks',p['roles']['architect']['fallbacks'][0])),
+                  ]
+                  for name,expected,mutate in runner_cases:
+                      value=profile();mutate(value);path=temp/f'{name}.json';write(path,value)
+                      fail([RUNNER,'--project-dir',project,'--command','ai-plan','--arguments','test','--routing-config',path,'--config-dir',temp/'runner-config','--opencode-command','definitely-not-opencode'],expected)
+                  print('PASS: Unix routing schema parity regressions')
+          if __name__=='__main__':main()
+          '''
+          Path('tests/test-routing-schema-parity.py').write_text(py_test,encoding='utf-8')
+
+          hardening=Path('.github/workflows/verify-hardening.yml')
+          text=hardening.read_text(encoding='utf-8')
+          text=text.replace('tests/test-hardening.py tests/test-jsonc-preservation.py scripts/context-intelligence.py','tests/test-hardening.py tests/test-jsonc-preservation.py tests/test-routing-schema-parity.py scripts/context-intelligence.py')
+          text=text.replace('python3 tests/test-jsonc-preservation.py','python3 tests/test-jsonc-preservation.py\n          python3 tests/test-routing-schema-parity.py')
+          text=text.replace("'tests/test-runner-contract.ps1','tests/test-jsonc-preservation.ps1'","'tests/test-runner-contract.ps1','tests/test-jsonc-preservation.ps1','tests/test-powershell-schema-parity.ps1'")
+          text=text.replace('pwsh -NoProfile -File tests/test-jsonc-preservation.ps1','pwsh -NoProfile -File tests/test-jsonc-preservation.ps1\n          pwsh -NoProfile -File tests/test-powershell-schema-parity.ps1')
+          hardening.write_text(text,encoding='utf-8')
+
+          Path('VERSION').write_text('3.4.2\n',encoding='utf-8')
+          replace_once('README.md','Current release: **3.4.1 — Cleanup & Hardening**.','Current release: **3.4.2 — Cross-Platform Schema Parity**.\n\nVersion 3.4.2 makes routing-profile and skill-manifest JSON type validation identical across Windows and Unix entrypoints; scalar strings no longer pass where the schema requires arrays or integers.')
+          changelog=Path('CHANGELOG.md');text=changelog.read_text(encoding='utf-8')
+          marker='All released versions are recorded in this single file. Dates use `YYYY-MM-DD`.\n'
+          entry='''\n## 3.4.2 - 2026-07-30\n\n- Enforced the same routing JSON type contract in the PowerShell installer and both Architect runners.\n- Rejected scalar strings where `enabled_roles`, `eligible_failures`, `fallbacks`, `only_on` or `work_classes` require arrays.\n- Rejected string-encoded cooldowns, priorities and skill token estimates where the schema requires JSON integers.\n- Added Windows and Unix negative regressions for routing and skill-manifest schema parity.\n- Preserved all provider/model routes, variants, fallback priorities, work classes, reviewer independence, durability and external-action contracts.\n'''
+          if '## 3.4.2 - 2026-07-30' not in text:text=text.replace(marker,marker+entry)
+          changelog.write_text(text,encoding='utf-8')
+
+          for path in ['scripts/install.ps1','scripts/install.sh']:
+              p=Path(path);p.write_text(p.read_text(encoding='utf-8').replace('3.4.1','3.4.2'),encoding='utf-8')
+
+          for path in ['scripts/uninstall.ps1','scripts/uninstall.sh']:
+              p=Path(path);text=p.read_text(encoding='utf-8')
+              text=text.replace("'3.4.0','3.4.1'","'3.4.0','3.4.1','3.4.2'").replace('3.4.0|3.4.1','3.4.0|3.4.1|3.4.2')
+              text=text.replace("'3.3.2','3.3.3','3.3.4','3.4.0','3.4.1'","'3.3.2','3.3.3','3.3.4','3.4.0','3.4.1','3.4.2'")
+              p.write_text(text,encoding='utf-8')
+
+          ps=Path('scripts/verify-routing.ps1');text=ps.read_text(encoding='utf-8')
+          text=text.replace("$Supported=@('3.3.2','3.3.3','3.3.4','3.4.0','3.4.1')","$Supported=@('3.3.2','3.3.3','3.3.4','3.4.0','3.4.1','3.4.2')")
+          text=text.replace("if($Version-in@('3.4.0','3.4.1')){\n    $ExpectedRunner=if($Version-eq'3.4.0'){'3.3.4'}else{'3.4.1'}\n    $ExpectedContext=if($Version-eq'3.4.0'){'3.4.0'}else{'3.4.1'}","if($Version-in@('3.4.0','3.4.1','3.4.2')){\n    $ExpectedRunner=if($Version-eq'3.4.0'){'3.3.4'}else{$Version}\n    $ExpectedContext=$Version")
+          text=text.replace("'3.4.0','3.4.1'","'3.4.0','3.4.1','3.4.2'").replace("'3.3.3','3.3.4','3.4.0','3.4.1'","'3.3.3','3.3.4','3.4.0','3.4.1','3.4.2'").replace("'3.3.4','3.4.0','3.4.1'","'3.3.4','3.4.0','3.4.1','3.4.2'")
+          text=text.replace("if($Version-eq'3.4.1')","if($Version-in@('3.4.1','3.4.2'))")
+          ps.write_text(text,encoding='utf-8')
+
+          sh=Path('scripts/verify-routing.sh');text=sh.read_text(encoding='utf-8')
+          text=text.replace('3.3.2|3.3.3|3.3.4|3.4.0|3.4.1','3.3.2|3.3.3|3.3.4|3.4.0|3.4.1|3.4.2')
+          text=text.replace("if version in {'3.4.0','3.4.1'}:\n    runner='3.3.4' if version=='3.4.0' else '3.4.1';context='3.4.0' if version=='3.4.0' else '3.4.1'","if version in {'3.4.0','3.4.1','3.4.2'}:\n    runner='3.3.4' if version=='3.4.0' else version;context=version")
+          text=text.replace("'3.4.0','3.4.1'","'3.4.0','3.4.1','3.4.2'").replace("'3.3.3','3.3.4','3.4.0','3.4.1'","'3.3.3','3.3.4','3.4.0','3.4.1','3.4.2'").replace("'3.3.4','3.4.0','3.4.1'","'3.3.4','3.4.0','3.4.1','3.4.2'")
+          text=text.replace("version=='3.4.1'","version in {'3.4.1','3.4.2'}")
+          sh.write_text(text,encoding='utf-8')
+
+          for path in ['.github/workflows/verify-v332.yml','.github/workflows/verify-v333.yml','.github/workflows/verify-v340.yml']:
+              p=Path(path);text=p.read_text(encoding='utf-8').replace('3.4.1','3.4.2').replace('Cleanup & Hardening','Cross-Platform Schema Parity');p.write_text(text,encoding='utf-8')
+
+          architect=Path('docs/architect-runner-integration.md');text=architect.read_text(encoding='utf-8')
+          text=text.replace('Version 3.4.1 hardens routing validation, cooldown parity, managed-tool backup and retained-log privacy.','Version 3.4.1 hardens routing validation, cooldown parity, managed-tool backup and retained-log privacy. Version 3.4.2 enforces identical JSON array and integer types across Windows and Unix entrypoints.')
+          text=text.replace('The 3.4.1 routing manifest records:','The 3.4.2 routing manifest records:').replace('governance_version: 3.4.1','governance_version: 3.4.2').replace('architect_runner_version: 3.4.1','architect_runner_version: 3.4.2').replace('context_intelligence_version: 3.4.1','context_intelligence_version: 3.4.2')
+          text=text.replace('Optional JSON arrays are normalized consistently across PowerShell and Unix; an absent optional work-class array is empty, not an invalid blank value.','JSON arrays and integers are type-checked consistently across PowerShell and Unix. An absent optional work-class array is empty, while scalar strings are rejected rather than coerced.')
+          architect.write_text(text,encoding='utf-8')
+
+          context_doc=Path('docs/context-intelligence-skill-routing.md');text=context_doc.read_text(encoding='utf-8')
+          text=text.replace('Version 3.4.1 hardens path containment, required-section routing and terminal-state validation.','Version 3.4.1 hardens path containment, required-section routing and terminal-state validation. Version 3.4.2 rejects string-encoded token estimates and aligns the PowerShell schema with the Python core.')
+          text=text.replace('governance_version: 3.4.1','governance_version: 3.4.2').replace('architect_runner_version: 3.4.1','architect_runner_version: 3.4.2').replace('context_intelligence_version: 3.4.1','context_intelligence_version: 3.4.2')
+          text=text.replace('3.4.1\n```','3.4.1\n3.4.2\n```').replace('A 3.4.1 installation preserves','A 3.4.2 installation preserves')
+          context_doc.write_text(text,encoding='utf-8')
+          PY
+
+      - name: Validate patched scripts and focused regressions
+        run: |
+          python3 -m py_compile tests/test-routing-schema-parity.py scripts/context-intelligence.py
+          bash -n scripts/install.sh scripts/run-governed.sh scripts/verify-routing.sh scripts/uninstall.sh
+          python3 tests/test-routing-schema-parity.py
+          python3 tests/test-hardening.py
+          python3 tests/test-context-intelligence.py
+          pwsh -NoProfile -File tests/test-powershell-schema-parity.ps1
+          pwsh -NoProfile -File tests/test-context-intelligence.ps1
+
+      - name: Commit validated v3.4.2 patch
+        run: |
+          rm -f .github/workflows/apply-v342-schema-parity.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'fix: enforce cross-platform routing schema parity'
+          git push origin HEAD:fix/v3.4.2-routing-schema-parity
