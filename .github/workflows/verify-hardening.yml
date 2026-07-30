@@ -3,42 +3,7 @@ on:
   push:
   pull_request:
 
-permissions:
-  contents: write
-
 jobs:
-  apply-v344:
-    if: ((github.event_name == 'push' && github.ref == 'refs/heads/release/v3.4.4-deterministic-workflow-continuation') || (github.event_name == 'pull_request' && github.head_ref == 'release/v3.4.4-deterministic-workflow-continuation')) && github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: release/v3.4.4-deterministic-workflow-continuation
-          fetch-depth: 0
-      - name: Apply deterministic continuation release
-        run: |
-          python3 scripts/fix-v344-migration.py
-          python3 scripts/apply-v344.py
-          python3 scripts/fix-v344-whitespace.py
-      - name: Run focused regressions before commit
-        run: |
-          set -euo pipefail
-          python3 -m py_compile scripts/workflow-continuation.py tests/test-workflow-continuation.py tests/test-command-contracts.py
-          python3 tests/test-workflow-continuation.py
-          bash tests/test-workflow-continuation.sh
-          python3 tests/test-command-contracts.py
-          bash -n scripts/install.sh scripts/uninstall.sh scripts/verify-routing.sh
-          git diff --check
-      - name: Commit validated migration
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git restore .github/workflows/verify-v332.yml .github/workflows/verify-v333.yml .github/workflows/verify-v340.yml
-          git add -A
-          git commit -m 'release: prepare OpenCode Governance 3.4.4'
-          git push origin HEAD:release/v3.4.4-deterministic-workflow-continuation
-
   linux-hardening:
     runs-on: ubuntu-latest
     steps:
