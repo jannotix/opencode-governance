@@ -117,6 +117,7 @@ jobs:
           $runState=Join-Path $env:RUNNER_TEMP 'v34-run-state.json';@{top_level_command='ai-workflow';current_phase='AUDIT_PASS';next_required_phase='IDEA_INTAKE';terminal_reason=$null}|ConvertTo-Json|Set-Content $runState -Encoding utf8
           & pwsh -NoProfile -File (Join-Path $tools 'workflow-continuation.ps1') -RunStatePath $runState -ExpectedCommand ai-workflow|Out-Null
           if($LASTEXITCODE-ne3){throw "Expected continuation exit 3, got $LASTEXITCODE"}
+          $global:LASTEXITCODE=0
           'preserve'|Set-Content (Join-Path $tools 'unrelated.txt');./scripts/uninstall.ps1 -ConfigDir $config|Out-Null
           if(-not(Test-Path (Join-Path $tools 'unrelated.txt'))){throw 'Unrelated tool removed'}
           if(-not(Test-Path (Join-Path $cache 'sentinel.txt'))){throw 'External cache removed'}
