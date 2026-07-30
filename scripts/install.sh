@@ -72,25 +72,31 @@ fi
 JSONC_TARGET="$CONFIG_DIR/opencode.jsonc"
 if [[ ! -f "$JSONC_TARGET" && -f "$CONFIG_DIR/opencode.json" ]]; then JSONC_TARGET="$CONFIG_DIR/opencode.json"; fi
 JSONC_BACKUP=""
+JSONC_NORMALIZED=""
 INSTALL_COMPLETED=0
 cleanup_install(){
   status=$?
   if [[ $INSTALL_COMPLETED -ne 1 && -n "$JSONC_BACKUP" && -f "$JSONC_BACKUP" ]]; then cp -p "$JSONC_BACKUP" "$JSONC_TARGET"; fi
   [[ -z "$JSONC_BACKUP" ]] || rm -f "$JSONC_BACKUP"
+  [[ -z "$JSONC_NORMALIZED" ]] || rm -f "$JSONC_NORMALIZED"
   exit "$status"
 }
 trap cleanup_install EXIT
 if [[ -f "$JSONC_TARGET" ]]; then
-  JSONC_BACKUP="$(mktemp)";cp -p "$JSONC_TARGET" "$JSONC_BACKUP"
+  JSONC_BACKUP="$(mktemp)";JSONC_NORMALIZED="$(mktemp)"
+  cp -p "$JSONC_TARGET" "$JSONC_BACKUP"
   python3 "$SCRIPT_DIR/normalize-jsonc.py" "$JSONC_TARGET"
+  cp -p "$JSONC_TARGET" "$JSONC_NORMALIZED"
+  printf '{\n  "$schema": "https://opencode.ai/config.json"\n}\n' > "$JSONC_TARGET"
 fi
 
 "$SCRIPT_DIR/install-core.sh" "$@"
+backup_dir="$(find "$CONFIG_DIR/backups" -mindepth 1 -maxdepth 1 -type d -name 'opencode-governance-*' -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -n1 | cut -d' ' -f2-)"
+if [[ -z "$backup_dir" || ! -d "$backup_dir" ]]; then echo 'Installer backup directory was not created.' >&2;exit 1;fi
+if [[ -n "$JSONC_BACKUP" && -f "$JSONC_BACKUP" ]]; then cp -p "$JSONC_BACKUP" "$backup_dir/$(basename "$JSONC_TARGET")";fi
 
 if [[ -n "$ROUTING_CONFIG" ]]; then
   tools="$CONFIG_DIR/opencode-governance-tools"
-  backup_dir="$(find "$CONFIG_DIR/backups" -mindepth 1 -maxdepth 1 -type d -name 'opencode-governance-*' -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -n1 | cut -d' ' -f2-)"
-  if [[ -z "$backup_dir" || ! -d "$backup_dir" ]]; then echo 'Installer backup directory was not created; refusing to overwrite managed tools.' >&2;exit 1;fi
   for name in architect-attempt.ps1 architect-attempt.sh context-intelligence.ps1 context-intelligence.sh context-intelligence.py; do [[ ! -f "$tools/$name" ]] || cp -p "$tools/$name" "$backup_dir/$name";done
   cp "$SCRIPT_DIR/run-governed.ps1" "$tools/architect-attempt.ps1";cp "$SCRIPT_DIR/run-governed.sh" "$tools/architect-attempt.sh"
   cp "$SCRIPT_DIR/context-intelligence.ps1" "$tools/context-intelligence.ps1";cp "$SCRIPT_DIR/context-intelligence.sh" "$tools/context-intelligence.sh";cp "$SCRIPT_DIR/context-intelligence.py" "$tools/context-intelligence.py"
@@ -186,5 +192,9 @@ PY
   "$SCRIPT_DIR/verify-routing.sh" "$CONFIG_DIR"
   echo 'Installed OpenCode Governance v3.4.1 — Cleanup & Hardening.'
   echo 'Routing preflight, complete managed-tool backup and hardened context paths are enabled without changing model selection.'
+fi
+if [[ -n "$JSONC_NORMALIZED" && -f "$JSONC_NORMALIZED" ]]; then
+  python3 "$SCRIPT_DIR/normalize-jsonc.py" "$JSONC_NORMALIZED" --set-default-agent
+  cp -p "$JSONC_NORMALIZED" "$JSONC_TARGET"
 fi
 INSTALL_COMPLETED=1
