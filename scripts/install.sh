@@ -18,8 +18,23 @@ done
 
 BASE_INSTALLER="$SCRIPT_DIR/install-base.sh"
 CAPABILITIES="$SCRIPT_DIR/governance-capabilities.py"
-[[ -f "$BASE_INSTALLER" ]] || { echo "Internal base installer not found: $BASE_INSTALLER" >&2; exit 1; }
-[[ -f "$CAPABILITIES" ]] || { echo "Governance capability installer not found: $CAPABILITIES" >&2; exit 1; }
+TRANSACTION="$SCRIPT_DIR/governance-install-transaction.py"
+for required in "$BASE_INSTALLER" "$CAPABILITIES" "$TRANSACTION"; do
+  [[ -f "$required" ]] || { echo "Required Governance installer component not found: $required" >&2; exit 1; }
+done
+
+snapshot_json="$(python3 "$TRANSACTION" snapshot --config-dir "$CONFIG_DIR")"
+backup_dir="$(python3 -c 'import json,sys;print(json.load(sys.stdin)["backup_dir"])' <<<"$snapshot_json")"
+[[ -d "$backup_dir" ]] || { echo 'Governance pre-install snapshot directory was not created.' >&2; exit 1; }
+rollback_required=1
+cleanup_install(){
+  status=$?
+  if [[ $status -ne 0 && $rollback_required -eq 1 ]]; then
+    python3 "$TRANSACTION" restore --config-dir "$CONFIG_DIR" --backup-dir "$backup_dir" || echo 'Governance rollback failed.' >&2
+  fi
+  exit "$status"
+}
+trap cleanup_install EXIT
 
 bash "$BASE_INSTALLER" "$@"
 
@@ -32,3 +47,7 @@ else
   echo 'Installed OpenCode Governance v3.6.0 in legacy single-model mode.'
   echo 'Provider/model routing was not changed. Advanced routed capabilities require a local routing profile.'
 fi
+
+echo "Canonical pre-install backup: $backup_dir"
+rollback_required=0
+trap - EXIT
