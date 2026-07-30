@@ -91,6 +91,12 @@ jobs:
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
           printf 'VERSION=%s\n' "$version" >> "$GITHUB_ENV"
 
+      - name: Configure release Git identity
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
       - name: Repair historical release tag integrity
         run: |
           set -euo pipefail
