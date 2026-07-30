@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.4.0 - 2026-07-30
+
+- Added bounded iterative context retrieval with deterministic `CONTEXT_BUDGET_V1`, a maximum of three `DISPATCH -> EVALUATE -> REFINE` cycles and explicit `CONTEXT_SUFFICIENT|BLOCKED_CONTEXT_GAP` terminal states.
+- Added normalized `SKILL_CAPABILITY_MANIFEST_V1` selection with trust precedence, work-class and technology applicability, overlap/conflict deduplication, section-level loading and exact rejection reasons.
+- Added an external user-local content-addressed summary cache keyed by project identity, relative-path hash, source SHA-256, schema, parser and skill context; cache output remains advisory and never replaces current primary evidence.
+- Added context-efficiency metrics for considered/admitted/rejected files, retrieval cycles, selected skills, estimated skill tokens, cache results, repeated reads, packet references and runtime token data when available.
+- Added managed PowerShell, Unix and Python Context Intelligence tools with path-escape, invalid-task, cache-overlap and malformed-schema fail-closed validation.
+- Added Windows and Linux regression coverage for budgets, cycle limits, skill deduplication, cache invalidation, source-content secrecy, installation, verification and conservative uninstall.
+- Preserved every provider/model route, variant, fallback priority, `only_on`, hidden alias, Executor work class, reviewer-independence rule, Local Configuration Durability and no-push/no-deploy contract.
+
 ## 3.3.4 - 2026-07-30
 
 - Replaced Architect runner `git status --porcelain` equality with `PROJECT_STATE_FINGERPRINT_V1`, a content-aware project manifest that detects changes to files that were already dirty, staged or untracked.
