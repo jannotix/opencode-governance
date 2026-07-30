@@ -37,6 +37,8 @@ def validate(directory: pathlib.Path, label: str) -> None:
             raise AssertionError(f"{label}/{name}: invalid frontmatter or agent binding")
         if re.search(r"__[A-Z0-9_]+__", text):
             raise AssertionError(f"{label}/{name}: unrendered placeholder")
+        if "NO_AUTOMATIC_EXTERNAL_ACTION" not in text:
+            raise AssertionError(f"{label}/{name}: missing universal external-action boundary")
         if text.count("## ARCHITECT_RUNNER_ENTRY_GATE") > 1:
             raise AssertionError(f"{label}/{name}: duplicate Architect entry gate")
         if text.count("## CONTEXT_INTELLIGENCE_ENTRY") > 1:
