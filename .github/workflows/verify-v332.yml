@@ -26,7 +26,7 @@ jobs:
           assert data['architect_runner_version']=='3.4.4'
           assert data['context_intelligence_version']=='3.4.4'
           assert data['workflow_continuation_version']=='3.4.4'
-          names=['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','workflow-continuation.py']
+          names=['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','workflow-continuation.ps1','workflow-continuation.py']
           assert set(data['managed_tools'])=={str(tools/name) for name in names}
           for name in ['architect','build','plan']:
               text=(root/'agents'/f'{name}.md').read_text()
@@ -36,12 +36,12 @@ jobs:
               for marker in ['ARCHITECT_RUNNER_ENTRY_GATE','ARCHITECT_RUNNER_REQUIRED','PROJECT_STATE_CHANGED','pwsh -NoProfile -File','WINDOWS_COMMAND:','UNIX_COMMAND:']:assert marker in text
           for command in ['ai-workflow','ai-resume']:
               text=(root/'commands'/f'{command}.md').read_text()
-              for marker in ['WORKFLOW_CONTINUATION_GATE_V1','WORKFLOW_CONTINUATION_CORE','CONTINUE_REQUIRED','TERMINAL_ALLOWED',str(tools/'workflow-continuation.py')]:assert marker in text
+              for marker in ['WORKFLOW_CONTINUATION_GATE_V1','WINDOWS_WORKFLOW_CONTINUATION_CORE','UNIX_WORKFLOW_CONTINUATION_CORE','CONTINUE_REQUIRED','TERMINAL_ALLOWED',str(tools/'workflow-continuation.ps1'),str(tools/'workflow-continuation.py')]:assert marker in text
           PY
           ./scripts/verify-routing.sh "$config"
           ./scripts/uninstall.sh --config-dir "$config" >/dev/null
           test -f "$unrelated"
-          for name in architect-attempt.ps1 architect-attempt.sh executor-attempt.ps1 executor-attempt.sh context-intelligence.ps1 context-intelligence.sh context-intelligence.py workflow-continuation.py;do test ! -e "$config/opencode-governance-tools/$name";done
+          for name in architect-attempt.ps1 architect-attempt.sh executor-attempt.ps1 executor-attempt.sh context-intelligence.ps1 context-intelligence.sh context-intelligence.py workflow-continuation.ps1 workflow-continuation.py;do test ! -e "$config/opencode-governance-tools/$name";done
       - name: Exercise transactional and non-Git behavior
         shell: bash
         run: bash tests/test-project-state-integrity.sh
@@ -65,7 +65,7 @@ jobs:
           if($manifest.architect_runner_version-ne'3.4.4'){throw 'Architect runner version is not 3.4.4'}
           if($manifest.context_intelligence_version-ne'3.4.4'){throw 'Context Intelligence version is not 3.4.4'}
           if($manifest.workflow_continuation_version-ne'3.4.4'){throw 'Workflow continuation version is not 3.4.4'}
-          if(@($manifest.managed_tools).Count-ne8){throw 'Expected eight managed tools'}
+          if(@($manifest.managed_tools).Count-ne9){throw 'Expected nine managed tools'}
           foreach($name in 'architect','build','plan'){
             $text=Get-Content (Join-Path $config "agents/$name.md") -Raw
             foreach($marker in 'ARCHITECT_RUNNER_INTEGRATION','ARCHITECT_RUNNER_REQUIRED','POWERSHELL_7_REQUIRED','PROJECT_STATE_FINGERPRINT_V1','NON_GIT_PROJECT_SUPPORTED','PROJECT_STATE_CHANGED','[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]'){if($text-notlike"*$marker*"){throw "$name missing marker: $marker"}}
@@ -76,11 +76,11 @@ jobs:
           }
           foreach($command in 'ai-workflow','ai-resume'){
             $text=Get-Content (Join-Path $config "commands/$command.md") -Raw
-            foreach($marker in 'WORKFLOW_CONTINUATION_GATE_V1','WORKFLOW_CONTINUATION_CORE','CONTINUE_REQUIRED','TERMINAL_ALLOWED',(Join-Path $tools 'workflow-continuation.py')){if($text-notlike"*$marker*"){throw "$command missing marker: $marker"}}
+            foreach($marker in 'WORKFLOW_CONTINUATION_GATE_V1','WINDOWS_WORKFLOW_CONTINUATION_CORE','UNIX_WORKFLOW_CONTINUATION_CORE','CONTINUE_REQUIRED','TERMINAL_ALLOWED',(Join-Path $tools 'workflow-continuation.ps1'),(Join-Path $tools 'workflow-continuation.py')){if($text-notlike"*$marker*"){throw "$command missing marker: $marker"}}
           }
           ./scripts/verify-routing.ps1 -ConfigDir $config;./scripts/uninstall.ps1 -ConfigDir $config|Out-Null
           if(-not(Test-Path (Join-Path $tools 'unrelated-user-tool.txt'))){throw 'Unrelated user tool was removed'}
-          foreach($name in 'architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','workflow-continuation.py'){if(Test-Path (Join-Path $tools $name)){throw "Managed tool survived uninstall: $name"}}
+          foreach($name in 'architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','workflow-continuation.ps1','workflow-continuation.py'){if(Test-Path (Join-Path $tools $name)){throw "Managed tool survived uninstall: $name"}}
       - name: Exercise transactional and non-Git behavior
         shell: pwsh
         run: pwsh -NoProfile -File tests/test-project-state-integrity.ps1
