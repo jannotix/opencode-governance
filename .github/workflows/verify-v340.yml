@@ -1,0 +1,30 @@
+name: Verify Context Intelligence v3.4.0
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux-context-intelligence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          show-progress: false
+      - name: Run Python context regressions
+        run: python3 tests/test-context-intelligence.py
+
+  windows-context-intelligence:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          show-progress: false
+      - name: Parse PowerShell test
+        shell: pwsh
+        run: |
+          $errors=$null
+          [Management.Automation.Language.Parser]::ParseFile((Join-Path $env:GITHUB_WORKSPACE 'tests/test-context-intelligence.ps1'),[ref]$null,[ref]$errors)|Out-Null
+          if($errors.Count){throw ($errors|Out-String)}
+      - name: Run PowerShell context regressions
+        shell: pwsh
+        run: ./tests/test-context-intelligence.ps1
