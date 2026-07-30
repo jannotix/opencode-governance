@@ -1,0 +1,68 @@
+name: Verify v3.6 governance authority and memory
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux-governance-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          show-progress: false
+      - name: Compile governance runtime
+        run: |
+          python3 -m py_compile \
+            scripts/governance-authority.py \
+            scripts/governance-memory.py \
+            scripts/governance-evidence.py \
+            scripts/governance-simulation.py \
+            scripts/governance-runtime-install.py \
+            tests/test-governance-authority-memory.py \
+            tests/test-governance-runtime-install.py \
+            tests/test-governance-simulation-fixture.py
+          bash -n scripts/install-v360.sh scripts/uninstall-v360.sh
+      - name: Run authority, memory, evidence and simulation regressions
+        run: python3 tests/test-governance-authority-memory.py
+      - name: Run runtime installer lifecycle regressions
+        run: python3 tests/test-governance-runtime-install.py
+      - name: Validate shipped twelve-command simulation
+        run: python3 tests/test-governance-simulation-fixture.py
+      - name: Preserve workflow continuation regressions
+        run: python3 tests/test-workflow-continuation.py
+
+  windows-governance-runtime:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          show-progress: false
+      - name: Compile governance runtime
+        shell: pwsh
+        run: |
+          python -m py_compile `
+            scripts/governance-authority.py `
+            scripts/governance-memory.py `
+            scripts/governance-evidence.py `
+            scripts/governance-simulation.py `
+            scripts/governance-runtime-install.py `
+            tests/test-governance-authority-memory.py `
+            tests/test-governance-runtime-install.py `
+            tests/test-governance-simulation-fixture.py
+          $errors=$null
+          foreach($path in 'scripts/install-v360.ps1','scripts/uninstall-v360.ps1'){
+            [Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path),[ref]$null,[ref]$errors)|Out-Null
+            if($errors.Count){throw "$path`n$($errors|Out-String)"}
+          }
+      - name: Run authority, memory, evidence and simulation regressions
+        shell: pwsh
+        run: python tests/test-governance-authority-memory.py
+      - name: Run runtime installer lifecycle regressions
+        shell: pwsh
+        run: python tests/test-governance-runtime-install.py
+      - name: Validate shipped twelve-command simulation
+        shell: pwsh
+        run: python tests/test-governance-simulation-fixture.py
+      - name: Preserve workflow continuation regressions
+        shell: pwsh
+        run: python tests/test-workflow-continuation.py
