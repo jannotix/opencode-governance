@@ -26,13 +26,23 @@ function Test-RoutingProfile([string]$Path){
     $Failures=@('PROVIDER_UNAVAILABLE','RATE_LIMIT','PLAN_QUOTA_EXHAUSTED','MODEL_RETIRED','MODEL_TEMPORARILY_UNAVAILABLE','BOUNDED_TIMEOUT')
     $OnlyOnAllowed=$Failures+@('MODEL_UNAVAILABLE_ON_ALL_CONFIGURED_PROVIDERS')
     $WorkClasses=@('PATCH','BOUNDED_FEATURE','MAJOR_FEATURE','EXISTING_PRODUCT_EVOLUTION','NEW_PRODUCT','HIGH_RISK_CHANGE')
-    $Enabled=@($Profile.settings.enabled_roles|Where-Object{-not[string]::IsNullOrWhiteSpace([string]$_)}|ForEach-Object{[string]$_})
-    $Eligible=@($Profile.settings.eligible_failures|Where-Object{-not[string]::IsNullOrWhiteSpace([string]$_)}|ForEach-Object{[string]$_})
-    if(@($Enabled|Where-Object{$_-notin$RoleNames}).Count){throw 'Routing profile contains an unsupported enabled role.'}
-    if(@($Eligible|Where-Object{$_-notin$Failures}).Count){throw 'Routing profile contains an unsupported eligible failure.'}
-    if($Profile.settings.allow_degraded_independence-ne$false){throw 'Routing must fail closed on degraded model independence.'}
-    $Cooldown=0
-    if(-not[int]::TryParse([string]$Profile.settings.default_cooldown_seconds,[ref]$Cooldown)-or$Cooldown-lt60-or$Cooldown-gt86400){throw 'default_cooldown_seconds must be between 60 and 86400.'}
+
+    function Get-JsonArray([object]$Owner,[string]$Name,[string]$Context,[bool]$Required=$true){
+        $Property=$Owner.PSObject.Properties[$Name]
+        if($null-eq$Property){if($Required){throw "$Context must be an array."};return}
+        $Value=$Property.Value
+        if($Value-is[string]-or$Value-isnot[System.Collections.IEnumerable]){throw "$Context must be an array."}
+        @($Value)
+    }
+    function Test-JsonInteger([object]$Value){($Value-is[int])-or($Value-is[long])}
+
+    $Enabled=@(Get-JsonArray $Profile.settings 'enabled_roles' 'settings.enabled_roles')
+    $Eligible=@(Get-JsonArray $Profile.settings 'eligible_failures' 'settings.eligible_failures')
+    if(@($Enabled|Where-Object{$_-isnot[string]-or[string]::IsNullOrWhiteSpace([string]$_)-or([string]$_-notin$RoleNames)}).Count-gt0){throw 'Routing profile contains an unsupported enabled role.'}
+    if(@($Eligible|Where-Object{$_-isnot[string]-or[string]::IsNullOrWhiteSpace([string]$_)-or([string]$_-notin$Failures)}).Count-gt0){throw 'Routing profile contains an unsupported eligible failure.'}
+    if($Profile.settings.allow_degraded_independence-isnot[bool]-or$Profile.settings.allow_degraded_independence-ne$false){throw 'Routing must fail closed on degraded model independence.'}
+    $CooldownValue=$Profile.settings.default_cooldown_seconds
+    if(-not(Test-JsonInteger $CooldownValue)-or[long]$CooldownValue-lt60-or[long]$CooldownValue-gt86400){throw 'default_cooldown_seconds must be an integer between 60 and 86400.'}
 
     function Test-Candidate([object]$Candidate,[string]$Role,[string]$Context,[bool]$NeedsPriority){
         if($null-eq$Candidate-or[string]$Candidate.model-notmatch'^[^/\s]+/\S+$'){throw "$Context model must use concrete provider/model format."}
@@ -43,15 +53,17 @@ function Test-RoutingProfile([string]$Path){
         if($Policy-eq'provider_default'-and-not[string]::IsNullOrWhiteSpace([string]$Candidate.variant)){throw "$Context provider_default must use a blank variant."}
         if($Policy-eq'highest_supported'-and[string]::IsNullOrWhiteSpace([string]$Candidate.variant)){throw "$Context highest_supported must be resolved locally before installation."}
         if([string]$Candidate.variant-eq'highest_supported'){throw "$Context cannot use highest_supported as a literal variant."}
-        if(-not$Candidate.PSObject.Properties['only_on']){throw "$Context only_on must be an array."}
-        $OnlyOn=@($Candidate.only_on|Where-Object{-not[string]::IsNullOrWhiteSpace([string]$_)}|ForEach-Object{[string]$_})
-        if(@($OnlyOn|Where-Object{$_-notin$OnlyOnAllowed}).Count){throw "$Context contains an unsupported only_on value."}
-        $Classes=@($Candidate.work_classes|Where-Object{-not[string]::IsNullOrWhiteSpace([string]$_)}|ForEach-Object{[string]$_})
-        if(@($Classes|Where-Object{$_-notin$WorkClasses}).Count){throw "$Context contains an invalid work class."}
-        if($Role-ne'executor'-and$Classes.Count){throw "$Context work_classes is valid only for Executor routes."}
+
+        $OnlyOn=@(Get-JsonArray $Candidate 'only_on' "$Context only_on")
+        if(@($OnlyOn|Where-Object{$_-isnot[string]-or[string]::IsNullOrWhiteSpace([string]$_)-or([string]$_-notin$OnlyOnAllowed)}).Count-gt0){throw "$Context contains an unsupported only_on value."}
+
+        $Classes=@(Get-JsonArray $Candidate 'work_classes' "$Context work_classes" $false)
+        if(@($Classes|Where-Object{$_-isnot[string]-or[string]::IsNullOrWhiteSpace([string]$_)-or([string]$_-notin$WorkClasses)}).Count-gt0){throw "$Context contains an invalid work class."}
+        if($Role-ne'executor'-and$Classes.Count-gt0){throw "$Context work_classes is valid only for Executor routes."}
+
         if($NeedsPriority){
-            $Priority=0
-            if(-not[int]::TryParse([string]$Candidate.priority,[ref]$Priority)-or$Priority-lt1){throw "$Context priority must be a positive integer."}
+            $PriorityValue=$Candidate.priority
+            if(-not(Test-JsonInteger $PriorityValue)-or[long]$PriorityValue-lt1){throw "$Context priority must be a positive integer."}
         }
         if($Candidate.PSObject.Properties['requires_role_rebalance']-and$Candidate.requires_role_rebalance-isnot[bool]){throw "$Context requires_role_rebalance must be boolean."}
     }
@@ -60,18 +72,17 @@ function Test-RoutingProfile([string]$Path){
         $RoleConfig=$Profile.roles.$Role
         if($null-eq$RoleConfig){throw "Routing profile missing role: $Role"}
         Test-Candidate $RoleConfig.primary $Role "$Role primary" $false
-        $Fallbacks=@($RoleConfig.fallbacks|Where-Object{$null-ne$_})
+        $Fallbacks=@(Get-JsonArray $RoleConfig 'fallbacks' "$Role fallbacks" $false)
         $Priorities=@()
         foreach($Candidate in $Fallbacks){
             Test-Candidate $Candidate $Role "$Role fallback" $true
-            $Priority=[int]$Candidate.priority
+            $Priority=[long]$Candidate.priority
             if($Priority-in$Priorities){throw "$Role fallback priorities must be unique."}
             $Priorities+=$Priority
         }
         if($Role-in$Enabled-and$Fallbacks.Count-eq0){throw "$Role failover is enabled but no fallback is configured."}
     }
 }
-
 if($RoutingConfigPath){Test-RoutingProfile $RoutingConfigPath}
 
 $JsoncPath=Join-Path $ConfigDir 'opencode.jsonc'
@@ -116,9 +127,9 @@ try{
 
         try{$Manifest=Get-Content -LiteralPath $ManifestPath -Raw|ConvertFrom-Json}catch{throw 'Routing manifest is invalid after core installation.'}
         if([string]$Manifest.schema_version-ne'1.0'){throw 'Routing manifest schema_version must be 1.0.'}
-        $Manifest|Add-Member NoteProperty governance_version '3.4.1' -Force
-        $Manifest|Add-Member NoteProperty architect_runner_version '3.4.1' -Force
-        $Manifest|Add-Member NoteProperty context_intelligence_version '3.4.1' -Force
+        $Manifest|Add-Member NoteProperty governance_version '3.4.2' -Force
+        $Manifest|Add-Member NoteProperty architect_runner_version '3.4.2' -Force
+        $Manifest|Add-Member NoteProperty context_intelligence_version '3.4.2' -Force
         $Manifest|Add-Member NoteProperty managed_tools @(
             $ArchitectRunnerPs,$ArchitectRunnerSh,
             (Join-Path $ToolsDir 'executor-attempt.ps1'),(Join-Path $ToolsDir 'executor-attempt.sh'),
@@ -221,7 +232,7 @@ Use ``$ContextToolPs`` through ``pwsh -NoProfile -File`` on Windows or ``$Contex
         }
 
         & (Join-Path $PSScriptRoot 'verify-routing.ps1') -ConfigDir $ConfigDir
-        Write-Host 'Installed OpenCode Governance v3.4.1 — Cleanup & Hardening.'
+        Write-Host 'Installed OpenCode Governance v3.4.2 — Cleanup & Hardening.'
         Write-Host 'Routing preflight, complete managed-tool backup and hardened context paths are enabled without changing model selection.'
     }
 

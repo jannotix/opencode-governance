@@ -33,8 +33,10 @@ failures={'PROVIDER_UNAVAILABLE','RATE_LIMIT','PLAN_QUOTA_EXHAUSTED','MODEL_RETI
 only_on_allowed=failures|{'MODEL_UNAVAILABLE_ON_ALL_CONFIGURED_PROVIDERS'}
 work_classes={'PATCH','BOUNDED_FEATURE','MAJOR_FEATURE','EXISTING_PRODUCT_EVOLUTION','NEW_PRODUCT','HIGH_RISK_CHANGE'}
 enabled=settings.get('enabled_roles');eligible=settings.get('eligible_failures')
-if not isinstance(enabled,list) or any(value not in role_names for value in enabled): raise SystemExit('Routing profile contains an unsupported enabled role.')
-if not isinstance(eligible,list) or any(value not in failures for value in eligible): raise SystemExit('Routing profile contains an unsupported eligible failure.')
+if not isinstance(enabled,list): raise SystemExit('settings.enabled_roles must be an array.')
+if any(value not in role_names for value in enabled): raise SystemExit('Routing profile contains an unsupported enabled role.')
+if not isinstance(eligible,list): raise SystemExit('settings.eligible_failures must be an array.')
+if any(value not in failures for value in eligible): raise SystemExit('Routing profile contains an unsupported eligible failure.')
 if settings.get('allow_degraded_independence') is not False: raise SystemExit('Routing must fail closed on degraded model independence.')
 cooldown=settings.get('default_cooldown_seconds')
 if not isinstance(cooldown,int) or isinstance(cooldown,bool) or not 60<=cooldown<=86400: raise SystemExit('default_cooldown_seconds must be between 60 and 86400.')
@@ -107,7 +109,7 @@ import json,pathlib,re,sys
 root=pathlib.Path(sys.argv[1]);tools=root/'opencode-governance-tools';manifest_path=root/'opencode-governance-routing.json'
 data=json.loads(manifest_path.read_text(encoding='utf-8-sig'))
 if data.get('schema_version')!='1.0': raise SystemExit('Routing manifest schema_version must be 1.0.')
-data['governance_version']='3.4.1';data['architect_runner_version']='3.4.1';data['context_intelligence_version']='3.4.1'
+data['governance_version']='3.4.2';data['architect_runner_version']='3.4.2';data['context_intelligence_version']='3.4.2'
 data['managed_tools']=[str(tools/name) for name in ['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py']]
 manifest_path.write_text(json.dumps(data,indent=2)+'\n',encoding='utf-8')
 marker='[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]';ps_runner=str(tools/'architect-attempt.ps1');sh_runner=str(tools/'architect-attempt.sh');ps_context=str(tools/'context-intelligence.ps1');sh_context=str(tools/'context-intelligence.sh');py_context=str(tools/'context-intelligence.py')
@@ -190,7 +192,7 @@ for command in ['ai-workflow','ai-resume','ai-metrics']:
     path.write_text(text[:match.end()]+entry+text[match.end():],encoding='utf-8')
 PY
   "$SCRIPT_DIR/verify-routing.sh" "$CONFIG_DIR"
-  echo 'Installed OpenCode Governance v3.4.1 — Cleanup & Hardening.'
+  echo 'Installed OpenCode Governance v3.4.2 — Cleanup & Hardening.'
   echo 'Routing preflight, complete managed-tool backup and hardened context paths are enabled without changing model selection.'
 fi
 if [[ -n "$JSONC_NORMALIZED" && -f "$JSONC_NORMALIZED" ]]; then

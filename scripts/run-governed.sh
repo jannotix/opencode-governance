@@ -25,24 +25,44 @@ if a.timeout_seconds<30:raise SystemExit('timeout-seconds must be at least 30.')
 try:routing=json.loads(routing_path.read_text(encoding='utf-8-sig'))
 except Exception:raise SystemExit('Routing profile is invalid JSON.')
 if routing.get('schema_version')!='1.0':raise SystemExit('Routing schema_version must be 1.0.')
-settings=routing.get('settings') or {};architect=(routing.get('roles') or {}).get('architect')
-if 'architect' not in settings.get('enabled_roles',[]):raise SystemExit('Architect failover is not enabled in the routing profile.')
-if not architect or not architect.get('fallbacks'):raise SystemExit('Architect failover requires at least one fallback.')
-eligible=settings.get('eligible_failures') or [];cooldown=int(settings.get('default_cooldown_seconds') or 0)
-if cooldown<60:raise SystemExit('default cooldown must be at least 60 seconds.')
-def only(c):
- if 'only_on' not in c:raise SystemExit('Every route candidate must define only_on.')
- return [str(x) for x in c.get('only_on',[]) if str(x).strip()]
-def validate(c,priority=False):
- if not re.fullmatch(r'[^/\s]+/\S+',str(c.get('model') or '')):raise SystemExit(f"Invalid Architect route model: {c.get('model')}")
- if not str(c.get('model_family') or '').strip():raise SystemExit('Architect route model_family is required.')
- if c.get('variant_policy')=='highest_supported' and not str(c.get('variant') or '').strip():raise SystemExit('highest_supported must be resolved to a concrete variant before running.')
- if c.get('variant')=='highest_supported':raise SystemExit('highest_supported cannot be used as a literal variant.')
- if priority and (not isinstance(c.get('priority'),int) or c['priority']<1):raise SystemExit('Architect fallback priority must be positive.')
- only(c)
-validate(architect['primary'])
-for c in architect['fallbacks']:validate(c,True)
-routes=[{'candidate':architect['primary'],'priority':0,'route':'architect-primary'}]+[{'candidate':c,'priority':c['priority'],'route':f"architect-fallback-{c['priority']}"} for c in sorted(architect['fallbacks'],key=lambda x:x['priority'])]
+settings=routing.get('settings');roles=routing.get('roles')
+if not isinstance(settings,dict) or not isinstance(roles,dict):raise SystemExit('Routing profile is missing settings or roles.')
+allowed_failures={'PROVIDER_UNAVAILABLE','RATE_LIMIT','PLAN_QUOTA_EXHAUSTED','MODEL_RETIRED','MODEL_TEMPORARILY_UNAVAILABLE','BOUNDED_TIMEOUT'}
+allowed_only_on=allowed_failures|{'MODEL_UNAVAILABLE_ON_ALL_CONFIGURED_PROVIDERS'}
+enabled=settings.get('enabled_roles');eligible=settings.get('eligible_failures')
+if not isinstance(enabled,list) or any(not isinstance(value,str) or not value.strip() for value in enabled):raise SystemExit('settings.enabled_roles must be an array of non-empty strings.')
+if 'architect' not in enabled:raise SystemExit('Architect failover is not enabled in the routing profile.')
+if not isinstance(eligible,list) or any(value not in allowed_failures for value in eligible):raise SystemExit('Routing profile contains an unsupported eligible failure.')
+if settings.get('allow_degraded_independence') is not False:raise SystemExit('Routing must fail closed on degraded model independence.')
+cooldown=settings.get('default_cooldown_seconds')
+if not isinstance(cooldown,int) or isinstance(cooldown,bool) or not 60<=cooldown<=86400:raise SystemExit('default cooldown must be an integer between 60 and 86400 seconds.')
+architect=roles.get('architect')
+if not isinstance(architect,dict):raise SystemExit('Architect role is missing from the routing profile.')
+fallbacks=architect.get('fallbacks',[])
+if not isinstance(fallbacks,list):raise SystemExit('architect fallbacks must be an array.')
+if not fallbacks:raise SystemExit('Architect failover requires at least one fallback.')
+def only(candidate):
+ if 'only_on' not in candidate or not isinstance(candidate['only_on'],list):raise SystemExit('Every route candidate only_on must be an array.')
+ if any(not isinstance(value,str) or not value.strip() or value not in allowed_only_on for value in candidate['only_on']):raise SystemExit('Every route candidate only_on contains an unsupported value.')
+ return candidate['only_on']
+def validate(candidate,priority=False):
+ if not isinstance(candidate,dict) or not re.fullmatch(r'[^/\s]+/\S+',str(candidate.get('model') or '')):raise SystemExit(f"Invalid Architect route model: {candidate.get('model') if isinstance(candidate,dict) else None}")
+ if not str(candidate.get('model_family') or '').strip():raise SystemExit('Architect route model_family is required.')
+ policy=candidate.get('variant_policy');variant=candidate.get('variant')
+ if policy not in {'explicit','provider_default','highest_supported'}:raise SystemExit('Architect route variant_policy is invalid.')
+ if policy=='explicit' and not str(variant or '').strip():raise SystemExit('Explicit Architect variant is required.')
+ if policy=='provider_default' and variant not in {None,''}:raise SystemExit('provider_default must use a blank variant.')
+ if policy=='highest_supported' and not str(variant or '').strip():raise SystemExit('highest_supported must be resolved to a concrete variant before running.')
+ if variant=='highest_supported':raise SystemExit('highest_supported cannot be used as a literal variant.')
+ only(candidate)
+ if priority and (not isinstance(candidate.get('priority'),int) or isinstance(candidate.get('priority'),bool) or candidate['priority']<1):raise SystemExit('Architect fallback priority must be a positive integer.')
+validate(architect.get('primary'))
+priorities=set()
+for candidate in fallbacks:
+ validate(candidate,True)
+ if candidate['priority'] in priorities:raise SystemExit('Architect fallback priorities must be unique.')
+ priorities.add(candidate['priority'])
+routes=[{'candidate':architect['primary'],'priority':0,'route':'architect-primary'}]+[{'candidate':candidate,'priority':candidate['priority'],'route':f"architect-fallback-{candidate['priority']}"} for candidate in sorted(fallbacks,key=lambda value:value['priority'])]
 config.mkdir(parents=True,exist_ok=True);state_path=config/'opencode-governance-routing-state.tsv'
 def load_cooldowns():
  now=int(time.time());out={}

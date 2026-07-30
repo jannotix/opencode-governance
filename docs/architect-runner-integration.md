@@ -1,6 +1,6 @@
 # Architect Runner Integration
 
-OpenCode Governance 3.3.2 fixed the `ARCHITECT_RUNNER_UNAVAILABLE` installation defect for Architect pre-execution failover. Version 3.3.3 added the PowerShell 7 host contract, and 3.3.4 added content-aware project-state integrity plus non-Git workspace support. Version 3.4.1 hardens routing validation, cooldown parity, managed-tool backup and retained-log privacy.
+OpenCode Governance 3.3.2 fixed the `ARCHITECT_RUNNER_UNAVAILABLE` installation defect for Architect pre-execution failover. Version 3.3.3 added the PowerShell 7 host contract, and 3.3.4 added content-aware project-state integrity plus non-Git workspace support. Version 3.4.1 hardens routing validation, cooldown parity, managed-tool backup and retained-log privacy. Version 3.4.2 enforces identical JSON array and integer types across Windows and Unix entrypoints.
 
 ## Scope
 
@@ -31,12 +31,12 @@ opencode-governance-tools/context-intelligence.sh
 opencode-governance-tools/context-intelligence.py
 ```
 
-The 3.4.1 routing manifest records:
+The 3.4.2 routing manifest records:
 
 ```text
-governance_version: 3.4.1
-architect_runner_version: 3.4.1
-context_intelligence_version: 3.4.1
+governance_version: 3.4.2
+architect_runner_version: 3.4.2
+context_intelligence_version: 3.4.2
 ```
 
 Before replacing an existing routing installation, the wrapper validates the complete new profile. An invalid profile cannot remove the current manifest, aliases or managed tools. Every existing managed tool is copied into the timestamped installation backup before replacement.
@@ -65,7 +65,7 @@ The Windows and Unix runners validate the same routing properties before the fir
 - positive, unique fallback priorities;
 - cooldown from 60 to 86,400 seconds.
 
-Optional JSON arrays are normalized consistently across PowerShell and Unix; an absent optional work-class array is empty, not an invalid blank value.
+JSON arrays and integers are type-checked consistently across PowerShell and Unix. An absent optional work-class array is empty, while scalar strings are rejected rather than coerced.
 
 ## Direct command gate
 

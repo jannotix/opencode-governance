@@ -2,6 +2,14 @@
 
 All released versions are recorded in this single file. Dates use `YYYY-MM-DD`.
 
+## 3.4.2 - 2026-07-30
+
+- Enforced the same routing JSON type contract in the PowerShell installer and both Architect runners.
+- Rejected scalar strings where `enabled_roles`, `eligible_failures`, `fallbacks`, `only_on` or `work_classes` require arrays.
+- Rejected string-encoded cooldowns, priorities and skill token estimates where the schema requires JSON integers.
+- Added Windows and Unix negative regressions for routing and skill-manifest schema parity.
+- Preserved all provider/model routes, variants, fallback priorities, work classes, reviewer independence, durability and external-action contracts.
+
 ## 3.4.1 - 2026-07-30
 
 - Hardened Context Intelligence governance-state writes against symbolic-link, junction and reparse-point traversal outside the project.
