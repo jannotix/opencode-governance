@@ -11,6 +11,10 @@ function Invoke-Tool([hashtable]$Parameters){
   if($LASTEXITCODE-ne 0){throw "Context tool failed: $($json -join "`n")"}
   return ($json -join "`n")|ConvertFrom-Json
 }
+function Invoke-ToolFailure([string[]]$Arguments){
+  $output=& pwsh -NoProfile -File $Tool @Arguments 2>&1
+  return [pscustomobject]@{Code=$LASTEXITCODE;Text=($output-join"`n")}
+}
 function Write-Json([string]$Path,[object]$Value){
   $Value|ConvertTo-Json -Depth 30|Set-Content -LiteralPath $Path -Encoding utf8NoBOM
 }
@@ -36,9 +40,9 @@ try{
     if(($stored|ConvertTo-Json -Depth 20 -Compress)-ne($result|ConvertTo-Json -Depth 20 -Compress)){throw 'Stored budget mismatch'}
   }
 
-  $bad=& $Tool -Action InitializeBudget -ProjectDir $Project -TaskId '../escape' -WorkClass PATCH 2>&1
-  if($LASTEXITCODE-eq 0){throw 'Invalid task ID was accepted'}
-  if(($bad-join"`n")-notmatch'INVALID_TASK_ID'){throw 'Invalid task ID error missing'}
+  $bad=Invoke-ToolFailure @('-Action','InitializeBudget','-ProjectDir',$Project,'-TaskId','../escape','-WorkClass','PATCH')
+  if($bad.Code-eq0){throw 'Invalid task ID was accepted'}
+  if($bad.Text-notmatch'INVALID_TASK_ID'){throw "Invalid task ID error missing: $($bad.Text)"}
 
   $task='CTX-CYCLES'
   Invoke-Tool @{Action='InitializeBudget';ProjectDir=$Project;TaskId=$task;WorkClass='MAJOR_FEATURE';CacheRoot=$Cache}|Out-Null
@@ -48,9 +52,9 @@ try{
     $recorded=Invoke-Tool @{Action='RecordCycle';ProjectDir=$Project;TaskId=$task;Cycle=$number;InputJsonPath=$cycle}
     if($recorded.cycle-ne$number){throw 'Cycle number mismatch'}
   }
-  $fourth=& $Tool -Action RecordCycle -ProjectDir $Project -TaskId $task -Cycle 4 -InputJsonPath $cycle 2>&1
-  if($LASTEXITCODE-eq 0){throw 'Fourth cycle was accepted'}
-  if(($fourth-join"`n")-notmatch'RETRIEVAL_CYCLE_LIMIT'){throw 'Cycle limit error missing'}
+  $fourth=Invoke-ToolFailure @('-Action','RecordCycle','-ProjectDir',$Project,'-TaskId',$task,'-Cycle','4','-InputJsonPath',$cycle)
+  if($fourth.Code-eq0){throw 'Fourth cycle was accepted'}
+  if($fourth.Text-notmatch'RETRIEVAL_CYCLE_LIMIT'){throw "Cycle limit error missing: $($fourth.Text)"}
 
   $catalog=Join-Path $Temp 'skills.json'
   $criteria=Join-Path $Temp 'criteria.json'
