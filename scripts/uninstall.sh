@@ -12,27 +12,19 @@ if [[ $# -gt 0 ]]; then
 fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFEST="$CONFIG_DIR/opencode-governance-routing.json"
+CAPABILITIES="$SCRIPT_DIR/governance-capabilities.py"
+BASE_UNINSTALLER="$SCRIPT_DIR/uninstall-base.sh"
+[[ -f "$BASE_UNINSTALLER" ]] || { echo "Internal base uninstaller not found: $BASE_UNINSTALLER" >&2; exit 1; }
 
 if [[ -f "$MANIFEST" ]]; then
-  python3 - "$CONFIG_DIR" <<'PY'
-import json,pathlib,sys
-root=pathlib.Path(sys.argv[1]);manifest=root/'opencode-governance-routing.json'
-data=json.loads(manifest.read_text(encoding='utf-8-sig'));version=data.get('governance_version')
-if version in {'3.3.2','3.3.3','3.3.4','3.4.0','3.4.1','3.4.2','3.4.3','3.4.4'}:
-    tools=root/'opencode-governance-tools'
-    names=['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh']
-    if version in {'3.4.0','3.4.1','3.4.2','3.4.3','3.4.4'}: names += ['context-intelligence.ps1','context-intelligence.sh','context-intelligence.py']
-    if version=='3.4.4': names += ['workflow-continuation.ps1','workflow-continuation.py']
-    allowed={tools/name for name in names};managed={pathlib.Path(str(value)) for value in data.get('managed_tools',[])}
-    if managed!=allowed: raise SystemExit(f'Unsafe managed tool set in v{version} routing manifest.')
-    remove=['architect-attempt.ps1','architect-attempt.sh']
-    if version in {'3.4.0','3.4.1','3.4.2','3.4.3','3.4.4'}: remove += ['context-intelligence.ps1','context-intelligence.sh','context-intelligence.py']
-    if version=='3.4.4': remove += ['workflow-continuation.ps1','workflow-continuation.py']
-    for name in remove: (tools/name).unlink(missing_ok=True)
-    data['governance_version']='3.3.0';data.pop('architect_runner_version',None);data.pop('context_intelligence_version',None);data.pop('workflow_continuation_version',None)
-    data['managed_tools']=[str(tools/'executor-attempt.ps1'),str(tools/'executor-attempt.sh')]
-    manifest.write_text(json.dumps(data,indent=2)+'\n',encoding='utf-8')
-PY
+  version="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1],encoding="utf-8-sig")).get("governance_version",""))' "$MANIFEST")"
+  if [[ "$version" == '3.6.0' ]]; then
+    [[ -f "$CAPABILITIES" ]] || { echo "Capability uninstaller not found: $CAPABILITIES" >&2; exit 1; }
+    python3 "$CAPABILITIES" uninstall --config-dir "$CONFIG_DIR"
+  fi
 fi
 
-exec "$SCRIPT_DIR/uninstall-core.sh" --config-dir "$CONFIG_DIR"
+bash "$BASE_UNINSTALLER" --config-dir "$CONFIG_DIR"
+echo 'Removed OpenCode Governance 3.6.0 canonical agents, commands, managed routes and managed tools.'
+echo 'Provider authentication, project .ai state, project documentation, backups, governed memory and unrelated local files were preserved.'
+echo 'Any explicitly installed project pre-commit receipt gate must be removed from that project before deleting its referenced tool path.'
