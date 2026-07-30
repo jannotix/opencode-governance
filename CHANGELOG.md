@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.5.0 - 2026-07-30
+
+- Added deterministic `QUALITY_PROFILE_V1` derivation from work class, task kind and risk flags, including mandatory Debug-First, TDD, eval and self-check gates.
+- Added `DEBUG_PROOF_V1` with reproduction, root-cause evidence, minimal experiment, disproving condition, defect classification and mandatory architecture-review escalation after three unresolved hypotheses.
+- Added risk-adaptive `TDD_PROOF_V1` requiring observable RED failure, GREEN success and regression-suite success, with bounded exception classes that never self-approve.
+- Added `EVAL_PLAN_V1` for AI-system behavior, including capability/regression/negative cases, forbidden behaviors, grader type, threshold evidence and mandatory `PASS_K` reliability for governed AI work.
+- Added `IMPLEMENTATION_SELF_CHECK_V1` with `approval_authority: false` to catch plan, scope, test, security, dependency, migration, documentation and temporary-file defects before independent review.
+- Added append-only `LEARNING_CANDIDATE_V1` and `LEARNING_PROMOTION_V1` records with duplicate-key rejection and Final Reviewer-only promotion; helpers never update `GOVERNANCE_MEMORY.md` automatically.
+- Added managed PowerShell, Unix and Python Quality Gate tools plus Windows/Linux regression coverage, exact installation, verification and conservative uninstall.
+- Preserved every provider/model route, variant, fallback priority, `only_on`, hidden alias, Executor work class, reviewer-independence rule, Local Configuration Durability and no-push/no-deploy contract.
+
 ## 3.4.0 - 2026-07-30
 
 - Added bounded iterative context retrieval with deterministic `CONTEXT_BUDGET_V1`, a maximum of three `DISPATCH -> EVALUATE -> REFINE` cycles and explicit `CONTEXT_SUFFICIENT|BLOCKED_CONTEXT_GAP` terminal states.
