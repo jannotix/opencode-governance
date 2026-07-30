@@ -1,6 +1,6 @@
 # Architect Runner Integration
 
-OpenCode Governance 3.3.2 fixed the `ARCHITECT_RUNNER_UNAVAILABLE` installation defect for Architect pre-execution failover. Version 3.3.3 added the PowerShell 7 host contract, and 3.3.4 added content-aware project-state integrity plus non-Git workspace support. Version 3.4.1 hardens routing validation, cooldown parity, managed-tool backup and retained-log privacy. Version 3.4.2 enforces identical JSON array and integer types across Windows and Unix entrypoints.
+OpenCode Governance 3.3.2 fixed the `ARCHITECT_RUNNER_UNAVAILABLE` installation defect for Architect pre-execution failover. Version 3.3.3 added the PowerShell 7 host contract, and 3.3.4 added content-aware project-state integrity plus non-Git workspace support. Version 3.4.1 hardens routing validation, cooldown parity, managed-tool backup and retained-log privacy. Version 3.4.2 enforces identical JSON array and integer types across Windows and Unix entrypoints. Version 3.4.3 preserves readable JSONC URL literals and publishes releases through verified repository metadata.
 
 ## Scope
 
@@ -31,12 +31,12 @@ opencode-governance-tools/context-intelligence.sh
 opencode-governance-tools/context-intelligence.py
 ```
 
-The 3.4.2 routing manifest records:
+The 3.4.3 routing manifest records:
 
 ```text
-governance_version: 3.4.2
-architect_runner_version: 3.4.2
-context_intelligence_version: 3.4.2
+governance_version: 3.4.3
+architect_runner_version: 3.4.3
+context_intelligence_version: 3.4.3
 ```
 
 Before replacing an existing routing installation, the wrapper validates the complete new profile. An invalid profile cannot remove the current manifest, aliases or managed tools. Every existing managed tool is copied into the timestamped installation backup before replacement.

@@ -127,9 +127,9 @@ try{
 
         try{$Manifest=Get-Content -LiteralPath $ManifestPath -Raw|ConvertFrom-Json}catch{throw 'Routing manifest is invalid after core installation.'}
         if([string]$Manifest.schema_version-ne'1.0'){throw 'Routing manifest schema_version must be 1.0.'}
-        $Manifest|Add-Member NoteProperty governance_version '3.4.2' -Force
-        $Manifest|Add-Member NoteProperty architect_runner_version '3.4.2' -Force
-        $Manifest|Add-Member NoteProperty context_intelligence_version '3.4.2' -Force
+        $Manifest|Add-Member NoteProperty governance_version '3.4.3' -Force
+        $Manifest|Add-Member NoteProperty architect_runner_version '3.4.3' -Force
+        $Manifest|Add-Member NoteProperty context_intelligence_version '3.4.3' -Force
         $Manifest|Add-Member NoteProperty managed_tools @(
             $ArchitectRunnerPs,$ArchitectRunnerSh,
             (Join-Path $ToolsDir 'executor-attempt.ps1'),(Join-Path $ToolsDir 'executor-attempt.sh'),
@@ -232,7 +232,7 @@ Use ``$ContextToolPs`` through ``pwsh -NoProfile -File`` on Windows or ``$Contex
         }
 
         & (Join-Path $PSScriptRoot 'verify-routing.ps1') -ConfigDir $ConfigDir
-        Write-Host 'Installed OpenCode Governance v3.4.2 — Cleanup & Hardening.'
+        Write-Host 'Installed OpenCode Governance v3.4.3 — Release Integrity & JSONC Readability.'
         Write-Host 'Routing preflight, complete managed-tool backup and hardened context paths are enabled without changing model selection.'
     }
 
