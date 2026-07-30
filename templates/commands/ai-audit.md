@@ -20,4 +20,4 @@ Use independent reviewer audits and Final Reviewer control. Do not implement or 
 
 Revalidate the exact current repository reference and product artifact versions. Reviewer packets use one frozen target and never include sibling findings. Final Reviewer adjudicates baseline/product allegations against primary evidence. A changed source, contract, dependency, migration, environment, validation, skill, preview, tool, recovery or isolation input invalidates only dependent evidence.
 
-Audit does not declare the codebase defect-free, rewrite historical requirements, install tools, admit dependencies, deploy, push, merge or widen permissions. Maximum three failed baseline correction cycles.
+Audit does not declare the codebase defect-free, rewrite historical requirements, install tools, admit dependencies, deploy, push, merge or widen permissions. Maximum three failed baseline correction cycles. `NO_AUTOMATIC_EXTERNAL_ACTION` applies.
