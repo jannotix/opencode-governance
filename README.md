@@ -195,6 +195,19 @@ python3 ./scripts/governance-capabilities.py verify --config-dir "$OPENCODE_CONF
 
 The canonical routing manifest is `opencode-governance-routing.json`. Version 3.6.0 records all 14 managed tools, component versions, capability tool hashes and managed prompt-section hashes in that single manifest.
 
+## Local configuration durability
+
+OpenCode Desktop and CLI use the same authoritative configuration directory. Local Configuration Durability protects that directory across owner-triggered application updates:
+
+- `config-durability.ps1` creates an external snapshot with a non-secret manifest of paths, lengths and SHA-256 hashes;
+- verification detects added, removed or changed protected files;
+- `update-opencode-safely.ps1` refuses unsafe overlapping paths and active OpenCode processes;
+- updater drift is quarantined and the pre-update configuration is restored byte-for-byte, including when the updater itself fails;
+- backups, quarantine data and recovery directories remain outside the protected source tree;
+- provider credentials and secret values are never copied into diagnostic output.
+
+Durability does not change provider/model routing and does not authorize an OpenCode update by itself. The owner supplies the updater command explicitly.
+
 ## Updating an existing installation
 
 ```bash
