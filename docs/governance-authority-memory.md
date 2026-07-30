@@ -1,10 +1,12 @@
 # Governance Authority, Memory and Evidence Runtime
 
-OpenCode Governance 3.6.0 extends the 3.4.4 routing-compatible base with deterministic candidate authority, approval receipts, actionable continuation, focused review lenses, governed engineering memory, exact evidence reuse and deterministic simulation.
+OpenCode Governance 3.6.0 extends the 3.4.4 routing-compatible base with deterministic candidate authority, approval receipts, actionable continuation, focused review lenses, governed engineering memory, exact evidence reuse, a staged pre-commit gate and deterministic OpenCode simulation.
 
 ## Installation
 
 Use the canonical wrapper for the platform. It runs the existing base installer first and then installs the 3.6.0 runtime overlay.
+
+The overlay installation is transactional. It backs up every affected tool, agent, command and prior manifest, projects the managed sections, writes exact tool and section hashes, verifies the resulting installation and restores the previous bytes if any post-mutation step fails.
 
 ### Windows
 
@@ -37,6 +39,8 @@ python3 ./scripts/governance-runtime-install.py verify \
   --config-dir "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
 ```
 
+Verification checks the exact five managed tool hashes and every installed managed-section hash. Unrelated local headings remain permitted; changed or duplicated managed sections fail closed.
+
 ## Candidate projections
 
 `governance-authority.py candidate freeze` supports:
@@ -62,7 +66,39 @@ A projection is part of candidate identity. Switching projections creates a diff
 - Final Reviewer adjudication;
 - actual model families and independence result.
 
-Pre-commit, pre-push, pre-PR and release gates rederive the selected live candidate. A mismatch returns `APPROVAL_RECEIPT_MISMATCH`; a gate never silently renews the receipt or launches another review budget.
+Post-apply, pre-commit, pre-push, pre-PR and release gates rederive the selected live candidate. A mismatch returns `APPROVAL_RECEIPT_MISMATCH`; a gate never silently renews the receipt or launches another review budget.
+
+## Staged pre-commit receipt gate
+
+The runtime installs the gate tool but does not silently modify project Git hooks. Installation and arming are explicit project-scoped actions.
+
+```powershell
+python "$env:USERPROFILE\.config\opencode\opencode-governance-tools\governance-pre-commit.py" install `
+  --project-dir "C:\path\to\project"
+
+python "$env:USERPROFILE\.config\opencode\opencode-governance-tools\governance-pre-commit.py" arm `
+  --project-dir "C:\path\to\project" `
+  --receipt ".ai\tasks\<TASK-ID>\approval-receipt.json" `
+  --authority-tool "$env:USERPROFILE\.config\opencode\opencode-governance-tools\governance-authority.py"
+```
+
+```bash
+python3 "$HOME/.config/opencode/opencode-governance-tools/governance-pre-commit.py" install \
+  --project-dir "/path/to/project"
+
+python3 "$HOME/.config/opencode/opencode-governance-tools/governance-pre-commit.py" arm \
+  --project-dir "/path/to/project" \
+  --receipt ".ai/tasks/<TASK-ID>/approval-receipt.json" \
+  --authority-tool "$HOME/.config/opencode/opencode-governance-tools/governance-authority.py"
+```
+
+The receipt must live under project-root `.ai/**` and use the `staged` projection. The hook performs no model call. It revalidates the exact Git index and blocks commit when the index changes, the pointer is missing or approval is stale. Existing hook content is preserved and repeated installation is idempotent.
+
+Before removing the runtime from a machine, remove each explicitly installed project hook:
+
+```bash
+python3 <governance-pre-commit.py> uninstall --project-dir <project>
+```
 
 ## Actionable continuation
 
@@ -101,7 +137,7 @@ Lens selection derives from the task risk profile and current primary evidence r
 
 ## Governed engineering memory
 
-The memory store is local SQLite and is not committed. Memory lifecycle is:
+The memory store is local SQLite under the OpenCode configuration directory and is not committed. The exact database path is projected into installed agents. Memory lifecycle is:
 
 ```text
 CANDIDATE → ACTIVE → SUPERSEDED
@@ -131,7 +167,18 @@ Only a prior `PASS` with byte-identical dependencies is reusable. Any dependency
 
 ## Simulation harness
 
-The deterministic simulation contract validates scenarios covering all twelve `/ai-*` commands and rejects automatic external actions. It can be paired with a local OpenAI-compatible fixture to exercise the real OpenCode binary without commercial API calls. Simulation proves orchestration and contract behavior; it does not claim that a live model will choose the same tool sequence.
+`governance-simulation.py validate` checks deterministic scenario structure, all twelve `/ai-*` command contracts, terminal markers and forbidden external actions.
+
+`governance-simulation.py run` starts a loopback OpenAI-compatible endpoint, writes an isolated OpenCode configuration and launches the supplied OpenCode binary with the real agent/tool protocol. Only model reasoning is scripted; the OpenCode process, project, tool calls and terminal output remain real.
+
+```bash
+python3 ./scripts/governance-simulation.py run \
+  --scenario ./tests/fixtures/governance-simulation-all-commands.json \
+  --opencode-bin "$(command -v opencode)" \
+  --project-dir .
+```
+
+The CI suite exercises the complete loopback hosting protocol with a deterministic local client on Linux and Windows, without API keys, vendor network calls or token cost. Simulation proves orchestration and contract behavior; it does not claim that a live model will choose the same tool sequence.
 
 ## Uninstallation
 
@@ -147,4 +194,4 @@ bash ./scripts/uninstall-v360.sh \
   --config-dir "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
 ```
 
-The overlay uninstaller validates the exact managed-tool inventory, backs up affected files, removes only marked overlay sections and tools, preserves unrelated local files, then invokes the existing base uninstaller.
+The overlay uninstaller first verifies the exact managed-tool inventory and managed-section hashes, backs up affected files, removes only manifest-owned sections and tools, preserves unrelated local files and the external memory database, then invokes the existing base uninstaller. Project-scoped pre-commit hooks must be removed explicitly before deleting the runtime tool they reference.
