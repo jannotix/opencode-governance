@@ -53,6 +53,33 @@ jobs:
           PY
           chmod +x /tmp/v342-apply.sh /tmp/v342-validate.sh
 
+      - name: Normalize the current Context Intelligence source
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          context = Path('scripts/context-intelligence.ps1')
+          text = context.read_text(encoding='utf-8')
+          old = """        $tokenEstimate=0
+                  if(-not[int]::TryParse([string]$skill.estimated_context_tokens,[ref]$tokenEstimate)-or$tokenEstimate-lt0){throw 'SKILL_TOKEN_ESTIMATE_INVALID'}"""
+          new = """        $tokenEstimateValue=$skill.estimated_context_tokens
+                  if(($tokenEstimateValue-isnot[int]-and$tokenEstimateValue-isnot[long])-or[long]$tokenEstimateValue-lt0-or[long]$tokenEstimateValue-gt[int]::MaxValue){throw 'SKILL_TOKEN_ESTIMATE_INVALID'}
+                  $tokenEstimate=[int]$tokenEstimateValue"""
+          if text.count(old) != 1:
+              raise SystemExit('Current Context Intelligence token-validation block was not found exactly once.')
+          text = text.replace(old, new)
+          marker = 'estimated_context_tokens=[int]$skill.estimated_context_tokens'
+          if text.count(marker) != 1:
+              raise SystemExit('Current selected-skill token output was not found exactly once.')
+          context.write_text(text.replace(marker, 'estimated_context_tokens=$tokenEstimate'), encoding='utf-8')
+
+          script_path = Path('/tmp/v342-apply.sh')
+          script = script_path.read_text(encoding='utf-8')
+          start = script.index("context=Path('scripts/context-intelligence.ps1')")
+          end = script.index("\n\nps_test=", start)
+          script_path.write_text(script[:start] + script[end + 2:], encoding='utf-8')
+          PY
+
       - name: Apply the schema parity patch
         run: /tmp/v342-apply.sh
 
