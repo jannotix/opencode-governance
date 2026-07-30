@@ -58,24 +58,28 @@ function Test-RoutingProfile([string]$Path){
 
 if($RoutingConfigPath){Test-RoutingProfile $RoutingConfigPath}
 $JsoncPath=Join-Path $ConfigDir 'opencode.jsonc';$JsonPath=Join-Path $ConfigDir 'opencode.json';$ConfigTarget=if((Test-Path -LiteralPath $JsoncPath)-or-not(Test-Path -LiteralPath $JsonPath)){$JsoncPath}else{$JsonPath}
-$ConfigBackup=$null
+$ConfigBackup=$null;$ConfigNormalized=$null
 if(Test-Path -LiteralPath $ConfigTarget -PathType Leaf){
-    $ConfigBackup=Join-Path ([IO.Path]::GetTempPath()) ('opencode-jsonc-'+[guid]::NewGuid().ToString('N'))
+    $ConfigBackup=Join-Path ([IO.Path]::GetTempPath()) ('opencode-jsonc-backup-'+[guid]::NewGuid().ToString('N'))
+    $ConfigNormalized=Join-Path ([IO.Path]::GetTempPath()) ('opencode-jsonc-normalized-'+[guid]::NewGuid().ToString('N'))
     Copy-Item -LiteralPath $ConfigTarget -Destination $ConfigBackup -Force
     & (Join-Path $PSScriptRoot 'normalize-jsonc.ps1') -Path $ConfigTarget
+    Copy-Item -LiteralPath $ConfigTarget -Destination $ConfigNormalized -Force
+    [IO.File]::WriteAllText($ConfigTarget,"{`n  `"`$schema`": `"https://opencode.ai/config.json`"`n}`n",(New-Object Text.UTF8Encoding($false)))
 }
 
 try{
     $CoreInstaller=Join-Path $PSScriptRoot 'install-core.ps1'
     if(-not(Test-Path -LiteralPath $CoreInstaller -PathType Leaf)){throw "Core installer not found: $CoreInstaller"}
     & $CoreInstaller @PSBoundParameters
+    $BackupDir=Get-ChildItem -LiteralPath (Join-Path $ConfigDir 'backups') -Directory -Filter 'opencode-governance-*'|Sort-Object LastWriteTimeUtc -Descending|Select-Object -First 1
+    if($null-eq$BackupDir){throw 'Installer backup directory was not created.'}
+    if($ConfigBackup){Copy-Item -LiteralPath $ConfigBackup -Destination (Join-Path $BackupDir.FullName ([IO.Path]::GetFileName($ConfigTarget))) -Force}
 
     if($RoutingConfigPath){
         $ToolsDir=Join-Path $ConfigDir 'opencode-governance-tools';$ManifestPath=Join-Path $ConfigDir 'opencode-governance-routing.json'
         $ArchitectRunnerPs=Join-Path $ToolsDir 'architect-attempt.ps1';$ArchitectRunnerSh=Join-Path $ToolsDir 'architect-attempt.sh'
         $ContextToolPs=Join-Path $ToolsDir 'context-intelligence.ps1';$ContextToolSh=Join-Path $ToolsDir 'context-intelligence.sh';$ContextToolPy=Join-Path $ToolsDir 'context-intelligence.py'
-        $BackupDir=Get-ChildItem -LiteralPath (Join-Path $ConfigDir 'backups') -Directory -Filter 'opencode-governance-*'|Sort-Object LastWriteTimeUtc -Descending|Select-Object -First 1
-        if($null-eq$BackupDir){throw 'Installer backup directory was not created; refusing to overwrite managed tools.'}
         foreach($Path in @($ArchitectRunnerPs,$ArchitectRunnerSh,$ContextToolPs,$ContextToolSh,$ContextToolPy)){if(Test-Path -LiteralPath $Path -PathType Leaf){Copy-Item -LiteralPath $Path -Destination (Join-Path $BackupDir.FullName ([IO.Path]::GetFileName($Path))) -Force}}
         Copy-Item (Join-Path $PSScriptRoot 'run-governed.ps1') $ArchitectRunnerPs -Force;Copy-Item (Join-Path $PSScriptRoot 'run-governed.sh') $ArchitectRunnerSh -Force
         Copy-Item (Join-Path $PSScriptRoot 'context-intelligence.ps1') $ContextToolPs -Force;Copy-Item (Join-Path $PSScriptRoot 'context-intelligence.sh') $ContextToolSh -Force;Copy-Item (Join-Path $PSScriptRoot 'context-intelligence.py') $ContextToolPy -Force
@@ -164,9 +168,11 @@ Use ``$ContextToolPs`` through ``pwsh -NoProfile -File`` on Windows or ``$Contex
         & (Join-Path $PSScriptRoot 'verify-routing.ps1') -ConfigDir $ConfigDir
         Write-Host 'Installed OpenCode Governance v3.4.1 — Cleanup & Hardening.';Write-Host 'Routing preflight, complete managed-tool backup and hardened context paths are enabled without changing model selection.'
     }
+    if($ConfigNormalized){& (Join-Path $PSScriptRoot 'normalize-jsonc.ps1') -Path $ConfigNormalized -SetDefaultAgent;Copy-Item -LiteralPath $ConfigNormalized -Destination $ConfigTarget -Force}
 }catch{
     if($ConfigBackup-and(Test-Path -LiteralPath $ConfigBackup -PathType Leaf)){Copy-Item -LiteralPath $ConfigBackup -Destination $ConfigTarget -Force}
     throw
 }finally{
     if($ConfigBackup){Remove-Item -LiteralPath $ConfigBackup -Force -ErrorAction SilentlyContinue}
+    if($ConfigNormalized){Remove-Item -LiteralPath $ConfigNormalized -Force -ErrorAction SilentlyContinue}
 }
