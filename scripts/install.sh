@@ -99,10 +99,10 @@ if [[ -n "$JSONC_BACKUP" && -f "$JSONC_BACKUP" ]]; then cp -p "$JSONC_BACKUP" "$
 
 if [[ -n "$ROUTING_CONFIG" ]]; then
   tools="$CONFIG_DIR/opencode-governance-tools"
-  for name in architect-attempt.ps1 architect-attempt.sh context-intelligence.ps1 context-intelligence.sh context-intelligence.py workflow-continuation.py; do [[ ! -f "$tools/$name" ]] || cp -p "$tools/$name" "$backup_dir/$name";done
+  for name in architect-attempt.ps1 architect-attempt.sh context-intelligence.ps1 context-intelligence.sh context-intelligence.py workflow-continuation.ps1 workflow-continuation.py; do [[ ! -f "$tools/$name" ]] || cp -p "$tools/$name" "$backup_dir/$name";done
   cp "$SCRIPT_DIR/run-governed.ps1" "$tools/architect-attempt.ps1";cp "$SCRIPT_DIR/run-governed.sh" "$tools/architect-attempt.sh"
   cp "$SCRIPT_DIR/context-intelligence.ps1" "$tools/context-intelligence.ps1";cp "$SCRIPT_DIR/context-intelligence.sh" "$tools/context-intelligence.sh";cp "$SCRIPT_DIR/context-intelligence.py" "$tools/context-intelligence.py"
-  cp "$SCRIPT_DIR/workflow-continuation.py" "$tools/workflow-continuation.py"
+  cp "$SCRIPT_DIR/workflow-continuation.ps1" "$tools/workflow-continuation.ps1";cp "$SCRIPT_DIR/workflow-continuation.py" "$tools/workflow-continuation.py"
   chmod +x "$tools/architect-attempt.sh" "$tools/context-intelligence.sh" "$tools/context-intelligence.py" "$tools/workflow-continuation.py"
 
   python3 - "$CONFIG_DIR" <<'PY'
@@ -111,9 +111,9 @@ root=pathlib.Path(sys.argv[1]);tools=root/'opencode-governance-tools';manifest_p
 data=json.loads(manifest_path.read_text(encoding='utf-8-sig'))
 if data.get('schema_version')!='1.0': raise SystemExit('Routing manifest schema_version must be 1.0.')
 data['governance_version']='3.4.4';data['architect_runner_version']='3.4.4';data['context_intelligence_version']='3.4.4';data['workflow_continuation_version']='3.4.4'
-data['managed_tools']=[str(tools/name) for name in ['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','workflow-continuation.py']]
+data['managed_tools']=[str(tools/name) for name in ['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','workflow-continuation.ps1','workflow-continuation.py']]
 manifest_path.write_text(json.dumps(data,indent=2)+'\n',encoding='utf-8')
-marker='[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]';ps_runner=str(tools/'architect-attempt.ps1');sh_runner=str(tools/'architect-attempt.sh');ps_context=str(tools/'context-intelligence.ps1');sh_context=str(tools/'context-intelligence.sh');py_context=str(tools/'context-intelligence.py');workflow_gate=str(tools/'workflow-continuation.py')
+marker='[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]';ps_runner=str(tools/'architect-attempt.ps1');sh_runner=str(tools/'architect-attempt.sh');ps_context=str(tools/'context-intelligence.ps1');sh_context=str(tools/'context-intelligence.sh');py_context=str(tools/'context-intelligence.py');workflow_ps=str(tools/'workflow-continuation.ps1');workflow_py=str(tools/'workflow-continuation.py')
 architect_policy=f'''
 
 ## ARCHITECT_RUNNER_INTEGRATION
@@ -175,7 +175,7 @@ UNIX_COMMAND: "{sh_runner}" --project-dir "<CURRENT_PROJECT_ROOT>" --command {co
 
 The external runner supports Git and non-Git project directories. It fingerprints all source and project-documentation content outside root `.ai/**` before and after each attempt and returns `PROJECT_STATE_CHANGED` on any delta.
 
-Do not create, edit or delete `.ai/**`. Do not invoke the runner from inside this OpenCode process. Tell the owner to run `pwsh -NoProfile -File "{ps_runner}"` with the current project root and `-Command {command}` on Windows, or the installed Unix runner with `--command {command}`. Do not invent another runner path.
+Do not create, edit or delete `.ai/**`. Do not invoke the runner from inside this OpenCode process. Return the complete `WINDOWS_COMMAND` and `UNIX_COMMAND` values with the actual current project root and original arguments substituted so the owner can copy and execute them. Do not invent another runner path.
 
 When the exact marker is present, this is already a transactional child attempt; continue with the command contract below.
 '''
@@ -193,24 +193,20 @@ for command in ['ai-workflow','ai-resume','ai-metrics']:
     match=re.match(r'\A(---\r?\n.*?\r?\n---\r?\n)',text,flags=re.S)
     if not match: raise SystemExit(f'Command front matter not found: {path}')
     path.write_text(text[:match.end()]+entry+text[match.end():],encoding='utf-8')
-PY
-  python3 - "$CONFIG_DIR" <<'PY'
-import pathlib,re,sys
-root=pathlib.Path(sys.argv[1]);tools=root/'opencode-governance-tools';workflow_gate=str(tools/'workflow-continuation.py')
-
-workflow_entry=f'''
+for command in ['ai-workflow','ai-resume']:
+    path=root/'commands'/f'{command}.md';text=path.read_text(encoding='utf-8');text=re.sub(r'\n## WORKFLOW_CONTINUATION_GATE_V1\n.*?(?=\n## |\Z)','',text,count=1,flags=re.S)
+    workflow_entry=f'''
 
 ## WORKFLOW_CONTINUATION_GATE_V1
 
-WORKFLOW_CONTINUATION_CORE: {workflow_gate}
+WINDOWS_WORKFLOW_CONTINUATION_CORE: {workflow_ps}
+UNIX_WORKFLOW_CONTINUATION_CORE: {workflow_py}
 
-Persist `top_level_command`, `current_phase`, `next_required_phase` and `terminal_reason` in the authoritative task `RUN_STATE.json`. Before a final response, invoke `python3 "{workflow_gate}" --run-state "<AUTHORITATIVE_RUN_STATE_PATH>" --expected-command <EXPECTED_COMMAND>`. Exit 3/`CONTINUE_REQUIRED` requires continuation at the recorded next phase. Exit 0/`TERMINAL_ALLOWED` permits only `LOCAL_COMMITTED` or an explicit blocker. Exit 2/`INVALID_RUN_STATE` blocks completion.
+Persist `top_level_command`, `current_phase`, `next_required_phase` and `terminal_reason` in the authoritative task `RUN_STATE.json`. Before a final response on Windows, invoke `pwsh -NoProfile -File "{workflow_ps}" -RunStatePath "<AUTHORITATIVE_RUN_STATE_PATH>" -ExpectedCommand {command}`. On Unix, invoke `python3 "{workflow_py}" --run-state "<AUTHORITATIVE_RUN_STATE_PATH>" --expected-command {command}`. Exit 3/`CONTINUE_REQUIRED` requires continuation at the recorded next phase. Exit 0/`TERMINAL_ALLOWED` permits only `LOCAL_COMMITTED` or an explicit blocker. Exit 2/`INVALID_RUN_STATE` blocks completion.
 '''
-for command in ['ai-workflow','ai-resume']:
-    path=root/'commands'/f'{command}.md';text=path.read_text(encoding='utf-8');text=re.sub(r'\n## WORKFLOW_CONTINUATION_GATE_V1\n.*?(?=\n## |\Z)','',text,count=1,flags=re.S)
     match=re.match(r'\A(---\r?\n.*?\r?\n---\r?\n)',text,flags=re.S)
     if not match: raise SystemExit(f'Command front matter not found: {path}')
-    text=text[:match.end()]+workflow_entry.replace('<EXPECTED_COMMAND>',command)+text[match.end():];path.write_text(text,encoding='utf-8')
+    path.write_text(text[:match.end()]+workflow_entry+text[match.end():],encoding='utf-8')
 PY
   "$SCRIPT_DIR/verify-routing.sh" "$CONFIG_DIR"
   echo 'Installed OpenCode Governance v3.4.4 — Deterministic Workflow Continuation.'
