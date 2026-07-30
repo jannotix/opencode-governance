@@ -2,6 +2,16 @@
 
 All released versions are recorded in this single file. Dates use `YYYY-MM-DD`.
 
+## 3.6.0 - 2026-07-30
+
+- Added immutable `workspace`, `staged`, `commit` and `base-diff` candidate projections and `GOVERNANCE_APPROVAL_RECEIPT_V1`, binding approved requirements, execution packet, evidence, both independent reviews, Final Reviewer adjudication and actual model families to the exact reviewed candidate.
+- Added typed actionable continuation and risk-derived review lenses while preserving both independent reviewers and Final Reviewer authority.
+- Added Final-Reviewer-governed local engineering memory with progressive disclosure, supersession, review lifecycle and owner-authorized promotion of recurring validated lessons into project policy.
+- Added exact dependency-bound evidence reuse, an explicit staged pre-commit receipt gate with no model call and deterministic loopback OpenCode simulation covering all twelve `/ai-*` commands.
+- Unified the capabilities into the canonical `install.ps1|sh`, `verify-routing.ps1|sh`, `uninstall.ps1|sh` and `opencode-governance-routing.json` lifecycle; removed the separate runtime manifest, v360 wrappers, overlay workflow and duplicate release documents.
+- Added complete pre-install snapshots and byte-for-byte rollback across the entire managed installation, exact hashes for all capability tools and managed prompt sections, and Linux/Windows release-blocking regressions.
+- Preserved providers, models, variants, fallback order, priorities, `only_on`, work classes, hidden aliases, authentication, reviewer independence, seven public agents and all external-action boundaries.
+
 ## 3.4.4 - 2026-07-30
 
 - Added `WORKFLOW_CONTINUATION_GATE_V1`, an installed deterministic helper that rejects `/ai-workflow` completion at intermediate phases such as `AUDIT_PASS`, `TASK_VALIDATED` or `PRODUCT_INCOMPLETE`.
@@ -107,7 +117,7 @@ All released versions are recorded in this single file. Dates use `YYYY-MM-DD`.
 - Added fresh-process route attempts with concrete model/variant selection, bounded cooldown state and same-family provider preference before different-family fallback.
 - Added complete `.ai/**` snapshots outside the repository and byte-for-byte restoration before every eligible retry.
 - Added fail-closed protection when source or project-documentation state changes, governance restoration fails, the error is ineligible, or no valid route remains.
-- Preserved sticky attempts: primary recovery never interrupts an active fallback and is reconsidered only on a later runner invocation after cooldown.
+- Preserved sticky attempts: primary recovery never interrupts a fallback and is reconsidered only on a later runner invocation after cooldown.
 - Explicitly blocked top-level automatic restart of workflow, execution, review and release commands after the implementation/review side-effect boundary.
 - Preserved reviewer/final hidden-route failover, legacy single-model installation, seven public agents, twelve commands and all v2/v3 governance contracts.
 
