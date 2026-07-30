@@ -39,6 +39,26 @@ def main() -> None:
     assert payload["current_phase"] == "AUDIT_PASS"
     assert payload["next_required_phase"] == "IDEA_INTAKE"
 
+    for phase, next_phase in (
+        ("BASELINE_DEFECT", "BASELINE_DUAL_AUDIT"),
+        ("DISCOVERY_DEFECT", "ADAPTIVE_PRODUCT_DISCOVERY"),
+        ("PASS", "PRODUCT_COMPLETENESS_RECONCILIATION"),
+        ("IMPLEMENTATION_DEFECT", "IMPLEMENTING"),
+        ("PLAN_DEFECT", "CONTEXT_ROUTING"),
+        ("PRODUCT_DEFECT", "IMPLEMENTING"),
+        ("NOT_READY_FOR_PRODUCTION", "VALIDATED_LEARNING"),
+    ):
+        code, payload, _ = run_gate(
+            {
+                "top_level_command": "ai-workflow",
+                "current_phase": phase,
+                "next_required_phase": next_phase,
+                "terminal_reason": None,
+            }
+        )
+        assert code == 3, (phase, payload)
+        assert payload["decision"] == "CONTINUE_REQUIRED"
+
     code, payload, _ = run_gate(
         {
             "top_level_command": "ai-workflow",
