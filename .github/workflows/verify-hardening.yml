@@ -14,6 +14,7 @@ jobs:
         run: |
           python3 -m py_compile \
             tests/test-hardening.py \
+            tests/test-v360-unified-hardening.py \
             tests/test-jsonc-preservation.py \
             tests/test-jsonc-readable.py \
             tests/test-workflow-continuation.py \
@@ -38,6 +39,7 @@ jobs:
       - name: Run hardening and 3.6.0 regressions
         run: |
           python3 tests/test-hardening.py
+          python3 tests/test-v360-unified-hardening.py
           python3 tests/test-jsonc-preservation.py
           python3 tests/test-jsonc-readable.py
           python3 tests/test-workflow-continuation.py
