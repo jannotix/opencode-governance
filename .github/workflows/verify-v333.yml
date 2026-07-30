@@ -45,7 +45,7 @@ jobs:
           Copy-Item (Join-Path $source 'opencode-governance-tools/executor-attempt.ps1') (Join-Path $config 'opencode-governance-tools/executor-attempt.ps1') -Force
           Copy-Item (Join-Path $source 'opencode-governance-tools/executor-attempt.sh') (Join-Path $config 'opencode-governance-tools/executor-attempt.sh') -Force
           $manifest=Get-Content (Join-Path $source 'opencode-governance-routing.json') -Raw|ConvertFrom-Json
-          $manifest.governance_version='3.3.0';$manifest.PSObject.Properties.Remove('architect_runner_version');$manifest.PSObject.Properties.Remove('context_intelligence_version')
+          $manifest.governance_version='3.3.0';$manifest.PSObject.Properties.Remove('architect_runner_version');$manifest.PSObject.Properties.Remove('context_intelligence_version');$manifest.PSObject.Properties.Remove('workflow_continuation_version')
           $manifest.managed_tools=@((Join-Path $config 'opencode-governance-tools/executor-attempt.ps1'),(Join-Path $config 'opencode-governance-tools/executor-attempt.sh'))
           $manifest|ConvertTo-Json -Depth 30|Set-Content (Join-Path $config 'opencode-governance-routing.json')
           $global:LASTEXITCODE=74;& ./scripts/verify-routing.ps1 -ConfigDir $config
@@ -71,9 +71,9 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          if((Get-Content VERSION -Raw).Trim()-ne'3.4.3'){throw 'VERSION must be 3.4.3.'}
-          if((Get-Content README.md -Raw)-notmatch'3\.4\.3 — Release Integrity & JSONC Readability'){throw 'README 3.4.3 marker missing.'}
-          if((Get-Content CHANGELOG.md -Raw)-notmatch'(?m)^## 3\.4\.3 - 2026-07-30\r?$'){throw 'CHANGELOG 3.4.3 entry missing.'}
+          if((Get-Content VERSION -Raw).Trim()-ne'3.4.4'){throw 'VERSION must be 3.4.4.'}
+          if((Get-Content README.md -Raw)-notmatch'3\.4\.4 — Deterministic Workflow Continuation'){throw 'README 3.4.4 marker missing.'}
+          if((Get-Content CHANGELOG.md -Raw)-notmatch'(?m)^## 3\.4\.4 - 2026-07-30\r?$'){throw 'CHANGELOG 3.4.4 entry missing.'}
           foreach($path in 'scripts/install.ps1','scripts/uninstall.ps1','scripts/verify-routing.ps1'){
             $text=Get-Content $path -Raw
             if($text-match'(?m)^\s*(?:exit|if\s*\().*\$LASTEXITCODE'){throw "$path still treats stale LASTEXITCODE as a PowerShell child result."}
