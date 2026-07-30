@@ -14,33 +14,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          config="$RUNNER_TEMP/opencode-v332"
-          unrelated="$config/opencode-governance-tools/unrelated-user-tool.txt"
+          config="$RUNNER_TEMP/opencode-v332";unrelated="$config/opencode-governance-tools/unrelated-user-tool.txt"
           ./scripts/install.sh --config-dir "$config" --routing-config "$GITHUB_WORKSPACE/tests/fixtures/routing/architect-failover.valid.json"
-          mkdir -p "$(dirname "$unrelated")"; printf 'preserve\n' > "$unrelated"
-          cmp scripts/run-governed.ps1 "$config/opencode-governance-tools/architect-attempt.ps1"
-          cmp scripts/run-governed.sh "$config/opencode-governance-tools/architect-attempt.sh"
+          mkdir -p "$(dirname "$unrelated")";printf 'preserve\n' > "$unrelated"
+          cmp scripts/run-governed.ps1 "$config/opencode-governance-tools/architect-attempt.ps1";cmp scripts/run-governed.sh "$config/opencode-governance-tools/architect-attempt.sh"
           python3 - "$config" <<'PY'
           import json,pathlib,sys
-          root=pathlib.Path(sys.argv[1]); data=json.loads((root/'opencode-governance-routing.json').read_text()); tools=root/'opencode-governance-tools'
-          assert data['governance_version']=='3.4.0'
-          assert data['architect_runner_version']=='3.3.4'
-          assert data['context_intelligence_version']=='3.4.0'
-          names=['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py']
+          root=pathlib.Path(sys.argv[1]);data=json.loads((root/'opencode-governance-routing.json').read_text());tools=root/'opencode-governance-tools'
+          assert data['governance_version']=='3.5.0';assert data['architect_runner_version']=='3.3.4';assert data['context_intelligence_version']=='3.4.0';assert data['quality_gates_version']=='3.5.0'
+          names=['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','quality-gates.ps1','quality-gates.sh','quality-gates.py']
           assert set(data['managed_tools'])=={str(tools/name) for name in names}
           for name in ['architect','build','plan']:
               text=(root/'agents'/f'{name}.md').read_text()
-              for marker in ['ARCHITECT_RUNNER_INTEGRATION','ARCHITECT_RUNNER_REQUIRED','POWERSHELL_7_REQUIRED','PROJECT_STATE_FINGERPRINT_V1','NON_GIT_PROJECT_SUPPORTED','PROJECT_STATE_CHANGED','[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]']:
-                  assert marker in text
+              for marker in ['ARCHITECT_RUNNER_INTEGRATION','ARCHITECT_RUNNER_REQUIRED','POWERSHELL_7_REQUIRED','PROJECT_STATE_FINGERPRINT_V1','NON_GIT_PROJECT_SUPPORTED','PROJECT_STATE_CHANGED','[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]']:assert marker in text
           for command in ['ai-init','ai-audit','ai-discover','ai-plan']:
               text=(root/'commands'/f'{command}.md').read_text()
-              for marker in ['ARCHITECT_RUNNER_ENTRY_GATE','ARCHITECT_RUNNER_REQUIRED','PROJECT_STATE_CHANGED','pwsh -NoProfile -File']:
-                  assert marker in text
+              for marker in ['ARCHITECT_RUNNER_ENTRY_GATE','ARCHITECT_RUNNER_REQUIRED','PROJECT_STATE_CHANGED','pwsh -NoProfile -File']:assert marker in text
           PY
-          ./scripts/verify-routing.sh "$config"
-          ./scripts/uninstall.sh --config-dir "$config" >/dev/null
-          test -f "$unrelated"
-          for name in architect-attempt.ps1 architect-attempt.sh executor-attempt.ps1 executor-attempt.sh context-intelligence.ps1 context-intelligence.sh context-intelligence.py; do test ! -e "$config/opencode-governance-tools/$name"; done
+          ./scripts/verify-routing.sh "$config";./scripts/uninstall.sh --config-dir "$config" >/dev/null;test -f "$unrelated"
       - name: Exercise transactional and non-Git behavior
         shell: bash
         run: bash tests/test-project-state-integrity.sh
@@ -54,36 +45,17 @@ jobs:
       - name: Install and verify deterministic Architect runner
         shell: pwsh
         run: |
-          $ErrorActionPreference='Stop'
-          $config=Join-Path $env:RUNNER_TEMP 'opencode-v332'
+          $ErrorActionPreference='Stop';$config=Join-Path $env:RUNNER_TEMP 'opencode-v332'
           ./scripts/install.ps1 -ConfigDir $config -NonInteractive -RoutingConfigPath (Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/architect-failover.valid.json')
-          $tools=Join-Path $config 'opencode-governance-tools'
-          'preserve'|Set-Content (Join-Path $tools 'unrelated-user-tool.txt')
-          if((Get-FileHash scripts/run-governed.ps1).Hash-ne(Get-FileHash (Join-Path $tools 'architect-attempt.ps1')).Hash){throw 'Installed PowerShell Architect runner is stale'}
-          if((Get-FileHash scripts/run-governed.sh).Hash-ne(Get-FileHash (Join-Path $tools 'architect-attempt.sh')).Hash){throw 'Installed Unix Architect runner is stale'}
+          $tools=Join-Path $config 'opencode-governance-tools';'preserve'|Set-Content (Join-Path $tools 'unrelated-user-tool.txt')
+          if((Get-FileHash scripts/run-governed.ps1).Hash-ne(Get-FileHash (Join-Path $tools 'architect-attempt.ps1')).Hash){throw 'PowerShell runner stale'}
+          if((Get-FileHash scripts/run-governed.sh).Hash-ne(Get-FileHash (Join-Path $tools 'architect-attempt.sh')).Hash){throw 'Unix runner stale'}
           $manifest=Get-Content (Join-Path $config 'opencode-governance-routing.json') -Raw|ConvertFrom-Json
-          if($manifest.governance_version-ne'3.4.0'){throw 'Routing manifest version is not 3.4.0'}
-          if($manifest.architect_runner_version-ne'3.3.4'){throw 'Architect runner version is not 3.3.4'}
-          if($manifest.context_intelligence_version-ne'3.4.0'){throw 'Context Intelligence version is not 3.4.0'}
-          if(@($manifest.managed_tools).Count-ne7){throw 'Expected seven managed tools'}
-          foreach($name in 'architect','build','plan'){
-            $text=Get-Content (Join-Path $config "agents/$name.md") -Raw
-            foreach($marker in 'ARCHITECT_RUNNER_INTEGRATION','ARCHITECT_RUNNER_REQUIRED','POWERSHELL_7_REQUIRED','PROJECT_STATE_FINGERPRINT_V1','NON_GIT_PROJECT_SUPPORTED','PROJECT_STATE_CHANGED','[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]'){
-              if($text-notlike"*$marker*"){throw "$name missing marker: $marker"}
-            }
-          }
-          foreach($command in 'ai-init','ai-audit','ai-discover','ai-plan'){
-            $text=Get-Content (Join-Path $config "commands/$command.md") -Raw
-            foreach($marker in 'ARCHITECT_RUNNER_ENTRY_GATE','ARCHITECT_RUNNER_REQUIRED','PROJECT_STATE_CHANGED','pwsh -NoProfile -File'){
-              if($text-notlike"*$marker*"){throw "$command missing marker: $marker"}
-            }
-          }
-          ./scripts/verify-routing.ps1 -ConfigDir $config
-          ./scripts/uninstall.ps1 -ConfigDir $config|Out-Null
-          if(-not(Test-Path (Join-Path $tools 'unrelated-user-tool.txt'))){throw 'Unrelated tool was removed'}
-          foreach($name in 'architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py'){
-            if(Test-Path (Join-Path $tools $name)){throw "Managed tool survived uninstall: $name"}
-          }
+          if($manifest.governance_version-ne'3.5.0'-or$manifest.architect_runner_version-ne'3.3.4'-or$manifest.context_intelligence_version-ne'3.4.0'-or$manifest.quality_gates_version-ne'3.5.0'){throw 'Component version mismatch'}
+          if(@($manifest.managed_tools).Count-ne10){throw 'Expected ten managed tools'}
+          foreach($name in 'architect','build','plan'){$text=Get-Content (Join-Path $config "agents/$name.md") -Raw;foreach($marker in 'ARCHITECT_RUNNER_INTEGRATION','ARCHITECT_RUNNER_REQUIRED','POWERSHELL_7_REQUIRED','PROJECT_STATE_FINGERPRINT_V1','NON_GIT_PROJECT_SUPPORTED','PROJECT_STATE_CHANGED','[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]'){if($text-notlike"*$marker*"){throw "$name missing $marker"}}}
+          ./scripts/verify-routing.ps1 -ConfigDir $config;./scripts/uninstall.ps1 -ConfigDir $config|Out-Null
+          if(-not(Test-Path (Join-Path $tools 'unrelated-user-tool.txt'))){throw 'Unrelated tool removed'}
       - name: Exercise transactional and non-Git behavior
         shell: pwsh
         run: pwsh -NoProfile -File tests/test-project-state-integrity.ps1
