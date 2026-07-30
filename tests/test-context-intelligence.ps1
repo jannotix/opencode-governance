@@ -15,9 +15,7 @@ function Invoke-ToolFailure([string[]]$Arguments){
   $output=& pwsh -NoProfile -File $Tool @Arguments 2>&1
   return [pscustomobject]@{Code=$LASTEXITCODE;Text=($output-join"`n")}
 }
-function Write-Json([string]$Path,[object]$Value){
-  $Value|ConvertTo-Json -Depth 30|Set-Content -LiteralPath $Path -Encoding utf8NoBOM
-}
+function Write-Json([string]$Path,[object]$Value){$Value|ConvertTo-Json -Depth 30|Set-Content -LiteralPath $Path -Encoding utf8NoBOM}
 
 try{
   $expected=[ordered]@{
@@ -30,8 +28,7 @@ try{
   }
   $index=0
   foreach($entry in $expected.GetEnumerator()){
-    $index++
-    $task="CTX-$index"
+    $index++;$task="CTX-$index"
     $result=Invoke-Tool @{Action='InitializeBudget';ProjectDir=$Project;TaskId=$task;WorkClass=$entry.Key;CacheRoot=$Cache}
     if($result.schema-ne'CONTEXT_BUDGET_V1'){throw 'Budget schema mismatch'}
     $actual=@($result.max_retrieval_cycles,$result.max_loaded_skills,$result.max_packet_references,$result.max_admitted_paths)
@@ -41,23 +38,24 @@ try{
   }
 
   $bad=Invoke-ToolFailure @('-Action','InitializeBudget','-ProjectDir',$Project,'-TaskId','../escape','-WorkClass','PATCH')
-  if($bad.Code-eq0){throw 'Invalid task ID was accepted'}
-  if($bad.Text-notmatch'INVALID_TASK_ID'){throw "Invalid task ID error missing: $($bad.Text)"}
+  if($bad.Code-eq0-or$bad.Text-notmatch'INVALID_TASK_ID'){throw "Invalid task ID contract failed: $($bad.Text)"}
 
   $task='CTX-CYCLES'
   Invoke-Tool @{Action='InitializeBudget';ProjectDir=$Project;TaskId=$task;WorkClass='MAJOR_FEATURE';CacheRoot=$Cache}|Out-Null
   $cycle=Join-Path $Temp 'cycle.json'
-  Write-Json $cycle ([ordered]@{query='entry points';reason='initial dispatch';candidate_paths=@('src/a.ps1');admitted_paths=@('src/a.ps1');rejected_paths=@();dependency_edges=@();trust_boundaries=@();tests=@();context_gaps=@();stop_reason='REFINE'})
-  foreach($number in 1..3){
+  $record=[ordered]@{query='entry points';reason='initial dispatch';candidate_paths=@('src/a.ps1');admitted_paths=@('src/a.ps1');rejected_paths=@();dependency_edges=@();trust_boundaries=@();tests=@();context_gaps=@();stop_reason='REFINE'}
+  Write-Json $cycle $record
+  foreach($number in 1..2){
     $recorded=Invoke-Tool @{Action='RecordCycle';ProjectDir=$Project;TaskId=$task;Cycle=$number;InputJsonPath=$cycle}
     if($recorded.cycle-ne$number){throw 'Cycle number mismatch'}
   }
+  $record.stop_reason='CONTEXT_SUFFICIENT';Write-Json $cycle $record
+  $recorded=Invoke-Tool @{Action='RecordCycle';ProjectDir=$Project;TaskId=$task;Cycle=3;InputJsonPath=$cycle}
+  if($recorded.cycle-ne3){throw 'Terminal cycle mismatch'}
   $fourth=Invoke-ToolFailure @('-Action','RecordCycle','-ProjectDir',$Project,'-TaskId',$task,'-Cycle','4','-InputJsonPath',$cycle)
-  if($fourth.Code-eq0){throw 'Fourth cycle was accepted'}
-  if($fourth.Text-notmatch'RETRIEVAL_CYCLE_LIMIT'){throw "Cycle limit error missing: $($fourth.Text)"}
+  if($fourth.Code-eq0-or$fourth.Text-notmatch'RETRIEVAL_CYCLE_LIMIT'){throw "Cycle limit contract failed: $($fourth.Text)"}
 
-  $catalog=Join-Path $Temp 'skills.json'
-  $criteria=Join-Path $Temp 'criteria.json'
+  $catalog=Join-Path $Temp 'skills.json';$criteria=Join-Path $Temp 'criteria.json'
   Write-Json $catalog @(
     [ordered]@{schema='SKILL_CAPABILITY_MANIFEST_V1';skill_id='trusted-debug';version='1';content_sha256=('a'*64);source='project';trust_class='PROJECT_AUTHORITATIVE';triggers=@('debug');supported_work_classes=@('MAJOR_FEATURE');languages=@('powershell');frameworks=@();required_tools=@();external_dependencies=@();conflicts_with=@();overlaps_with=@('generic-debug');estimated_context_tokens=600;sections=@([ordered]@{id='root-cause';heading='Root cause'})},
     [ordered]@{schema='SKILL_CAPABILITY_MANIFEST_V1';skill_id='generic-debug';version='1';content_sha256=('b'*64);source='workspace';trust_class='WORKSPACE_ADVISORY';triggers=@('debug');supported_work_classes=@('MAJOR_FEATURE');languages=@('powershell');frameworks=@();required_tools=@();external_dependencies=@();conflicts_with=@();overlaps_with=@('trusted-debug');estimated_context_tokens=200;sections=@()},
@@ -92,7 +90,7 @@ try{
   if($recorded.schema-ne'CONTEXT_METRICS_V1'){throw 'Metrics schema mismatch'}
 
   $valid=Invoke-Tool @{Action='ValidateTask';ProjectDir=$Project;TaskId=$task}
-  if(-not$valid.valid){throw 'Task validation failed'}
+  if(-not$valid.valid){throw "Task validation failed: $(@($valid.errors)-join', ')"}
   Write-Host 'PASS: context intelligence PowerShell regressions'
 }finally{
   Remove-Item $Temp -Recurse -Force -ErrorAction SilentlyContinue
