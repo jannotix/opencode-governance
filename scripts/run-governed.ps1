@@ -44,6 +44,11 @@ function Get-OnlyOn([object]$Candidate){
   if(-not $Candidate.PSObject.Properties['only_on']){throw 'Every route candidate must define only_on.'}
   @($Candidate.only_on|Where-Object{-not[string]::IsNullOrWhiteSpace([string]$_)}|ForEach-Object{[string]$_})
 }
+function Get-RoutePriority([object]$Route){
+  $priority=0
+  if(-not[int]::TryParse([string]$Route.priority,[ref]$priority)-or$priority-lt1){throw 'Architect fallback priority must be a positive integer.'}
+  $priority
+}
 function Validate-Route([object]$Route,[bool]$NeedsPriority){
   if($null-eq$Route-or[string]$Route.model-notmatch'^[^/\s]+/\S+$'){throw "Invalid Architect route model: $($Route.model)"}
   if([string]::IsNullOrWhiteSpace([string]$Route.model_family)){throw 'Architect route model_family is required.'}
@@ -54,16 +59,17 @@ function Validate-Route([object]$Route,[bool]$NeedsPriority){
   if($policy-eq'highest_supported'-and[string]::IsNullOrWhiteSpace([string]$Route.variant)){throw 'highest_supported must be resolved to a concrete variant before running.'}
   if([string]$Route.variant-eq'highest_supported'){throw 'highest_supported cannot be used as a literal variant.'}
   Get-OnlyOn $Route|Out-Null
-  if($NeedsPriority-and($Route.priority-isnot[int]-or[int]$Route.priority-lt1)){throw 'Architect fallback priority must be a positive integer.'}
+  if($NeedsPriority){Get-RoutePriority $Route|Out-Null}
 }
 Validate-Route $Architect.primary $false
 $Priorities=@()
 foreach($route in @($Architect.fallbacks)){
   Validate-Route $route $true
-  if([int]$route.priority-in$Priorities){throw 'Architect fallback priorities must be unique.'}
-  $Priorities+=[int]$route.priority
+  $priority=Get-RoutePriority $route
+  if($priority-in$Priorities){throw 'Architect fallback priorities must be unique.'}
+  $Priorities+=$priority
 }
-$Routes=@([pscustomobject]@{candidate=$Architect.primary;priority=0;route='architect-primary'})+@($Architect.fallbacks|Sort-Object{[int]$_.priority}|ForEach-Object{[pscustomobject]@{candidate=$_;priority=[int]$_.priority;route="architect-fallback-$([int]$_.priority)"}})
+$Routes=@([pscustomobject]@{candidate=$Architect.primary;priority=0;route='architect-primary'})+@($Architect.fallbacks|Sort-Object{Get-RoutePriority $_}|ForEach-Object{$priority=Get-RoutePriority $_;[pscustomobject]@{candidate=$_;priority=$priority;route="architect-fallback-$priority"}})
 
 function Get-Epoch(){[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()}
 function Load-Cooldowns(){
