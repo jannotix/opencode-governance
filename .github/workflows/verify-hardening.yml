@@ -16,7 +16,9 @@ jobs:
           ref: release/v3.4.4-deterministic-workflow-continuation
           fetch-depth: 0
       - name: Apply deterministic continuation release
-        run: python3 scripts/apply-v344.py
+        run: |
+          python3 scripts/fix-v344-migration.py
+          python3 scripts/apply-v344.py
       - name: Run focused regressions before commit
         run: |
           set -euo pipefail
