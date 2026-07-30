@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   apply-v344:
-    if: github.ref == 'refs/heads/release/v3.4.4-deterministic-workflow-continuation' && github.actor != 'github-actions[bot]'
+    if: ((github.event_name == 'push' && github.ref == 'refs/heads/release/v3.4.4-deterministic-workflow-continuation') || (github.event_name == 'pull_request' && github.head_ref == 'release/v3.4.4-deterministic-workflow-continuation')) && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +44,7 @@ jobs:
       - name: Validate hardening tests and scripts
         run: |
           python3 -m py_compile tests/test-hardening.py tests/test-jsonc-preservation.py tests/test-jsonc-readable.py tests/test-workflow-continuation.py tests/test-command-contracts.py scripts/context-intelligence.py scripts/normalize-jsonc.py scripts/workflow-continuation.py
-          bash -n scripts/install.sh scripts/install-core.sh scripts/run-governed.sh scripts/workflow-continuation.py tests/test-workflow-continuation.sh
+          bash -n scripts/install.sh scripts/install-core.sh scripts/run-governed.sh tests/test-workflow-continuation.sh
       - name: Run hardening regressions
         run: |
           python3 tests/test-hardening.py
