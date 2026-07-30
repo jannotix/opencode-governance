@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""Regression for annotated-tag identity in the verified release publisher."""
 from __future__ import annotations
 
 import pathlib
