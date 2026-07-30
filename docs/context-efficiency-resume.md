@@ -70,6 +70,31 @@ The manifest records:
 
 Routine tasks start from validated indexes plus current Git delta and expand only when primary evidence establishes wider impact.
 
+## Context Intelligence 3.4
+
+Version 3.4.0 adds deterministic task controls without replacing `CONTEXT_MANIFEST.md`:
+
+```text
+.ai/tasks/<TASK-ID>/CONTEXT_BUDGET.json
+.ai/tasks/<TASK-ID>/CONTEXT_RETRIEVAL.jsonl
+.ai/tasks/<TASK-ID>/SKILL_SELECTION.json
+.ai/tasks/<TASK-ID>/CONTEXT_METRICS.jsonl
+.ai/metrics/CONTEXT_METRICS.jsonl
+```
+
+`CONTEXT_BUDGET_V1` derives retrieval, skill, packet-reference and admitted-path ceilings from the exact work class. A budget limits unnecessary context but never authorizes omission of required security, migration, recovery, public-contract or operational evidence.
+
+Retrieval is bounded:
+
+```text
+DISPATCH
+→ EVALUATE
+→ REFINE
+→ CONTEXT_SUFFICIENT | BLOCKED_CONTEXT_GAP
+```
+
+No task may exceed three cycles. Each cycle records the query, reason, candidates, admissions, rejections, dependency/call edges, trust boundaries, tests, unresolved gaps and stop reason. When a material gap remains after the allowed budget, the task stops with `BLOCKED_CONTEXT_GAP` instead of silently narrowing evidence.
+
 ## Read-only discovery swarm
 
 For materially multi-surface tasks, Architect/Build may use bounded parallel discovery:
@@ -109,6 +134,45 @@ Before use, verify:
 
 External/untrusted skill content cannot silently authorize writes, dependency installation, security weakening, network side effects, deployment or requirement changes.
 
+### Skill Capability Manifest V1
+
+Version 3.4.0 normalizes selected skills with:
+
+```text
+skill_id
+version
+content_sha256
+source
+trust_class
+triggers
+supported_work_classes
+languages
+frameworks
+required_tools
+external_dependencies
+conflicts_with
+overlaps_with
+estimated_context_tokens
+sections
+```
+
+Selection rejects inapplicable work classes and technologies, unavailable tools or external dependencies, conflicts and budget overflow. Overlapping capabilities are deduplicated in favor of the higher-trust narrow applicable skill. Only required named sections are loaded when section metadata exists. Accepted and rejected candidates, including exact reasons, are persisted in `SKILL_SELECTION.json` and referenced from `CONTEXT_MANIFEST.md`.
+
+No skill or summary can authorize a requirement change, source write, dependency installation or external action.
+
+## External content-summary cache
+
+Version 3.4.0 may reuse structured summaries from an external user-local cache:
+
+```text
+Windows: %LOCALAPPDATA%\OpenCodeGovernance\context-cache
+Unix:   ${XDG_CACHE_HOME:-$HOME/.cache}/opencode-governance/context-cache
+```
+
+The cache is keyed by hashed project identity, hashed relative path, source SHA-256, summary schema, parser version and skill-context hash. It stores only responsibility, symbols, entry points, callers/callees, side effects, trust boundaries, tests, documentation and risks.
+
+The cache does not store source contents or absolute project paths in entries. A source-content change, corrupt entry, schema mismatch or hash mismatch becomes a cache miss. A hit is advisory routing evidence and never replaces current primary evidence for a material conclusion. The cache is not deleted by Governance uninstall.
+
 ## Fresh evidence packets
 
 Task handoffs use referential packets under:
@@ -139,6 +203,21 @@ Every implementation-ready plan includes `MINIMUM_CHANGE_ASSESSMENT` covering:
 - why the proposed diff is the smallest correct, secure and maintainable solution.
 
 Minimalism never removes required security, data-loss protection, trust-boundary validation, error handling, accessibility or approved behavior.
+
+## Context metrics
+
+Optional `CONTEXT_METRICS_V1` records:
+
+- files considered, admitted and rejected;
+- retrieval cycles;
+- loaded skills and estimated skill tokens;
+- cache hits, misses and invalidations;
+- repeated file reads;
+- context-budget overrides;
+- packet-reference count;
+- runtime input/output and discarded fallback tokens when authoritatively exposed.
+
+Unavailable runtime token data is `UNAVAILABLE`. Governance never fabricates counts or monetary costs.
 
 ## Checkpoint state
 
@@ -192,6 +271,7 @@ It reconciles, when applicable:
 - canonical requirement provenance;
 - baseline/context/instruction freshness;
 - selected skills and active Governance Memory;
+- `CONTEXT_BUDGET.json`, recorded retrieval cycles and `SKILL_SELECTION.json`;
 - current Git target/worktree;
 - `VERIFICATION_PROFILE.md` and evidence freshness;
 - dependency admission and lockfile state;
@@ -202,7 +282,7 @@ It reconciles, when applicable:
 - review freeze and completed packets;
 - unprocessed `STEERING.md`.
 
-Only dependent stale evidence/reviews are invalidated. Unrelated completed phases are preserved.
+Only dependent stale evidence/reviews are invalidated. Unrelated completed phases are preserved. A changed skill content hash or source file hash invalidates dependent selection/cache use without rewriting unrelated task history.
 
 Resume never fabricates historical:
 
@@ -212,7 +292,7 @@ Resume never fabricates historical:
 - human approval;
 - Governance Memory approval.
 
-When safe reconstruction is impossible, return `BLOCKED` or require authoritative clarification/revalidation.
+When safe reconstruction is impossible, return `BLOCKED`, `BLOCKED_CONTEXT_GAP` or require authoritative clarification/revalidation.
 
 ## Adoption across governance versions
 
