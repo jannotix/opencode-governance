@@ -22,6 +22,7 @@ try{
   if(-not$bug.debug_first_required-or-not$bug.tdd_required-or$bug.eval_required){throw 'Bugfix profile mismatch'}
   $ai=Invoke-Gate @{Action='InitializeProfile';ProjectDir=$Project;TaskId='AI-1';WorkClass='HIGH_RISK_CHANGE';TaskKind='FEATURE';Risks='AI_SYSTEM,SECURITY'}
   if(-not$ai.tdd_required-or-not$ai.eval_required-or$ai.required_reliability_mode-ne'PASS_K'){throw 'AI profile mismatch'}
+  Invoke-Gate @{Action='InitializeProfile';ProjectDir=$Project;TaskId='EXC-1';WorkClass='BOUNDED_FEATURE';TaskKind='FEATURE';Risks=''}|Out-Null
 
   $badDebug=Join-Path $Temp 'debug-bad.json'
   Write-Json $badDebug ([ordered]@{symptom='wrong result';reproduction_status='REPRODUCED';root_cause_status='HYPOTHESIS';root_cause_evidence=@();hypothesis='maybe parser';minimal_experiment='isolate parser';disproving_condition='parser correct';hypothesis_attempts=3;defect_class='APPLICATION_DEFECT'})
@@ -40,6 +41,11 @@ try{
   $goodTdd=Join-Path $Temp 'tdd-good.json';$tdd=Get-Content $badTdd -Raw|ConvertFrom-Json;$tdd.red_exit_code=1;$tdd.red_observed_failure='assertion failed';Write-Json $goodTdd $tdd
   if((Invoke-Gate @{Action='ValidateTdd';ProjectDir=$Project;TaskId='BUG-1';InputJsonPath=$goodTdd}).status-ne'PASS'){throw 'TDD proof failed'}
 
+  $exceptionTdd=Join-Path $Temp 'tdd-exception.json'
+  Write-Json $exceptionTdd ([ordered]@{red_command=$null;red_exit_code=0;red_expected_failure=$null;red_observed_failure=$null;red_evidence_refs=@();green_command=$null;green_exit_code=0;green_evidence_refs=@();regression_command=$null;regression_exit_code=0;regression_evidence_refs=@();exception_class='NO_EXECUTABLE_HARNESS';exception_reason='No executable harness exists for the generated host configuration.';equivalent_verification='Validate generated schema and runtime diagnostic output.'})
+  $exceptionGate=Invoke-GateFailure @('-Action','ValidateTdd','-ProjectDir',$Project,'-TaskId','EXC-1','-InputJsonPath',$exceptionTdd)
+  if($exceptionGate.Code-ne3-or$exceptionGate.Value.status-ne'EXCEPTION_REQUIRES_FINAL_REVIEW'){throw 'TDD exception gate failed'}
+
   $badEval=Join-Path $Temp 'eval-bad.json'
   Write-Json $badEval ([ordered]@{capability_evals=@('routing');regression_evals=@('legacy');negative_cases=@('unsafe');forbidden_behaviors=@('source write');grader_type='HYBRID';success_threshold=1.0;reliability_mode='PASS_AT_K';run_count=3;observed_successes=3;evidence_refs=@('eval.json');exploratory_reason=$null})
   $evalBlocked=Invoke-GateFailure @('-Action','ValidateEval','-ProjectDir',$Project,'-TaskId','AI-1','-InputJsonPath',$badEval)
@@ -54,6 +60,19 @@ try{
   $goodCheck=Join-Path $Temp 'check-good.json';$check=Get-Content $badCheck -Raw|ConvertFrom-Json;$check.security_invariants_checked=$true;$check.unresolved_assumptions=@();Write-Json $goodCheck $check
   $ready=Invoke-Gate @{Action='RecordSelfCheck';ProjectDir=$Project;TaskId='BUG-1';InputJsonPath=$goodCheck}
   if($ready.status-ne'READY_FOR_REVIEW'-or$ready.approval_authority){throw 'Self-check readiness failed'}
+  Invoke-Gate @{Action='RecordSelfCheck';ProjectDir=$Project;TaskId='EXC-1';InputJsonPath=$goodCheck}|Out-Null
+
+  $badException=Join-Path $Temp 'exception-bad.json'
+  Write-Json $badException ([ordered]@{exception_id='QEX-001';gate='TDD';exception_class='NO_EXECUTABLE_HARNESS';approved_by='IMPLEMENTATION_REVIEWER';approval_verdict='APPROVED';reason='Equivalent verification is sufficient.';evidence_refs=@('equivalent-verification.log');approved_scope=@('generated host configuration');stale_when=@('executable harness becomes available')})
+  $deniedException=Invoke-GateFailure @('-Action','ApproveException','-ProjectDir',$Project,'-TaskId','EXC-1','-InputJsonPath',$badException)
+  if($deniedException.Code-ne3-or$deniedException.Value.status-ne'FINAL_REVIEWER_APPROVAL_REQUIRED'){throw 'Exception approval authority failed'}
+  $stillBlocked=Invoke-GateFailure @('-Action','ValidateTask','-ProjectDir',$Project,'-TaskId','EXC-1')
+  if($stillBlocked.Code-ne3-or'TDD_PROOF.json_NOT_PASSING'-notin@($stillBlocked.Value.errors)){throw 'Unapproved exception did not remain blocked'}
+
+  $goodException=Join-Path $Temp 'exception-good.json';$approval=Get-Content $badException -Raw|ConvertFrom-Json;$approval.approved_by='FINAL_REVIEWER';Write-Json $goodException $approval
+  $approved=Invoke-Gate @{Action='ApproveException';ProjectDir=$Project;TaskId='EXC-1';InputJsonPath=$goodException}
+  if($approved.status-ne'APPROVED_EXCEPTION'-or$approved.implementation_approved){throw 'Approved exception contract failed'}
+  if(-not(Invoke-Gate @{Action='ValidateTask';ProjectDir=$Project;TaskId='EXC-1'}).valid){throw 'Approved exception did not unblock task validation'}
 
   $candidate=Join-Path $Temp 'candidate.json'
   Write-Json $candidate ([ordered]@{candidate_id='LRN-001';source='REVIEW_FINDING';scope=@('parser');statement='Preserve zero values.';evidence_refs=@('review.md');confidence=0.95;dedup_key='parser-zero';privacy_class='PROJECT_INTERNAL';stale_when=@('parser replaced')})
