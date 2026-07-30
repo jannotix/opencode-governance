@@ -10,8 +10,42 @@ jobs:
       - uses: actions/checkout@v4
         with:
           show-progress: false
-      - name: Run Python quality regressions
-        run: python3 tests/test-quality-gates.py
+      - name: Validate scripts and run core regressions
+        run: |
+          python3 -m py_compile scripts/quality-gates.py tests/test-quality-gates.py
+          bash -n scripts/quality-gates.sh scripts/install.sh scripts/uninstall.sh scripts/verify-routing.sh
+          python3 tests/test-quality-gates.py
+      - name: Install verify and uninstall v3.5.0
+        run: |
+          set -euo pipefail
+          config="$RUNNER_TEMP/opencode-v350-linux"
+          ./scripts/install.sh --config-dir "$config" --routing-config "$GITHUB_WORKSPACE/tests/fixtures/routing/architect-failover.valid.json"
+          python3 - "$config" <<'PY'
+          import json,pathlib,sys
+          root=pathlib.Path(sys.argv[1]);tools=root/'opencode-governance-tools';data=json.loads((root/'opencode-governance-routing.json').read_text())
+          assert data['governance_version']=='3.5.0';assert data['architect_runner_version']=='3.3.4';assert data['context_intelligence_version']=='3.4.0';assert data['quality_gates_version']=='3.5.0'
+          names=['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','quality-gates.ps1','quality-gates.sh','quality-gates.py']
+          assert set(data['managed_tools'])=={str(tools/name) for name in names};assert all((tools/name).is_file() for name in names)
+          for name in ['architect','build','plan']:
+              text=(root/'agents'/f'{name}.md').read_text()
+              for marker in ['QUALITY_GATES_V1','QUALITY_PROFILE.json','DEBUG_PROOF_V1','TDD_PROOF_V1','EVAL_PLAN_V1','LEARNING_CANDIDATE_V1','FINAL_REVIEWER',str(tools/'quality-gates.sh')]: assert marker in text
+          text=(root/'agents'/'executor.md').read_text();assert 'IMPLEMENTATION_SELF_CHECK_V1' in text and 'approval_authority: false' in text
+          for name in ['ai-plan','ai-execute','ai-workflow','ai-review','ai-resume','ai-audit','ai-metrics']:
+              text=(root/'commands'/f'{name}.md').read_text();assert 'QUALITY_GATES_ENTRY' in text and 'QUALITY_PROFILE.json' in text
+          PY
+          ./scripts/verify-routing.sh "$config"
+          project="$RUNNER_TEMP/v350-project";mkdir -p "$project/.ai";printf 'MEMORY_SENTINEL\n' > "$project/.ai/GOVERNANCE_MEMORY.md"
+          "$config/opencode-governance-tools/quality-gates.sh" initialize-profile --project-dir "$project" --task-id INSTALLED --work-class PATCH --task-kind BUGFIX --risks '' >/dev/null
+          printf 'preserve\n' > "$config/opencode-governance-tools/unrelated.txt"
+          ./scripts/uninstall.sh --config-dir "$config" >/dev/null
+          test -f "$config/opencode-governance-tools/unrelated.txt"
+          test "$(cat "$project/.ai/GOVERNANCE_MEMORY.md")" = 'MEMORY_SENTINEL'
+          for name in architect-attempt.ps1 architect-attempt.sh executor-attempt.ps1 executor-attempt.sh context-intelligence.ps1 context-intelligence.sh context-intelligence.py quality-gates.ps1 quality-gates.sh quality-gates.py; do test ! -e "$config/opencode-governance-tools/$name"; done
+      - name: Verify release metadata
+        run: |
+          test "$(cat VERSION)" = '3.5.0'
+          grep -q '3.5.0 — Quality Gates & Governed Learning' README.md
+          grep -q '^## 3.5.0 - 2026-07-30$' CHANGELOG.md
 
   windows-quality-gates:
     runs-on: windows-latest
@@ -19,12 +53,37 @@ jobs:
       - uses: actions/checkout@v4
         with:
           show-progress: false
-      - name: Parse PowerShell test
+      - name: Parse PowerShell and run core regressions
         shell: pwsh
         run: |
-          $errors=$null
-          [Management.Automation.Language.Parser]::ParseFile((Join-Path $env:GITHUB_WORKSPACE 'tests/test-quality-gates.ps1'),[ref]$null,[ref]$errors)|Out-Null
-          if($errors.Count){throw ($errors|Out-String)}
-      - name: Run PowerShell quality regressions
+          $ErrorActionPreference='Stop'
+          foreach($path in 'scripts/quality-gates.ps1','tests/test-quality-gates.ps1','scripts/install.ps1','scripts/uninstall.ps1','scripts/verify-routing.ps1'){
+            $errors=$null;[Management.Automation.Language.Parser]::ParseFile((Join-Path $env:GITHUB_WORKSPACE $path),[ref]$null,[ref]$errors)|Out-Null
+            if($errors.Count){throw "$path`n$($errors|Out-String)"}
+          }
+          ./tests/test-quality-gates.ps1
+      - name: Install verify and uninstall v3.5.0
         shell: pwsh
-        run: ./tests/test-quality-gates.ps1
+        run: |
+          $ErrorActionPreference='Stop';$config=Join-Path $env:RUNNER_TEMP 'opencode-v350-windows'
+          ./scripts/install.ps1 -ConfigDir $config -NonInteractive -RoutingConfigPath (Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/architect-failover.valid.json')
+          $tools=Join-Path $config 'opencode-governance-tools';$manifest=Get-Content (Join-Path $config 'opencode-governance-routing.json') -Raw|ConvertFrom-Json
+          if($manifest.governance_version-ne'3.5.0'-or$manifest.architect_runner_version-ne'3.3.4'-or$manifest.context_intelligence_version-ne'3.4.0'-or$manifest.quality_gates_version-ne'3.5.0'){throw 'Component version mismatch'}
+          $names=@('architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','quality-gates.ps1','quality-gates.sh','quality-gates.py')
+          if(@($manifest.managed_tools).Count-ne10){throw 'Expected ten managed tools'};foreach($name in $names){if(-not(Test-Path (Join-Path $tools $name))){throw "Missing $name"}}
+          foreach($name in 'architect','build','plan'){$text=Get-Content (Join-Path $config "agents/$name.md") -Raw;foreach($marker in 'QUALITY_GATES_V1','QUALITY_PROFILE.json','DEBUG_PROOF_V1','TDD_PROOF_V1','EVAL_PLAN_V1','LEARNING_CANDIDATE_V1','FINAL_REVIEWER',(Join-Path $tools 'quality-gates.ps1')){if($text-notlike"*$marker*"){throw "$name missing $marker"}}}
+          $executor=Get-Content (Join-Path $config 'agents/executor.md') -Raw;if($executor-notlike'*IMPLEMENTATION_SELF_CHECK_V1*'-or$executor-notlike'*approval_authority: false*'){throw 'Executor self-check policy missing'}
+          foreach($name in 'ai-plan','ai-execute','ai-workflow','ai-review','ai-resume','ai-audit','ai-metrics'){$text=Get-Content (Join-Path $config "commands/$name.md") -Raw;if($text-notlike'*QUALITY_GATES_ENTRY*'-or$text-notlike'*QUALITY_PROFILE.json*'){throw "$name quality entry missing"}}
+          ./scripts/verify-routing.ps1 -ConfigDir $config
+          $project=Join-Path $env:RUNNER_TEMP 'v350-project';New-Item -ItemType Directory -Force -Path (Join-Path $project '.ai')|Out-Null;'MEMORY_SENTINEL'|Set-Content (Join-Path $project '.ai/GOVERNANCE_MEMORY.md')
+          & (Join-Path $tools 'quality-gates.ps1') -Action InitializeProfile -ProjectDir $project -TaskId INSTALLED -WorkClass PATCH -TaskKind BUGFIX -Risks ''|Out-Null
+          'preserve'|Set-Content (Join-Path $tools 'unrelated.txt');./scripts/uninstall.ps1 -ConfigDir $config|Out-Null
+          if(-not(Test-Path (Join-Path $tools 'unrelated.txt'))){throw 'Unrelated tool removed'}
+          if((Get-Content (Join-Path $project '.ai/GOVERNANCE_MEMORY.md') -Raw).Trim()-ne'MEMORY_SENTINEL'){throw 'Governance Memory changed'}
+          foreach($name in $names){if(Test-Path (Join-Path $tools $name)){throw "Managed tool survived uninstall: $name"}}
+      - name: Verify release metadata
+        shell: pwsh
+        run: |
+          if((Get-Content VERSION -Raw).Trim()-ne'3.5.0'){throw 'VERSION must be 3.5.0'}
+          if((Get-Content README.md -Raw)-notmatch'3\.5\.0 — Quality Gates & Governed Learning'){throw 'README marker missing'}
+          if((Get-Content CHANGELOG.md -Raw)-notmatch'(?m)^## 3\.5\.0 - 2026-07-30\r?$'){throw 'CHANGELOG marker missing'}
