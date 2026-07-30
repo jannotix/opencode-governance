@@ -21,8 +21,23 @@ $Capabilities=Join-Path $PSScriptRoot 'governance-capabilities.py'
 $Transaction=Join-Path $PSScriptRoot 'governance-install-transaction.py'
 foreach($Required in @($BaseInstaller,$Capabilities,$Transaction)){if(-not(Test-Path -LiteralPath $Required -PathType Leaf)){throw "Required Governance installer component not found: $Required"}}
 
-$SnapshotOutput=& python $Transaction snapshot --config-dir $ConfigDir
-if($LASTEXITCODE-ne0){throw "Governance pre-install snapshot failed with exit code $LASTEXITCODE."}
+function Invoke-GovernancePython([string[]]$Arguments,[switch]$CaptureOutput){
+    $Info=[Diagnostics.ProcessStartInfo]::new()
+    $Info.FileName='python'
+    $Info.UseShellExecute=$false
+    $Info.RedirectStandardOutput=$true
+    $Info.RedirectStandardError=$true
+    foreach($Argument in $Arguments){$Info.ArgumentList.Add($Argument)}
+    $Process=[Diagnostics.Process]::Start($Info)
+    $Output=$Process.StandardOutput.ReadToEnd()
+    $Errors=$Process.StandardError.ReadToEnd()
+    $Process.WaitForExit()
+    if($Process.ExitCode-ne0){throw "Governance Python command failed with exit code $($Process.ExitCode): $Errors"}
+    if($CaptureOutput){return $Output}
+    if(-not[string]::IsNullOrWhiteSpace($Output)){Write-Host $Output.TrimEnd()}
+}
+
+$SnapshotOutput=Invoke-GovernancePython @($Transaction,'snapshot','--config-dir',$ConfigDir) -CaptureOutput
 try{$Snapshot=$SnapshotOutput|ConvertFrom-Json}catch{throw 'Governance pre-install snapshot returned invalid JSON.'}
 $BackupDir=[string]$Snapshot.backup_dir
 if([string]::IsNullOrWhiteSpace($BackupDir)-or-not(Test-Path -LiteralPath $BackupDir -PathType Container)){throw 'Governance pre-install snapshot directory was not created.'}
@@ -30,8 +45,7 @@ if([string]::IsNullOrWhiteSpace($BackupDir)-or-not(Test-Path -LiteralPath $Backu
 try{
     & $BaseInstaller @PSBoundParameters
     if($RoutingConfigPath){
-        & python $Capabilities install --source-dir $PSScriptRoot --config-dir $ConfigDir
-        if($LASTEXITCODE-ne0){throw "Canonical Governance 3.6.0 capability installation failed with exit code $LASTEXITCODE."}
+        Invoke-GovernancePython @($Capabilities,'install','--source-dir',$PSScriptRoot,'--config-dir',$ConfigDir)
         & (Join-Path $PSScriptRoot 'verify-routing.ps1') -ConfigDir $ConfigDir
         Write-Host 'Installed OpenCode Governance v3.6.0 — Governed Authority, Memory & Evidence.'
         Write-Host 'Candidate receipts, actionable continuation, focused review lenses, governed memory, exact evidence reuse, staged commit validation and simulation are active.'
@@ -42,7 +56,6 @@ try{
     Write-Host "Canonical pre-install backup: $BackupDir"
 }catch{
     $InstallError=$_
-    & python $Transaction restore --config-dir $ConfigDir --backup-dir $BackupDir
-    if($LASTEXITCODE-ne0){throw "Governance installation failed and rollback also failed. Original error: $InstallError"}
+    try{Invoke-GovernancePython @($Transaction,'restore','--config-dir',$ConfigDir,'--backup-dir',$BackupDir)}catch{throw "Governance installation failed and rollback also failed. Original error: $InstallError; rollback error: $_"}
     throw $InstallError
 }
