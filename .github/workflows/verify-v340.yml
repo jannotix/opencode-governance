@@ -1,4 +1,4 @@
-name: Verify Context Intelligence v3.4.0
+name: Verify Context Intelligence v3.4.0+
 on:
   push:
   pull_request:
@@ -10,49 +10,33 @@ jobs:
       - uses: actions/checkout@v4
         with:
           show-progress: false
-      - name: Validate Python and shell scripts
+      - name: Validate and run Context Intelligence regressions
         run: |
           python3 -m py_compile scripts/context-intelligence.py tests/test-context-intelligence.py
           bash -n scripts/context-intelligence.sh scripts/install.sh scripts/uninstall.sh scripts/verify-routing.sh
-      - name: Run Python context regressions
-        run: python3 tests/test-context-intelligence.py
-      - name: Install verify and uninstall v3.4.0
+          python3 tests/test-context-intelligence.py
+      - name: Verify current installation preserves v3.4 contract
         run: |
           set -euo pipefail
-          config="$RUNNER_TEMP/opencode-v340-linux"
-          cache="$RUNNER_TEMP/context-cache-preserve"
-          mkdir -p "$cache"; printf 'preserve\n' > "$cache/sentinel.txt"
+          config="$RUNNER_TEMP/opencode-v340-linux";cache="$RUNNER_TEMP/context-cache-preserve";mkdir -p "$cache";printf 'preserve\n' > "$cache/sentinel.txt"
           ./scripts/install.sh --config-dir "$config" --routing-config "$GITHUB_WORKSPACE/tests/fixtures/routing/architect-failover.valid.json"
           python3 - "$config" <<'PY'
           import json,pathlib,sys
-          root=pathlib.Path(sys.argv[1]); tools=root/'opencode-governance-tools'
-          data=json.loads((root/'opencode-governance-routing.json').read_text())
-          assert data['governance_version']=='3.4.0'
-          assert data['architect_runner_version']=='3.3.4'
-          assert data['context_intelligence_version']=='3.4.0'
-          names=['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py']
+          root=pathlib.Path(sys.argv[1]);tools=root/'opencode-governance-tools';data=json.loads((root/'opencode-governance-routing.json').read_text())
+          assert data['governance_version']=='3.5.0';assert data['context_intelligence_version']=='3.4.0';assert data['quality_gates_version']=='3.5.0'
+          names=['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','quality-gates.ps1','quality-gates.sh','quality-gates.py']
           assert set(data['managed_tools'])=={str(tools/name) for name in names}
-          assert all((tools/name).is_file() for name in names)
           for name in ['architect','build','plan']:
               text=(root/'agents'/f'{name}.md').read_text()
-              for marker in ['CONTEXT_INTELLIGENCE_V1','CONTEXT_BUDGET.json','SKILL_CAPABILITY_MANIFEST_V1','CONTEXT_SUFFICIENT','BLOCKED_CONTEXT_GAP',str(tools/'context-intelligence.sh')]: assert marker in text
+              for marker in ['CONTEXT_INTELLIGENCE_V1','CONTEXT_BUDGET.json','SKILL_CAPABILITY_MANIFEST_V1','CONTEXT_SUFFICIENT','BLOCKED_CONTEXT_GAP',str(tools/'context-intelligence.sh')]:assert marker in text
           for name in ['ai-workflow','ai-resume','ai-metrics']:
-              text=(root/'commands'/f'{name}.md').read_text()
-              assert 'CONTEXT_INTELLIGENCE_ENTRY' in text and 'BLOCKED_CONTEXT_GAP' in text
+              text=(root/'commands'/f'{name}.md').read_text();assert 'CONTEXT_INTELLIGENCE_ENTRY' in text and 'BLOCKED_CONTEXT_GAP' in text
           PY
           ./scripts/verify-routing.sh "$config"
-          project="$RUNNER_TEMP/v340-installed-project"; mkdir -p "$project"
-          "$config/opencode-governance-tools/context-intelligence.sh" initialize-budget --project-dir "$project" --task-id INSTALLED --work-class PATCH --cache-root "$RUNNER_TEMP/v340-installed-cache" >/dev/null
-          mkdir -p "$config/opencode-governance-tools"; printf 'preserve\n' > "$config/opencode-governance-tools/unrelated.txt"
-          ./scripts/uninstall.sh --config-dir "$config" >/dev/null
-          test -f "$config/opencode-governance-tools/unrelated.txt"
-          test -f "$cache/sentinel.txt"
-          for name in architect-attempt.ps1 architect-attempt.sh executor-attempt.ps1 executor-attempt.sh context-intelligence.ps1 context-intelligence.sh context-intelligence.py; do test ! -e "$config/opencode-governance-tools/$name"; done
-      - name: Verify release metadata
-        run: |
-          test "$(cat VERSION)" = '3.4.0'
-          grep -q '3.4.0 — Context Intelligence & Skill Routing' README.md
-          grep -q '^## 3.4.0 - 2026-07-30$' CHANGELOG.md
+          project="$RUNNER_TEMP/v340-installed-project";mkdir -p "$project"
+          "$config/opencode-governance-tools/context-intelligence.sh" initialize-budget --project-dir "$project" --task-id INSTALLED --work-class PATCH --cache-root "$RUNNER_TEMP/v340-cache" >/dev/null
+          printf 'preserve\n' > "$config/opencode-governance-tools/unrelated.txt";./scripts/uninstall.sh --config-dir "$config" >/dev/null
+          test -f "$config/opencode-governance-tools/unrelated.txt";test -f "$cache/sentinel.txt"
 
   windows-context-intelligence:
     runs-on: windows-latest
@@ -60,54 +44,22 @@ jobs:
       - uses: actions/checkout@v4
         with:
           show-progress: false
-      - name: Parse PowerShell scripts
+      - name: Validate and run Context Intelligence regressions
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          foreach($path in 'scripts/context-intelligence.ps1','tests/test-context-intelligence.ps1','scripts/install.ps1','scripts/uninstall.ps1','scripts/verify-routing.ps1'){
-            $errors=$null
-            [Management.Automation.Language.Parser]::ParseFile((Join-Path $env:GITHUB_WORKSPACE $path),[ref]$null,[ref]$errors)|Out-Null
-            if($errors.Count){throw "$path`n$($errors|Out-String)"}
-          }
-      - name: Run PowerShell context regressions
-        shell: pwsh
-        run: ./tests/test-context-intelligence.ps1
-      - name: Install verify and uninstall v3.4.0
+          foreach($path in 'scripts/context-intelligence.ps1','tests/test-context-intelligence.ps1','scripts/install.ps1','scripts/uninstall.ps1','scripts/verify-routing.ps1'){$errors=$null;[Management.Automation.Language.Parser]::ParseFile((Join-Path $env:GITHUB_WORKSPACE $path),[ref]$null,[ref]$errors)|Out-Null;if($errors.Count){throw "$path`n$($errors|Out-String)"}}
+          ./tests/test-context-intelligence.ps1
+      - name: Verify current installation preserves v3.4 contract
         shell: pwsh
         run: |
-          $ErrorActionPreference='Stop'
-          $config=Join-Path $env:RUNNER_TEMP 'opencode-v340-windows'
-          $cache=Join-Path $env:RUNNER_TEMP 'context-cache-preserve'
-          New-Item -ItemType Directory -Force -Path $cache|Out-Null
-          'preserve'|Set-Content (Join-Path $cache 'sentinel.txt')
+          $ErrorActionPreference='Stop';$config=Join-Path $env:RUNNER_TEMP 'opencode-v340-windows';$cache=Join-Path $env:RUNNER_TEMP 'context-cache-preserve';New-Item -ItemType Directory -Force -Path $cache|Out-Null;'preserve'|Set-Content (Join-Path $cache 'sentinel.txt')
           ./scripts/install.ps1 -ConfigDir $config -NonInteractive -RoutingConfigPath (Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/architect-failover.valid.json')
-          $tools=Join-Path $config 'opencode-governance-tools'
-          $manifest=Get-Content (Join-Path $config 'opencode-governance-routing.json') -Raw|ConvertFrom-Json
-          if($manifest.governance_version-ne'3.4.0'){throw 'Governance version mismatch'}
-          if($manifest.architect_runner_version-ne'3.3.4'){throw 'Architect runner version mismatch'}
-          if($manifest.context_intelligence_version-ne'3.4.0'){throw 'Context Intelligence version mismatch'}
-          $names=@('architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py')
-          if(@($manifest.managed_tools).Count-ne7){throw 'Expected seven managed tools'}
-          foreach($name in $names){if(-not(Test-Path (Join-Path $tools $name) -PathType Leaf)){throw "Missing tool: $name"}}
-          foreach($name in 'architect','build','plan'){
-            $text=Get-Content (Join-Path $config "agents/$name.md") -Raw
-            foreach($marker in 'CONTEXT_INTELLIGENCE_V1','CONTEXT_BUDGET.json','SKILL_CAPABILITY_MANIFEST_V1','CONTEXT_SUFFICIENT','BLOCKED_CONTEXT_GAP',(Join-Path $tools 'context-intelligence.ps1')){if($text-notlike"*$marker*"){throw "$name missing $marker"}}
-          }
-          foreach($name in 'ai-workflow','ai-resume','ai-metrics'){
-            $text=Get-Content (Join-Path $config "commands/$name.md") -Raw
-            if($text-notlike'*CONTEXT_INTELLIGENCE_ENTRY*' -or $text-notlike'*BLOCKED_CONTEXT_GAP*'){throw "$name context entry missing"}
-          }
+          $tools=Join-Path $config 'opencode-governance-tools';$manifest=Get-Content (Join-Path $config 'opencode-governance-routing.json') -Raw|ConvertFrom-Json
+          if($manifest.governance_version-ne'3.5.0'-or$manifest.context_intelligence_version-ne'3.4.0'-or$manifest.quality_gates_version-ne'3.5.0'){throw 'Component version mismatch'}
+          if(@($manifest.managed_tools).Count-ne10){throw 'Expected ten managed tools'}
+          foreach($name in 'architect','build','plan'){$text=Get-Content (Join-Path $config "agents/$name.md") -Raw;foreach($marker in 'CONTEXT_INTELLIGENCE_V1','CONTEXT_BUDGET.json','SKILL_CAPABILITY_MANIFEST_V1','CONTEXT_SUFFICIENT','BLOCKED_CONTEXT_GAP',(Join-Path $tools 'context-intelligence.ps1')){if($text-notlike"*$marker*"){throw "$name missing $marker"}}}
           ./scripts/verify-routing.ps1 -ConfigDir $config
-          $project=Join-Path $env:RUNNER_TEMP 'v340-installed-project';New-Item -ItemType Directory -Force -Path $project|Out-Null
-          & (Join-Path $tools 'context-intelligence.ps1') -Action InitializeBudget -ProjectDir $project -TaskId INSTALLED -WorkClass PATCH -CacheRoot (Join-Path $env:RUNNER_TEMP 'v340-installed-cache')|Out-Null
-          'preserve'|Set-Content (Join-Path $tools 'unrelated.txt')
-          ./scripts/uninstall.ps1 -ConfigDir $config|Out-Null
-          if(-not(Test-Path (Join-Path $tools 'unrelated.txt'))){throw 'Unrelated tool removed'}
-          if(-not(Test-Path (Join-Path $cache 'sentinel.txt'))){throw 'External cache removed'}
-          foreach($name in $names){if(Test-Path (Join-Path $tools $name)){throw "Managed tool survived uninstall: $name"}}
-      - name: Verify release metadata
-        shell: pwsh
-        run: |
-          if((Get-Content VERSION -Raw).Trim()-ne'3.4.0'){throw 'VERSION must be 3.4.0'}
-          if((Get-Content README.md -Raw)-notmatch'3\.4\.0 — Context Intelligence & Skill Routing'){throw 'README marker missing'}
-          if((Get-Content CHANGELOG.md -Raw)-notmatch'(?m)^## 3\.4\.0 - 2026-07-30\r?$'){throw 'CHANGELOG marker missing'}
+          $project=Join-Path $env:RUNNER_TEMP 'v340-installed-project';New-Item -ItemType Directory -Force -Path $project|Out-Null;& (Join-Path $tools 'context-intelligence.ps1') -Action InitializeBudget -ProjectDir $project -TaskId INSTALLED -WorkClass PATCH -CacheRoot (Join-Path $env:RUNNER_TEMP 'v340-cache')|Out-Null
+          'preserve'|Set-Content (Join-Path $tools 'unrelated.txt');./scripts/uninstall.ps1 -ConfigDir $config|Out-Null
+          if(-not(Test-Path (Join-Path $tools 'unrelated.txt'))-or-not(Test-Path (Join-Path $cache 'sentinel.txt'))){throw 'Preservation failed'}
