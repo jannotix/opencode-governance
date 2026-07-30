@@ -1,6 +1,6 @@
 # Context Intelligence and Skill Routing
 
-OpenCode Governance 3.4.0 adds a deterministic local-first context layer for bounded retrieval, skill capability selection, content-summary reuse and efficiency metrics.
+OpenCode Governance 3.4 introduced a deterministic local-first context layer for bounded retrieval, skill capability selection, content-summary reuse and efficiency metrics. Version 3.4.1 hardens path containment, required-section routing and terminal-state validation.
 
 The feature extends existing `.ai/**` authority and evidence contracts. It does not introduce a vector database, network retrieval service, second memory authority or autonomous permission layer.
 
@@ -16,15 +16,13 @@ opencode-governance-tools/context-intelligence.py
 
 Windows uses `context-intelligence.ps1` through PowerShell 7. Unix uses `context-intelligence.sh`, which invokes the managed Python 3 standard-library core.
 
-The routing manifest records:
+The current routing manifest records:
 
 ```text
-governance_version: 3.4.0
-architect_runner_version: 3.3.4
-context_intelligence_version: 3.4.0
+governance_version: 3.4.1
+architect_runner_version: 3.4.1
+context_intelligence_version: 3.4.1
 ```
-
-The Architect runner version remains 3.3.4 because 3.4.0 does not alter its project-state-integrity implementation.
 
 ## Task artifacts
 
@@ -44,6 +42,8 @@ Aggregate optional metrics use:
 ```
 
 Existing projects are not mass-edited. Missing artifacts are created only when the relevant task is initialized, resumed, replanned or explicitly measured.
+
+Governance-state paths are resolved from the canonical project root. `.ai`, `.ai/tasks`, task directories and metrics paths may not traverse symbolic links, junctions or reparse points. A detected link or path escape fails closed before a file is created or modified.
 
 ## Context budgets
 
@@ -82,15 +82,13 @@ Each `CONTEXT_RETRIEVAL_CYCLE_V1` record contains:
 - unresolved context gaps;
 - stop reason.
 
+Cycles must be sequential. A terminal record cannot be followed by another cycle. Task validation requires at least one terminal record:
+
+- `CONTEXT_SUFFICIENT` permits continuation when every material context gap is resolved;
+- `BLOCKED_CONTEXT_GAP` records unresolved material gaps and keeps the task blocked;
+- ending on `REFINE`, having no cycles or exhausting the budget without a terminal record produces `TERMINAL_STATE_REQUIRED`.
+
 Material conclusions are verified against current primary files. Summaries, indexes and cached entries remain routing hypotheses until verified.
-
-When the budget is exhausted and a material gap remains, the task returns:
-
-```text
-BLOCKED_CONTEXT_GAP
-```
-
-It must not silently omit the missing evidence.
 
 ## Skill capability manifests
 
@@ -125,15 +123,16 @@ EXTERNAL_UNTRUSTED
 
 Selection applies these rules in order:
 
-1. validate schema, identity and content hash;
+1. validate schema, identity, unique section IDs and content hash;
 2. require applicable work class, trigger, language and framework;
 3. reject unavailable required tools or external dependencies;
-4. order candidates by trust, then narrower token cost and stable skill ID;
-5. reject conflicts;
-6. deduplicate overlaps in favor of the higher-trust selected capability;
-7. enforce the task skill budget;
-8. load only required named sections when available;
-9. record selected and rejected skills with exact reasons.
+4. reject a skill that declares named sections but lacks any requested section;
+5. order candidates by trust, then narrower token cost and stable skill ID;
+6. reject conflicts;
+7. deduplicate overlaps in favor of the higher-trust selected capability;
+8. enforce the task skill budget;
+9. load only the requested named sections, every declared section when none is requested, or `FULL` only for skills without section metadata;
+10. record selected and rejected skills with exact reasons.
 
 Skill content never authorizes source writes, dependency installation, security weakening, requirement changes or external actions.
 
@@ -226,7 +225,7 @@ record-metrics
 validate-task
 ```
 
-All actions validate project roots, task IDs, JSON schemas and path containment. Invalid task IDs, path escape, cache overlap and malformed JSON fail closed.
+All actions validate project roots, task IDs, exact JSON schemas and path containment. Invalid task IDs, path escape, governance-state links, cache overlap, malformed JSON and missing terminal state fail closed.
 
 ## Compatibility
 
@@ -238,6 +237,7 @@ Routing verification remains compatible with:
 3.3.3
 3.3.4
 3.4.0
+3.4.1
 ```
 
-A 3.4.0 installation preserves existing providers, models, variants, fallback priorities, `only_on`, hidden aliases and Executor work classes. Context Intelligence adds transport and context-control capabilities only; it does not select or rebalance models.
+A 3.4.1 installation preserves existing providers, models, variants, fallback priorities, `only_on`, hidden aliases and Executor work classes. Context Intelligence adds transport and context-control capabilities only; it does not select or rebalance models.

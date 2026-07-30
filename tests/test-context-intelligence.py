@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import json
-import os
 import pathlib
 import subprocess
 import sys
@@ -52,10 +51,14 @@ def main():
         task_id = "CTX-CYCLES"
         run("initialize-budget", "--project-dir", project, "--task-id", task_id, "--work-class", "MAJOR_FEATURE", "--cache-root", cache)
         cycle = temp / "cycle.json"
-        write_json(cycle, {"query": "entry points", "reason": "initial dispatch", "candidate_paths": ["src/a.py"], "admitted_paths": ["src/a.py"], "rejected_paths": [], "dependency_edges": [], "trust_boundaries": [], "tests": [], "context_gaps": [], "stop_reason": "REFINE"})
-        for number in (1, 2, 3):
+        record = {"query": "entry points", "reason": "initial dispatch", "candidate_paths": ["src/a.py"], "admitted_paths": ["src/a.py"], "rejected_paths": [], "dependency_edges": [], "trust_boundaries": [], "tests": [], "context_gaps": [], "stop_reason": "REFINE"}
+        write_json(cycle, record)
+        for number in (1, 2):
             result = run("record-cycle", "--project-dir", project, "--task-id", task_id, "--cycle", str(number), "--input-json", cycle)
             assert result["cycle"] == number
+        write_json(cycle, {**record, "stop_reason": "CONTEXT_SUFFICIENT"})
+        result = run("record-cycle", "--project-dir", project, "--task-id", task_id, "--cycle", "3", "--input-json", cycle)
+        assert result["cycle"] == 3
         fourth = subprocess.run([sys.executable, str(TOOL), "record-cycle", "--project-dir", str(project), "--task-id", task_id, "--cycle", "4", "--input-json", str(cycle)], text=True, capture_output=True)
         assert fourth.returncode != 0
         assert "RETRIEVAL_CYCLE_LIMIT" in fourth.stderr

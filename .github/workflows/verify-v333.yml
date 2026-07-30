@@ -71,9 +71,9 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          if((Get-Content VERSION -Raw).Trim()-ne'3.4.0'){throw 'VERSION must be 3.4.0.'}
-          if((Get-Content README.md -Raw)-notmatch'3\.4\.0 — Context Intelligence & Skill Routing'){throw 'README 3.4.0 marker missing.'}
-          if((Get-Content CHANGELOG.md -Raw)-notmatch'(?m)^## 3\.4\.0 - 2026-07-30\r?$'){throw 'CHANGELOG 3.4.0 entry missing.'}
+          if((Get-Content VERSION -Raw).Trim()-ne'3.4.1'){throw 'VERSION must be 3.4.1.'}
+          if((Get-Content README.md -Raw)-notmatch'3\.4\.1 — Cleanup & Hardening'){throw 'README 3.4.1 marker missing.'}
+          if((Get-Content CHANGELOG.md -Raw)-notmatch'(?m)^## 3\.4\.1 - 2026-07-30\r?$'){throw 'CHANGELOG 3.4.1 entry missing.'}
           foreach($path in 'scripts/install.ps1','scripts/uninstall.ps1','scripts/verify-routing.ps1'){
             $text=Get-Content $path -Raw
             if($text-match'(?m)^\s*(?:exit|if\s*\().*\$LASTEXITCODE'){throw "$path still treats stale LASTEXITCODE as a PowerShell child result."}

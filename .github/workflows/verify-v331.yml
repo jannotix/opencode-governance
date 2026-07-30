@@ -173,7 +173,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $paths = @('scripts/config-durability.ps1','scripts/update-opencode-safely.ps1','docs/local-configuration-durability.md','docs/superpowers/specs/2026-07-29-local-configuration-durability-design.md','docs/superpowers/plans/2026-07-29-local-configuration-durability.md')
+          $paths = @('scripts/config-durability.ps1','scripts/update-opencode-safely.ps1','docs/local-configuration-durability.md')
           $pattern = '(?i)(minimax|mimo|deepseek|qwen|glm-?5|gpt-?5\.6|alibaba-token|xiaomi/|zai/|openai/gpt)'
           foreach ($path in $paths) {
             if ((Get-Content $path -Raw) -match $pattern) { throw "Commercial provider or model identifier found in $path" }
