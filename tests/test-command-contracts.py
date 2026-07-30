@@ -15,7 +15,7 @@ COMMANDS = {
     "ai-review": ("REVIEW_FREEZE", "FINAL_PACKET.md", "NO_AUTOMATIC_EXTERNAL_ACTION"),
     "ai-workflow": ("WORKFLOW_CONTINUATION_GATE_V1", "CONTINUE_REQUIRED", "LOCAL_COMMITTED"),
     "ai-status": ("EVIDENCE_STATUS", "REMAINING_REQUIRED_CAPABILITIES", "Status integrity contract"),
-    "ai-resume": ("WORKFLOW_CONTINUATION_GATE_V1", "top_level_command", "CONTINUE_REQUIRED"),
+    "ai-resume": ("WORKFLOW_CONTINUATION_GATE_V1", "LEGACY_RUN_STATE_MIGRATION_V1", "top_level_command", "CONTINUE_REQUIRED"),
     "ai-metrics": ("GOVERNANCE_METRICS", "ESTIMATED_VALUES: NONE", "UNAVAILABLE"),
     "ai-release": ("PRODUCT_COMPLETENESS_VERDICT", "RELEASE_VERDICT", "NO_AUTOMATIC_EXTERNAL_ACTION"),
 }
@@ -45,6 +45,8 @@ def validate(directory: pathlib.Path, label: str) -> None:
             raise AssertionError(f"{label}/{name}: duplicate Context Intelligence entry")
         if text.count("## WORKFLOW_CONTINUATION_GATE_V1") > 1:
             raise AssertionError(f"{label}/{name}: duplicate continuation gate")
+        if text.count("## LEGACY_RUN_STATE_MIGRATION_V1") > 1:
+            raise AssertionError(f"{label}/{name}: duplicate legacy run-state migration contract")
         for marker in markers:
             if marker not in text:
                 raise AssertionError(f"{label}/{name}: missing {marker}")
