@@ -16,42 +16,44 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $CoreInstaller = Join-Path $PSScriptRoot 'install-core.ps1'
-if (-not (Test-Path -LiteralPath $CoreInstaller -PathType Leaf)) {
-    throw "Core installer not found: $CoreInstaller"
-}
-
+if (-not (Test-Path -LiteralPath $CoreInstaller -PathType Leaf)) { throw "Core installer not found: $CoreInstaller" }
 & $CoreInstaller @PSBoundParameters
 
-if (-not $ConfigDir) {
-    $ConfigDir = if ($env:OPENCODE_CONFIG_DIR) { $env:OPENCODE_CONFIG_DIR } else { Join-Path $HOME '.config\opencode' }
-}
+if (-not $ConfigDir) { $ConfigDir = if ($env:OPENCODE_CONFIG_DIR) { $env:OPENCODE_CONFIG_DIR } else { Join-Path $HOME '.config\opencode' } }
 
 if ($RoutingConfigPath) {
     $ToolsDir = Join-Path $ConfigDir 'opencode-governance-tools'
     $ManifestPath = Join-Path $ConfigDir 'opencode-governance-routing.json'
     $ArchitectRunnerPs = Join-Path $ToolsDir 'architect-attempt.ps1'
     $ArchitectRunnerSh = Join-Path $ToolsDir 'architect-attempt.sh'
+    $ContextToolPs = Join-Path $ToolsDir 'context-intelligence.ps1'
+    $ContextToolSh = Join-Path $ToolsDir 'context-intelligence.sh'
+    $ContextToolPy = Join-Path $ToolsDir 'context-intelligence.py'
+
     Copy-Item (Join-Path $PSScriptRoot 'run-governed.ps1') $ArchitectRunnerPs -Force
     Copy-Item (Join-Path $PSScriptRoot 'run-governed.sh') $ArchitectRunnerSh -Force
+    Copy-Item (Join-Path $PSScriptRoot 'context-intelligence.ps1') $ContextToolPs -Force
+    Copy-Item (Join-Path $PSScriptRoot 'context-intelligence.sh') $ContextToolSh -Force
+    Copy-Item (Join-Path $PSScriptRoot 'context-intelligence.py') $ContextToolPy -Force
 
-    try {
-        $Manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
-    } catch {
-        throw 'Routing manifest is invalid after core installation.'
-    }
+    try { $Manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json } catch { throw 'Routing manifest is invalid after core installation.' }
     if ([string]$Manifest.schema_version -ne '1.0') { throw 'Routing manifest schema_version must be 1.0.' }
-    $Manifest | Add-Member -MemberType NoteProperty -Name governance_version -Value '3.3.4' -Force
+    $Manifest | Add-Member -MemberType NoteProperty -Name governance_version -Value '3.4.0' -Force
     $Manifest | Add-Member -MemberType NoteProperty -Name architect_runner_version -Value '3.3.4' -Force
+    $Manifest | Add-Member -MemberType NoteProperty -Name context_intelligence_version -Value '3.4.0' -Force
     $Manifest | Add-Member -MemberType NoteProperty -Name managed_tools -Value @(
         $ArchitectRunnerPs,
         $ArchitectRunnerSh,
         (Join-Path $ToolsDir 'executor-attempt.ps1'),
-        (Join-Path $ToolsDir 'executor-attempt.sh')
+        (Join-Path $ToolsDir 'executor-attempt.sh'),
+        $ContextToolPs,
+        $ContextToolSh,
+        $ContextToolPy
     ) -Force
     [IO.File]::WriteAllText($ManifestPath, (($Manifest | ConvertTo-Json -Depth 30) + [Environment]::NewLine), (New-Object Text.UTF8Encoding($false)))
 
     $Marker = '[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]'
-    $PolicyBlock = @"
+    $ArchitectPolicy = @"
 
 ## ARCHITECT_RUNNER_INTEGRATION
 
@@ -70,15 +72,28 @@ Before and after every routed attempt, both runners fingerprint all project entr
 
 When the marker is absent, do not write ``.ai/**``; return ``ARCHITECT_RUNNER_REQUIRED`` with the exact installed runner path and command. Never invent ``architect-attempt`` at another path. Never invoke the Architect runner from inside the active OpenCode process. A routed child invocation containing the marker continues normally.
 "@
+    $ContextPolicy = @"
+
+## CONTEXT_INTELLIGENCE_V1
+
+WINDOWS_CONTEXT_TOOL: $ContextToolPs
+WINDOWS_CONTEXT_HOST: pwsh -NoProfile -File
+UNIX_CONTEXT_TOOL: $ContextToolSh
+CONTEXT_CORE: $ContextToolPy
+
+Before finalizing ``CONTEXT_MANIFEST.md``, initialize ``CONTEXT_BUDGET.json`` from the exact ``WORK_CLASS`` and use bounded ``DISPATCH -> EVALUATE -> REFINE`` retrieval. Never exceed three cycles. End with ``CONTEXT_SUFFICIENT`` or ``BLOCKED_CONTEXT_GAP``.
+
+Use ``SKILL_CAPABILITY_MANIFEST_V1`` to deduplicate overlapping skills, prefer the highest-trust narrow applicable capability and load only selected sections within the skill budget. Record accepted and rejected candidates with reasons in ``SKILL_SELECTION.json``.
+
+The external content summary cache is advisory, content-addressed and outside the project. A cache hit never replaces current primary evidence for a material claim. Cache failure is a recorded miss, not permission to fabricate context. Context-budget overrides require an evidence-backed reason and never waive security, migration, recovery, contract or operational evidence.
+"@
     foreach ($Name in @('architect','build','plan')) {
         $Path = Join-Path $ConfigDir "agents\$Name.md"
         $Text = Get-Content -LiteralPath $Path -Raw
         $Text = [regex]::Replace($Text, '(?s)\r?\n## ARCHITECT_RUNNER_INTEGRATION\r?\n.*?(?=\r?\n## Core invariants|\z)', '')
-        if ($Text -match '(?m)^## Core invariants\r?$') {
-            $Text = [regex]::Replace($Text, '(?m)^## Core invariants\r?$', ($PolicyBlock.TrimEnd() + "`n`n## Core invariants"), 1)
-        } else {
-            $Text += $PolicyBlock
-        }
+        $Text = [regex]::Replace($Text, '(?s)\r?\n## CONTEXT_INTELLIGENCE_V1\r?\n.*?(?=\r?\n## Core invariants|\z)', '')
+        $Insertion = $ArchitectPolicy.TrimEnd() + "`n" + $ContextPolicy.TrimEnd()
+        if ($Text -match '(?m)^## Core invariants\r?$') { $Text = [regex]::Replace($Text, '(?m)^## Core invariants\r?$', ($Insertion + "`n`n## Core invariants"), 1) } else { $Text += "`n" + $Insertion }
         [IO.File]::WriteAllText($Path, $Text, (New-Object Text.UTF8Encoding($false)))
     }
 
@@ -115,8 +130,24 @@ When the exact marker is present, this is already a transactional child attempt;
         [IO.File]::WriteAllText($Path, $Text, (New-Object Text.UTF8Encoding($false)))
     }
 
+    $ContextEntry = @"
+
+## CONTEXT_INTELLIGENCE_ENTRY
+
+Use ``$ContextToolPs`` through ``pwsh -NoProfile -File`` on Windows or ``$ContextToolSh`` on Unix. Initialize the task budget from ``WORK_CLASS`` before context routing; record each retrieval cycle, skill selection and optional metrics. Maximum retrieval cycles: 3. Budget exhaustion with unresolved material context is ``BLOCKED_CONTEXT_GAP``.
+"@
+    foreach ($Command in @('ai-workflow','ai-resume','ai-metrics')) {
+        $Path = Join-Path $ConfigDir "commands\$Command.md"
+        $Text = Get-Content -LiteralPath $Path -Raw
+        $Text = [regex]::Replace($Text, '(?s)\r?\n## CONTEXT_INTELLIGENCE_ENTRY\r?\n.*?(?=\r?\n## |\z)', '')
+        $FrontMatter = [regex]::Match($Text, '(?s)\A---\r?\n.*?\r?\n---\r?\n')
+        if (-not $FrontMatter.Success) { throw "Command front matter not found: $Path" }
+        $Text = $Text.Insert($FrontMatter.Length, $ContextEntry)
+        [IO.File]::WriteAllText($Path, $Text, (New-Object Text.UTF8Encoding($false)))
+    }
+
     & (Join-Path $PSScriptRoot 'verify-routing.ps1') -ConfigDir $ConfigDir
 }
 
-Write-Host 'Installed OpenCode Governance v3.3.4 — Project State Integrity.'
-Write-Host 'Architect failover now fingerprints project contents and supports both Git and non-Git workspaces.'
+Write-Host 'Installed OpenCode Governance v3.4.0 — Context Intelligence & Skill Routing.'
+Write-Host 'Bounded retrieval, skill manifests, external summary caching and context metrics are enabled without changing model routing.'

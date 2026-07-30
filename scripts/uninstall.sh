@@ -18,16 +18,20 @@ if [[ -f "$MANIFEST" ]]; then
 import json,pathlib,sys
 root=pathlib.Path(sys.argv[1]); manifest=root/'opencode-governance-routing.json'
 data=json.loads(manifest.read_text(encoding='utf-8-sig'))
-if data.get('governance_version') in {'3.3.2','3.3.3','3.3.4'}:
-    version=data.get('governance_version')
+version=data.get('governance_version')
+if version in {'3.3.2','3.3.3','3.3.4','3.4.0'}:
     tools=root/'opencode-governance-tools'
-    allowed={tools/name for name in ['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh']}
+    names=['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh']
+    if version=='3.4.0': names += ['context-intelligence.ps1','context-intelligence.sh','context-intelligence.py']
+    allowed={tools/name for name in names}
     managed={pathlib.Path(str(x)) for x in data.get('managed_tools',[])}
     if managed!=allowed: raise SystemExit(f'Unsafe managed tool set in v{version} routing manifest.')
-    for name in ['architect-attempt.ps1','architect-attempt.sh']:
-        (tools/name).unlink(missing_ok=True)
+    remove=['architect-attempt.ps1','architect-attempt.sh']
+    if version=='3.4.0': remove += ['context-intelligence.ps1','context-intelligence.sh','context-intelligence.py']
+    for name in remove: (tools/name).unlink(missing_ok=True)
     data['governance_version']='3.3.0'
     data.pop('architect_runner_version',None)
+    data.pop('context_intelligence_version',None)
     data['managed_tools']=[str(tools/'executor-attempt.ps1'),str(tools/'executor-attempt.sh')]
     manifest.write_text(json.dumps(data,indent=2)+'\n',encoding='utf-8')
 PY

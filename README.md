@@ -4,7 +4,7 @@ Provider- and model-agnostic product-lifecycle and engineering governance for Op
 
 > Community project. Not affiliated with or maintained by the OpenCode team.
 
-Current release: **3.3.4 — Project State Integrity**.
+Current release: **3.4.0 — Context Intelligence & Skill Routing**.
 
 v3 guides an idea through adaptive product discovery, constructive technical challenge, approved product definition, vertical delivery, evidence-driven implementation, independent review, product-completeness reconciliation and production-readiness assessment.
 
@@ -54,7 +54,7 @@ Optional failover routing:
    - Windows: `./scripts/install.ps1 -NonInteractive -RoutingConfigPath <profile.json>`
    - macOS/Linux: `./scripts/install.sh --routing-config <profile.json>`
 
-The installer renders seven public agents and twelve commands, preserves unrelated configuration and creates a timestamped backup. With a routing profile it writes the non-secret `opencode-governance-routing.json` manifest, renders only enabled hidden fallback aliases and installs managed Architect and Executor transactional helpers. No hidden Architect alias is created.
+The installer renders seven public agents and twelve commands, preserves unrelated configuration and creates a timestamped backup. With a routing profile it writes the non-secret `opencode-governance-routing.json` manifest, renders only enabled hidden fallback aliases and installs managed Architect, Executor and Context Intelligence tools. No hidden Architect alias is created.
 
 ## Local configuration durability
 
@@ -92,7 +92,7 @@ ai-discover
 ai-plan
 ```
 
-With Architect failover enabled, version 3.3.4 installs deterministic entrypoints inside the active OpenCode configuration directory:
+With Architect failover enabled, version 3.4.0 installs deterministic entrypoints inside the active OpenCode configuration directory:
 
 ```text
 opencode-governance-tools/architect-attempt.ps1
@@ -125,11 +125,43 @@ Direct `/ai-init`, `/ai-audit`, `/ai-discover` or `/ai-plan` invocation inside a
 
 The runner starts a fresh `opencode run` process for each route, snapshots the complete `.ai/**` tree and restores it before an eligible retry. A fallback never continues partial output and a recovered primary never interrupts an active fallback.
 
-Version 3.3.4 fingerprints every project entry outside root `.ai/**` before and after each routed attempt using path, entry type, mode/attributes, length, SHA-256 and symlink target. Git workspaces additionally bind the fingerprint to HEAD, the index and recursive submodule state. Non-Git directories are supported with the same content-integrity contract. Any source or project-documentation delta returns `PROJECT_STATE_CHANGED` and blocks fallback, including changes to files that were already dirty, staged or untracked.
+The 3.3.4 runner contract remains active in 3.4.0: every project entry outside root `.ai/**` is fingerprinted before and after each routed attempt using path, entry type, mode/attributes, length, SHA-256 and symlink target. Git workspaces additionally bind the fingerprint to HEAD, the index and recursive submodule state. Non-Git directories use the same content-integrity contract. Any source or project-documentation delta returns `PROJECT_STATE_CHANGED` and blocks fallback, including changes to files that were already dirty, staged or untracked.
 
 Content fingerprinting scans the complete project tree outside `.ai/**`; very large workspaces may incur additional pre/post attempt latency. This cost is intentional because classification-only Git status cannot prove immutability.
 
 Top-level automatic restart remains unavailable for `ai-workflow`, `ai-execute`, `ai-review` and `ai-release`, because those flows may already have crossed an implementation or review side-effect boundary.
+
+## Context intelligence and skill routing
+
+With failover routing installed, 3.4.0 adds:
+
+```text
+opencode-governance-tools/context-intelligence.ps1
+opencode-governance-tools/context-intelligence.sh
+opencode-governance-tools/context-intelligence.py
+```
+
+The PowerShell helper runs on PowerShell 7. The Unix entrypoint invokes the managed Python 3 standard-library core. No vector database, network service or third-party package is required.
+
+Each active task can maintain:
+
+```text
+.ai/tasks/<TASK-ID>/CONTEXT_BUDGET.json
+.ai/tasks/<TASK-ID>/CONTEXT_RETRIEVAL.jsonl
+.ai/tasks/<TASK-ID>/SKILL_SELECTION.json
+.ai/tasks/<TASK-ID>/CONTEXT_METRICS.jsonl
+.ai/metrics/CONTEXT_METRICS.jsonl
+```
+
+`CONTEXT_BUDGET_V1` derives deterministic ceilings from the exact work class. Retrieval follows at most three `DISPATCH -> EVALUATE -> REFINE` cycles and ends with `CONTEXT_SUFFICIENT` or `BLOCKED_CONTEXT_GAP`. An efficiency budget never authorizes omission of required security, migration, recovery, public-contract or operational evidence.
+
+`SKILL_CAPABILITY_MANIFEST_V1` records identity, source, trust, triggers, work classes, languages/frameworks, tools, dependencies, overlaps, conflicts, estimated context tokens and named sections. Selection prefers the highest-trust narrow applicable capability, rejects unavailable dependencies, deduplicates overlaps and loads only the selected sections within the task budget.
+
+Content summaries are stored outside the project in a user-local cache and keyed by project identity, relative-path hash, source SHA-256, schema, parser version and skill context. A cache hit is advisory routing evidence only; material claims still require current primary source inspection. Corrupt or stale entries become cache misses. The installer and uninstaller never delete the external cache automatically.
+
+`/ai-metrics` may record considered/admitted/rejected files, retrieval cycles, loaded skills, estimated skill tokens, cache hits/misses, repeated reads, budget overrides, packet references and runtime token data when the runtime exposes it. Missing token data is `UNAVAILABLE`, never estimated as fact.
+
+See [Context Intelligence and Skill Routing](docs/context-intelligence-skill-routing.md).
 
 ## Executor failover
 
@@ -166,6 +198,8 @@ Promotion is not validation. Evidence-Driven Verification, Operational Assurance
 ├── DEPLOYMENT_SCOPE.md
 ├── PROJECT_HISTORY.md
 ├── STATUS.md
+├── metrics/
+│   └── CONTEXT_METRICS.jsonl
 ├── product/
 │   ├── PRODUCT_VISION.md
 │   ├── USER_AND_ROLE_MODEL.md
@@ -181,7 +215,7 @@ Discovery is always `LIGHT`, `STANDARD` or `DEEP`. Domain evidence and recommend
 
 ## Documentation
 
-Focused references: [Product Lifecycle Governance](docs/product-lifecycle-governance.md), [Model Failover](docs/model-failover.md), [Architect Runner Integration](docs/architect-runner-integration.md), [Local Configuration Durability](docs/local-configuration-durability.md), [Workflow](docs/workflow.md), [Requirement Provenance](docs/requirement-provenance.md), [Context Efficiency and Resume](docs/context-efficiency-resume.md), [Evidence-Driven Verification](docs/evidence-driven-verification.md), [Operational Assurance](docs/operational-assurance.md), [Permissions](docs/permissions.md), [Project Documentation](docs/project-documentation.md) and [Troubleshooting](docs/troubleshooting.md).
+Focused references: [Product Lifecycle Governance](docs/product-lifecycle-governance.md), [Model Failover](docs/model-failover.md), [Architect Runner Integration](docs/architect-runner-integration.md), [Context Intelligence and Skill Routing](docs/context-intelligence-skill-routing.md), [Local Configuration Durability](docs/local-configuration-durability.md), [Workflow](docs/workflow.md), [Requirement Provenance](docs/requirement-provenance.md), [Context Efficiency and Resume](docs/context-efficiency-resume.md), [Evidence-Driven Verification](docs/evidence-driven-verification.md), [Operational Assurance](docs/operational-assurance.md), [Permissions](docs/permissions.md), [Project Documentation](docs/project-documentation.md) and [Troubleshooting](docs/troubleshooting.md).
 
 ## Verification
 
