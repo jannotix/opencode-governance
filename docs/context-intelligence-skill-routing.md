@@ -1,6 +1,6 @@
 # Context Intelligence and Skill Routing
 
-OpenCode Governance 3.4 introduced a deterministic local-first context layer for bounded retrieval, skill capability selection, content-summary reuse and efficiency metrics. Version 3.4.1 hardens path containment, required-section routing and terminal-state validation. Version 3.4.2 rejects string-encoded token estimates and aligns the PowerShell schema with the Python core.
+OpenCode Governance 3.4 introduced a deterministic local-first context layer for bounded retrieval, skill capability selection, content-summary reuse and efficiency metrics. Version 3.4.1 hardens path containment, required-section routing and terminal-state validation. Version 3.4.2 rejects string-encoded token estimates and aligns the PowerShell schema with the Python core. Version 3.4.3 keeps normalized URL literals human-readable on both platforms.
 
 The feature extends existing `.ai/**` authority and evidence contracts. It does not introduce a vector database, network retrieval service, second memory authority or autonomous permission layer.
 
@@ -19,9 +19,9 @@ Windows uses `context-intelligence.ps1` through PowerShell 7. Unix uses `context
 The current routing manifest records:
 
 ```text
-governance_version: 3.4.2
-architect_runner_version: 3.4.2
-context_intelligence_version: 3.4.2
+governance_version: 3.4.3
+architect_runner_version: 3.4.3
+context_intelligence_version: 3.4.3
 ```
 
 ## Task artifacts
@@ -241,4 +241,4 @@ Routing verification remains compatible with:
 3.4.2
 ```
 
-A 3.4.2 installation preserves existing providers, models, variants, fallback priorities, `only_on`, hidden aliases and Executor work classes. Context Intelligence adds transport and context-control capabilities only; it does not select or rebalance models.
+A 3.4.3 installation preserves existing providers, models, variants, fallback priorities, `only_on`, hidden aliases and Executor work classes. Context Intelligence adds transport and context-control capabilities only; it does not select or rebalance models.

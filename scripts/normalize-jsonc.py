@@ -110,8 +110,8 @@ def normalize(path: pathlib.Path, set_default_agent: bool) -> None:
         raise JsoncError(f"OpenCode configuration root must be an object: {path}")
     if set_default_agent:
         value["default_agent"] = "architect"
-    protected = json.dumps(value, indent=2, ensure_ascii=False).replace("/", "\\u002f") + "\n"
-    path.write_text(protected, encoding="utf-8")
+    normalized = json.dumps(value, indent=2, ensure_ascii=False) + "\n"
+    path.write_text(normalized, encoding="utf-8")
 
 
 def main() -> int:

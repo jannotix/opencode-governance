@@ -1,0 +1,147 @@
+name: Publish verified release
+
+on:
+  workflow_run:
+    workflows:
+      - Verify repository hardening
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: publish-governance-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          fetch-depth: 0
+
+      - name: Wait for the complete verification suite
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import time
+
+          repository = os.environ['GITHUB_REPOSITORY']
+          sha = os.environ['RELEASE_SHA']
+          required = {
+              'Verify governance',
+              'Verify repository hardening',
+              'Verify Context Intelligence v3.4+',
+              'Verify Architect Runner Integration v3.3.2+',
+              'Verify Project State Integrity v3.3.4',
+              'Verify Executor failover v3.3',
+              'Verify PowerShell Host and Verifier Reliability v3.3.3+',
+              'Verify Local Configuration Durability v3.3.1',
+          }
+          for _ in range(36):
+              payload = subprocess.check_output(
+                  ['gh', 'api', f'repos/{repository}/actions/runs?head_sha={sha}&per_page=100'],
+                  text=True,
+              )
+              runs = json.loads(payload).get('workflow_runs', [])
+              latest = {}
+              for run in runs:
+                  name = run.get('name')
+                  if name not in required:
+                      continue
+                  previous = latest.get(name)
+                  if previous is None or int(run.get('run_number', 0)) > int(previous.get('run_number', 0)):
+                      latest[name] = run
+              failed = {
+                  name: run.get('conclusion')
+                  for name, run in latest.items()
+                  if run.get('status') == 'completed' and run.get('conclusion') != 'success'
+              }
+              if failed:
+                  raise SystemExit(f'Verification failed for {sha}: {failed}')
+              if required.issubset(latest) and all(latest[name].get('status') == 'completed' and latest[name].get('conclusion') == 'success' for name in required):
+                  print(f'All required workflows passed for {sha}.')
+                  break
+              time.sleep(5)
+          else:
+              missing = sorted(required.difference(latest))
+              pending = sorted(name for name in required.intersection(latest) if latest[name].get('status') != 'completed')
+              raise SystemExit(f'Timed out waiting for release verification. Missing={missing}; pending={pending}')
+          PY
+
+      - name: Verify release metadata
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\r\n' < VERSION)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          grep -Fq "Current release: **$version" README.md
+          grep -Fq "## $version - " CHANGELOG.md
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          printf 'VERSION=%s\n' "$version" >> "$GITHUB_ENV"
+
+      - name: Repair historical release tag integrity
+        run: |
+          set -euo pipefail
+          git fetch --force --tags origin
+          expected_341='36c205d478b140674a65da7dc71e05772517b4df'
+          expected_342='f603e4a92a6b7b4290fe9e0fc62c46f53cf7245d'
+          test "$(git show "$expected_341:VERSION" | tr -d '\r\n')" = '3.4.1'
+          git show "$expected_341:README.md" | grep -Fq 'Current release: **3.4.1 — Cleanup & Hardening**.'
+          current_341="$(git rev-list -n 1 3.4.1 2>/dev/null || true)"
+          if [[ "$current_341" != "$expected_341" ]]; then
+            git tag -d 3.4.1 2>/dev/null || true
+            git tag -a 3.4.1 "$expected_341" -m 'OpenCode Governance 3.4.1 — Cleanup & Hardening'
+            git push --force origin refs/tags/3.4.1
+          fi
+          test "$(git rev-list -n 1 3.4.2)" = "$expected_342"
+
+      - name: Create verified tag
+        run: |
+          set -euo pipefail
+          existing="$(git rev-list -n 1 "$VERSION" 2>/dev/null || true)"
+          if [[ -n "$existing" && "$existing" != "$RELEASE_SHA" ]]; then
+            echo "Tag $VERSION already points to $existing instead of $RELEASE_SHA." >&2
+            exit 1
+          fi
+          if [[ -z "$existing" ]]; then
+            git tag -a "$VERSION" "$RELEASE_SHA" -m "OpenCode Governance $VERSION"
+            git push origin "refs/tags/$VERSION"
+          fi
+
+      - name: Create GitHub Release
+        run: |
+          set -euo pipefail
+          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $VERSION already exists."
+            exit 0
+          fi
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import re
+
+          version = os.environ['VERSION']
+          text = pathlib.Path('CHANGELOG.md').read_text(encoding='utf-8')
+          match = re.search(rf'^## {re.escape(version)} - .*?\n\n(.*?)(?=^## |\Z)', text, flags=re.M | re.S)
+          if not match:
+              raise SystemExit(f'Cannot extract changelog section for {version}.')
+          pathlib.Path('/tmp/release-notes.md').write_text(match.group(1).strip() + '\n', encoding='utf-8')
+          PY
+          gh release create "$VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --latest \
+            --title "OpenCode Governance $VERSION" \
+            --notes-file /tmp/release-notes.md

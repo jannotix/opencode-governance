@@ -2,6 +2,14 @@
 
 All released versions are recorded in this single file. Dates use `YYYY-MM-DD`.
 
+## 3.4.3 - 2026-07-30
+
+- Preserved literal `/` characters in normalized OpenCode JSONC so schema and provider URLs remain readable while comment markers inside strings stay safe.
+- Added Windows and Unix regressions for readable URL serialization in addition to semantic JSONC preservation.
+- Cleaned duplicated 3.4.2 entries from routing verification and uninstall compatibility matrices and added explicit 3.4.3 support.
+- Added fail-closed release publication checks that verify release metadata and repair the incorrectly moved 3.4.1 tag only after confirming its historical commit.
+- Preserved every local provider/model route, variant, fallback priority, work class, reviewer-independence rule, authentication and no-push/no-deploy governance contract.
+
 ## 3.4.2 - 2026-07-30
 
 - Enforced the same routing JSON type contract in the PowerShell installer and both Architect runners.
