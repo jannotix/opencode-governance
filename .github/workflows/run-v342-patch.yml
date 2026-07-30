@@ -1,0 +1,70 @@
+name: Run observable v3.4.2 patch
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: run-v342-patch
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.head_ref == 'fix/v3.4.2-routing-schema-parity' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Extract the patch and focused validation blocks
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path('.github/workflows/apply-v342-schema-parity.yml').read_text(encoding='utf-8').splitlines()
+          blocks = []
+          index = 0
+          while index < len(source):
+              if source[index].strip() == 'run: |':
+                  indent = len(source[index]) - len(source[index].lstrip())
+                  index += 1
+                  block = []
+                  while index < len(source):
+                      line = source[index]
+                      current = len(line) - len(line.lstrip())
+                      if line.strip() and current <= indent:
+                          break
+                      block.append(line[indent + 2:] if len(line) >= indent + 2 else '')
+                      index += 1
+                  blocks.append('\n'.join(block) + '\n')
+                  continue
+              index += 1
+
+          if len(blocks) < 2:
+              raise SystemExit(f'Expected at least two executable blocks, found {len(blocks)}.')
+          Path('/tmp/v342-apply.sh').write_text('set -euo pipefail\n' + blocks[0], encoding='utf-8')
+          Path('/tmp/v342-validate.sh').write_text('set -euo pipefail\n' + blocks[1], encoding='utf-8')
+          PY
+          chmod +x /tmp/v342-apply.sh /tmp/v342-validate.sh
+
+      - name: Apply the schema parity patch
+        run: /tmp/v342-apply.sh
+
+      - name: Run focused Windows and Unix regressions
+        run: /tmp/v342-validate.sh
+
+      - name: Commit the validated patch
+        run: |
+          rm -f .github/workflows/apply-v342-schema-parity.yml .github/workflows/run-v342-patch.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'fix: enforce cross-platform routing schema parity'
+          git push origin HEAD:fix/v3.4.2-routing-schema-parity
