@@ -26,12 +26,15 @@ This extends the existing `CONTEXT_INDEX.md`, `INSTRUCTION_INDEX.md`, `CONTEXT_M
 
 ### Installed context tools
 
-Failover-enabled installations add two managed helpers:
+Routing-enabled installations add three managed context files:
 
-- `opencode-governance-tools/context-intelligence.ps1`
-- `opencode-governance-tools/context-intelligence.sh`
+- `opencode-governance-tools/context-intelligence.ps1`;
+- `opencode-governance-tools/context-intelligence.sh`;
+- `opencode-governance-tools/context-intelligence.py`.
 
-The PowerShell implementation is native PowerShell 7. The Unix wrapper invokes a tracked Python 3 implementation. The helpers write only:
+The PowerShell implementation is native PowerShell 7. The Unix shell entrypoint invokes the managed Python 3 standard-library core. Together with the four existing Architect/Executor tools, a 3.4.0 routing manifest contains exactly seven managed tools.
+
+The helpers write only:
 
 - task context-control artifacts under `.ai/tasks/<TASK-ID>/`;
 - content summaries and cache indexes under the external user-local cache root;
@@ -44,10 +47,10 @@ Default roots:
 - Windows: `%LOCALAPPDATA%\OpenCodeGovernance\context-cache`
 - Unix: `${XDG_CACHE_HOME:-$HOME/.cache}/opencode-governance/context-cache`
 
-Projects are namespaced by a SHA-256 project identity derived from the canonical project root and, when available, Git repository identity. Cache entries are keyed by:
+Projects are namespaced by a SHA-256 project identity derived from the canonical project root and Git-metadata presence. Cache entries are keyed by:
 
 - project identity;
-- normalized relative path;
+- hashed normalized relative path;
 - file SHA-256;
 - summary schema version;
 - parser version;
@@ -97,7 +100,7 @@ The normalized schema is `SKILL_CAPABILITY_MANIFEST_V1` with:
 - `triggers`, `supported_work_classes`, `languages`, `frameworks`;
 - `required_tools`, `external_dependencies`, `conflicts_with`, `overlaps_with`;
 - `estimated_context_tokens`;
-- named sections with offsets or headings.
+- named sections with stable IDs and headings.
 
 Routing rules:
 
@@ -107,7 +110,7 @@ Routing rules:
 4. prefer the higher-trust, narrower applicable capability;
 5. load no more than the task budget;
 6. load only the required named sections when section metadata exists;
-7. record selection and rejection reasons in `CONTEXT_MANIFEST.md`.
+7. record selection and rejection reasons in `SKILL_SELECTION.json` and reference the result from `CONTEXT_MANIFEST.md`.
 
 No tracked third-party skill text is introduced by this release.
 
@@ -146,7 +149,8 @@ Missing runtime token data is `UNAVAILABLE`, never fabricated.
 - Existing projects are not mass-edited.
 - Missing 3.4 artifacts are created only when a task is initialized, resumed or replanned.
 - Existing 3.3.0, 3.3.2, 3.3.3 and 3.3.4 routing manifests remain verifiable.
-- Installing 3.4.0 with routing preserves all models, variants, priorities, `only_on`, aliases and work classes while adding exactly two managed context tools.
+- Installing 3.4.0 with routing preserves all models, variants, priorities, `only_on`, aliases and work classes while adding exactly three managed context files, for seven managed tools total.
+- The manifest records Governance `3.4.0`, Architect runner `3.3.4` and Context Intelligence `3.4.0` independently.
 - Uninstall removes only manifest-managed context tools and preserves external cache unless the owner explicitly removes it.
 
 ## Failure handling
@@ -164,7 +168,7 @@ Windows and Linux CI must prove:
 - maximum three retrieval cycles;
 - path and task-ID safety;
 - cache hit for identical content and miss after content change;
-- no source content in cache keys or metrics;
+- no source content or absolute project path in cache entries or metrics;
 - skill deduplication, trust precedence and section selection;
 - manifest 3.3.x compatibility;
 - installer/uninstaller preservation;
