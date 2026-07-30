@@ -19,3 +19,5 @@ Also report `GOVERNANCE_MEMORY`, `READ_ONLY_DISCOVERY_SWARM`, `GOVERNED_SKILL_RO
 ## Status integrity contract
 
 Report exact persisted states and evidence references, not optimistic summaries. Include baseline/reference freshness, requirement integrity, approval/blocker, review freeze, current cycle, dependency/safepoint/operational status, failed/unavailable/stale gates and next safe action. An approved deferral remains visible. A partial milestone never produces a completion percentage based on unknown capabilities.
+
+This command is observational: do not mutate source, project documentation, governance state or external systems. `NO_AUTOMATIC_EXTERNAL_ACTION` applies.
