@@ -1,6 +1,6 @@
 # Architect Runner Integration
 
-OpenCode Governance 3.3.2 fixed the `ARCHITECT_RUNNER_UNAVAILABLE` installation defect for Architect pre-execution failover. Version 3.3.3 added an explicit PowerShell host contract and reliable PowerShell child-script result propagation. Version 3.3.4 adds content-aware project-state integrity and non-Git workspace support.
+OpenCode Governance 3.3.2 fixed the `ARCHITECT_RUNNER_UNAVAILABLE` installation defect for Architect pre-execution failover. Version 3.3.3 added the PowerShell 7 host contract, and 3.3.4 added content-aware project-state integrity plus non-Git workspace support. Version 3.4.1 hardens routing validation, cooldown parity, managed-tool backup and retained-log privacy.
 
 ## Scope
 
@@ -19,18 +19,29 @@ The runner is not used for `ai-workflow`, `ai-execute`, `ai-review` or `ai-relea
 
 ## Installed tools
 
-With Architect failover enabled, the installer creates and records these managed tools under the active OpenCode configuration directory:
+With routing enabled, the current installation records seven managed tools:
 
 ```text
 opencode-governance-tools/architect-attempt.ps1
 opencode-governance-tools/architect-attempt.sh
 opencode-governance-tools/executor-attempt.ps1
 opencode-governance-tools/executor-attempt.sh
+opencode-governance-tools/context-intelligence.ps1
+opencode-governance-tools/context-intelligence.sh
+opencode-governance-tools/context-intelligence.py
 ```
 
-The routing manifest records `governance_version: 3.3.4`, `architect_runner_version: 3.3.4` and the exact four managed tool paths.
+The 3.4.1 routing manifest records:
 
-## PowerShell host contract
+```text
+governance_version: 3.4.1
+architect_runner_version: 3.4.1
+context_intelligence_version: 3.4.1
+```
+
+Before replacing an existing routing installation, the wrapper validates the complete new profile. An invalid profile cannot remove the current manifest, aliases or managed tools. Every existing managed tool is copied into the timestamped installation backup before replacement.
+
+## PowerShell host and routing contract
 
 The PowerShell Architect runner requires PowerShell 7 or newer because its process-isolation implementation relies on modern .NET process APIs. Run it through:
 
@@ -44,7 +55,17 @@ Windows PowerShell 5.1 is rejected before the runner resolves project state, cre
 POWERSHELL_7_REQUIRED
 ```
 
-The Unix runner remains available independently through `architect-attempt.sh`.
+The Windows and Unix runners validate the same routing properties before the first child process starts:
+
+- schema, settings and Architect role presence;
+- fail-closed independence policy;
+- supported eligible failures;
+- concrete model, family and variant policy;
+- explicit `only_on` arrays;
+- positive, unique fallback priorities;
+- cooldown from 60 to 86,400 seconds.
+
+Optional JSON arrays are normalized consistently across PowerShell and Unix; an absent optional work-class array is empty, not an invalid blank value.
 
 ## Direct command gate
 
@@ -76,13 +97,13 @@ The environment marker identifies the child process. The argument marker is visi
 
 ## Project-state integrity
 
-Version 3.3.4 replaces classification-only `git status --porcelain` comparison with:
+The runner uses:
 
 ```text
 PROJECT_STATE_FINGERPRINT_V1
 ```
 
-Before and after every routed attempt, the runner creates a canonical fingerprint for every project entry outside root `.ai/**` and Git metadata. Each entry includes, as applicable:
+Before and after every routed attempt, it creates a canonical fingerprint for every project entry outside root `.ai/**` and Git metadata. Each entry includes, as applicable:
 
 - normalized relative path;
 - entry type;
@@ -132,6 +153,8 @@ After an eligible provider, quota, rate-limit, retirement, temporary-availabilit
 
 Any source/project-documentation change, restoration mismatch, ineligible failure or exhausted route set stops with human recovery required.
 
+When `KeepAttemptLogs` is enabled, the runner preserves only stdout/stderr logs. The private `.ai/**` snapshot is removed before the retained log directory is reported.
+
 ## Windows example
 
 ```powershell
@@ -156,7 +179,7 @@ pwsh -NoProfile -File `
 bash ./scripts/verify-routing.sh <config-dir>
 ```
 
-The routing verifier checks exact managed tool paths, installed files, Architect/Build/Plan policy markers, command entry gates, project-state fingerprint markers, hidden-route consistency and the preserved Executor routing contract. PowerShell wrappers rely on terminating errors from PowerShell child scripts and never infer their outcome from a pre-existing native `$LASTEXITCODE` value.
+The routing verifier checks exact managed tool paths, installed files, Architect/Build/Plan policy markers, command entry gates, project-state fingerprint markers, cooldown validation, Context Intelligence hardening, hidden-route consistency and the preserved Executor routing contract. PowerShell wrappers rely on terminating errors from PowerShell child scripts and never infer their outcome from a pre-existing native `$LASTEXITCODE` value.
 
 ## Distinguishing workspace errors
 
@@ -164,4 +187,4 @@ The routing verifier checks exact managed tool paths, installed files, Architect
 
 `PROJECT_STATE_CHANGED` means a child attempt changed source or project documentation outside root `.ai/**`; this is a hard integrity block, not an eligible provider/model fallback condition.
 
-`DISCOVERY_BLOCKED_WRONG_WORKSPACE` is a different, correct fail-closed condition: a prompt intended for the Governance repository was executed inside an application repository, or vice versa. Version 3.3.4 does not weaken workspace validation.
+`DISCOVERY_BLOCKED_WRONG_WORKSPACE` is a different, correct fail-closed condition: a prompt intended for the Governance repository was executed inside an application repository, or vice versa. Version 3.4.1 does not weaken workspace validation.
