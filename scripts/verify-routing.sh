@@ -22,10 +22,11 @@ if version in {'3.4.0','3.4.1','3.4.2','3.4.3','3.4.4'}:
     expected += [tools/name for name in ['context-intelligence.ps1','context-intelligence.sh','context-intelligence.py']]
     if version=='3.4.4':
         if data.get('workflow_continuation_version')!='3.4.4': raise SystemExit('workflow_continuation_version must be 3.4.4.')
-        expected += [tools/'workflow-continuation.py']
+        expected += [tools/'workflow-continuation.ps1',tools/'workflow-continuation.py']
 else:
     if data.get('architect_runner_version')!=version: raise SystemExit(f'architect_runner_version must be {version}.')
     if 'context_intelligence_version' in data: raise SystemExit(f'context_intelligence_version is not valid for Governance {version}.')
+    if 'workflow_continuation_version' in data: raise SystemExit(f'workflow_continuation_version is not valid for Governance {version}.')
 if {str(path) for path in expected}!={str(path) for path in data.get('managed_tools',[])}: raise SystemExit(f'Managed tools do not match the v{version} contract.')
 for path in expected:
     if not path.is_file(): raise SystemExit(f'Missing managed tool: {path}')
@@ -42,6 +43,7 @@ for name in ['architect','build','plan']:
 gate=['ARCHITECT_RUNNER_ENTRY_GATE','ARCHITECT_RUNNER_REQUIRED',marker,str(base[0]),str(base[1])]
 if version in {'3.3.3','3.3.4','3.4.0','3.4.1','3.4.2','3.4.3','3.4.4'}: gate += ['pwsh -NoProfile -File']
 if version in {'3.3.4','3.4.0','3.4.1','3.4.2','3.4.3','3.4.4'}: gate += ['PROJECT_STATE_CHANGED']
+if version=='3.4.4': gate += ['WINDOWS_COMMAND:','UNIX_COMMAND:','-ProjectDir','--project-dir','<ORIGINAL_ARGUMENTS>']
 for command in ['ai-init','ai-audit','ai-discover','ai-plan']:
     text=(root/'commands'/f'{command}.md').read_text(encoding='utf-8')
     for value in gate:
@@ -66,24 +68,18 @@ if version in {'3.4.0','3.4.1','3.4.2','3.4.3','3.4.4'}:
     if version in {'3.4.1','3.4.2','3.4.3','3.4.4'}:
         for value in ['GOVERNANCE_STATE_LINK_FORBIDDEN','REQUIRED_SECTION_UNAVAILABLE','TERMINAL_STATE_REQUIRED']:
             if value not in ps_context or value not in py_context: raise SystemExit(f'Context hardening marker missing: {value}')
-
 if version=='3.4.4':
-    workflow=expected[7].read_text(encoding='utf-8')
+    ps_workflow=expected[7].read_text(encoding='utf-8');py_workflow=expected[8].read_text(encoding='utf-8')
     for value in ['WORKFLOW_CONTINUATION_GATE_V1','CONTINUE_REQUIRED','TERMINAL_ALLOWED','INVALID_RUN_STATE','AUDIT_PASS','LOCAL_COMMITTED']:
-        if value not in workflow: raise SystemExit(f'Workflow continuation helper missing marker: {value}')
+        if value not in ps_workflow or value not in py_workflow: raise SystemExit(f'Workflow continuation helper missing marker: {value}')
     for command in ['ai-workflow','ai-resume']:
         text=(root/'commands'/f'{command}.md').read_text(encoding='utf-8')
-        for value in ['WORKFLOW_CONTINUATION_GATE_V1','WORKFLOW_CONTINUATION_CORE',str(expected[7]),'CONTINUE_REQUIRED','TERMINAL_ALLOWED']:
+        for value in ['WORKFLOW_CONTINUATION_GATE_V1','WINDOWS_WORKFLOW_CONTINUATION_CORE','UNIX_WORKFLOW_CONTINUATION_CORE',str(expected[7]),str(expected[8]),'CONTINUE_REQUIRED','TERMINAL_ALLOWED']:
             if value not in text: raise SystemExit(f'{command} missing workflow continuation marker: {value}')
-    for command in ['ai-init','ai-audit','ai-discover','ai-plan']:
-        text=(root/'commands'/f'{command}.md').read_text(encoding='utf-8')
-        for value in ['WINDOWS_COMMAND:','UNIX_COMMAND:','-ProjectDir','--project-dir']:
-            if value not in text: raise SystemExit(f'{command} missing executable Architect handoff: {value}')
-
 with tempfile.TemporaryDirectory(prefix='opencode-routing-compat-') as directory:
     temp=pathlib.Path(directory);shutil.copytree(root/'agents',temp/'agents');(temp/'opencode-governance-tools').mkdir(parents=True)
     for name in ['executor-attempt.ps1','executor-attempt.sh']: shutil.copy2(tools/name,temp/'opencode-governance-tools'/name)
-    normalized=dict(data);normalized['governance_version']='3.3.0';normalized.pop('architect_runner_version',None);normalized.pop('context_intelligence_version',None)
+    normalized=dict(data);normalized['governance_version']='3.3.0';normalized.pop('architect_runner_version',None);normalized.pop('context_intelligence_version',None);normalized.pop('workflow_continuation_version',None)
     normalized['managed_tools']=[str(temp/'opencode-governance-tools'/name) for name in ['executor-attempt.ps1','executor-attempt.sh']]
     (temp/'opencode-governance-routing.json').write_text(json.dumps(normalized,indent=2)+'\n',encoding='utf-8')
     result=subprocess.run([str(core),str(temp)])
