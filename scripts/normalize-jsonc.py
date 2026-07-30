@@ -99,7 +99,7 @@ def strip_trailing_commas(text: str) -> str:
     return "".join(output)
 
 
-def normalize(path: pathlib.Path) -> None:
+def normalize(path: pathlib.Path, set_default_agent: bool) -> None:
     raw = path.read_text(encoding="utf-8-sig")
     cleaned = strip_trailing_commas(strip_comments(raw))
     try:
@@ -108,6 +108,8 @@ def normalize(path: pathlib.Path) -> None:
         raise JsoncError(f"Cannot safely parse {path}: {exc}") from exc
     if not isinstance(value, dict):
         raise JsoncError(f"OpenCode configuration root must be an object: {path}")
+    if set_default_agent:
+        value["default_agent"] = "architect"
     protected = json.dumps(value, indent=2, ensure_ascii=False).replace("/", "\\u002f") + "\n"
     path.write_text(protected, encoding="utf-8")
 
@@ -115,9 +117,10 @@ def normalize(path: pathlib.Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("path")
+    parser.add_argument("--set-default-agent", action="store_true")
     args = parser.parse_args()
     try:
-        normalize(pathlib.Path(args.path))
+        normalize(pathlib.Path(args.path), args.set_default_agent)
         return 0
     except JsoncError as exc:
         print(str(exc), file=sys.stderr)
