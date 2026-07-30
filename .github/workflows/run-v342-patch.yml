@@ -103,6 +103,21 @@ jobs:
           path.write_text(text.replace(old, new), encoding='utf-8')
           PY
 
+      - name: Align verifier cooldown marker
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          old = 'default cooldown must be between 60 and 86400 seconds.'
+          new = 'default cooldown must be an integer between 60 and 86400 seconds.'
+          for name in ('scripts/verify-routing.ps1', 'scripts/verify-routing.sh'):
+              path = Path(name)
+              text = path.read_text(encoding='utf-8')
+              if text.count(old) != 1:
+                  raise SystemExit(f'{name}: legacy cooldown marker was not found exactly once.')
+              path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+
       - name: Run focused Windows and Unix regressions
         run: /tmp/v342-validate.sh
 
