@@ -204,7 +204,7 @@ class SimulationTests(unittest.TestCase):
                     "ai-init", "ai-audit", "ai-docs", "ai-discover", "ai-plan", "ai-execute",
                     "ai-review", "ai-workflow", "ai-status", "ai-resume", "ai-metrics", "ai-release",
                 }),
-                "steps": [{"tool": "bash", "arguments": {"command": "/ai-status"}}, {"assistant_text": "TERMINAL_ALLOWED"}],
+                "steps": [{"tool": "bash", "arguments": {"command": "/ai-status"}}, {"assistant_text": "LOCAL_COMMITTED"}],
                 "terminal": "LOCAL_COMMITTED",
             }), encoding="utf-8")
             result = json.loads(run(SIMULATION, "validate", "--scenario", path).stdout)
