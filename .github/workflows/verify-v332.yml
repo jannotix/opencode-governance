@@ -22,9 +22,9 @@ jobs:
           python3 - "$config" <<'PY'
           import json,pathlib,sys
           root=pathlib.Path(sys.argv[1]);data=json.loads((root/'opencode-governance-routing.json').read_text());tools=root/'opencode-governance-tools'
-          assert data['governance_version']=='3.4.2'
-          assert data['architect_runner_version']=='3.4.2'
-          assert data['context_intelligence_version']=='3.4.2'
+          assert data['governance_version']=='3.4.3'
+          assert data['architect_runner_version']=='3.4.3'
+          assert data['context_intelligence_version']=='3.4.3'
           names=['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py']
           assert set(data['managed_tools'])=={str(tools/name) for name in names}
           for name in ['architect','build','plan']:
@@ -57,9 +57,9 @@ jobs:
           if((Get-FileHash scripts/run-governed.ps1).Hash-ne(Get-FileHash (Join-Path $tools 'architect-attempt.ps1')).Hash){throw 'Installed PowerShell Architect runner is stale'}
           if((Get-FileHash scripts/run-governed.sh).Hash-ne(Get-FileHash (Join-Path $tools 'architect-attempt.sh')).Hash){throw 'Installed Unix Architect runner is stale'}
           $manifest=Get-Content (Join-Path $config 'opencode-governance-routing.json') -Raw|ConvertFrom-Json
-          if($manifest.governance_version-ne'3.4.2'){throw 'Routing manifest version is not 3.4.2'}
-          if($manifest.architect_runner_version-ne'3.4.2'){throw 'Architect runner version is not 3.4.2'}
-          if($manifest.context_intelligence_version-ne'3.4.2'){throw 'Context Intelligence version is not 3.4.2'}
+          if($manifest.governance_version-ne'3.4.3'){throw 'Routing manifest version is not 3.4.3'}
+          if($manifest.architect_runner_version-ne'3.4.3'){throw 'Architect runner version is not 3.4.3'}
+          if($manifest.context_intelligence_version-ne'3.4.3'){throw 'Context Intelligence version is not 3.4.3'}
           if(@($manifest.managed_tools).Count-ne7){throw 'Expected seven managed tools'}
           foreach($name in 'architect','build','plan'){
             $text=Get-Content (Join-Path $config "agents/$name.md") -Raw
