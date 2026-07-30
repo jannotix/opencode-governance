@@ -65,9 +65,6 @@ def insert_section(text: str, heading: str, body: str, before_core: bool = False
     section = f"\n\n## {heading}\n\n{body.strip()}\n"
     if before_core and "\n## Core invariants" in text:
         return text.replace("\n## Core invariants", section + "\n## Core invariants", 1)
-    match = re.match(r"\A(---\r?\n.*?\r?\n---\r?\n)", text, re.S)
-    if match:
-        return text[: match.end()] + section + text[match.end() :]
     return text.rstrip() + section
 
 
