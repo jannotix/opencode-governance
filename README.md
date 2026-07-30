@@ -4,7 +4,7 @@ Provider- and model-agnostic product-lifecycle and engineering governance for Op
 
 > Community project. Not affiliated with or maintained by the OpenCode team.
 
-Current release: **3.4.0 — Context Intelligence & Skill Routing**.
+Current release: **3.5.0 — Quality Gates & Governed Learning**.
 
 v3 guides an idea through adaptive product discovery, constructive technical challenge, approved product definition, vertical delivery, evidence-driven implementation, independent review, product-completeness reconciliation and production-readiness assessment.
 
@@ -13,9 +13,9 @@ v3 guides an idea through adaptive product discovery, constructive technical cha
 - Seven public governance agents; `architect` is default and orchestrator.
 - Only `executor` writes application source and approved project documentation.
 - Implementation and architecture/security reviewers remain independent.
-- Final Reviewer controls baseline, discovery, task, product and release adjudication.
-- Requirement provenance and evidence outrank summaries and assertions.
-- No automatic push, merge, deployment or production rollback.
+- Final Reviewer controls baseline, discovery, task, product, learning promotion and release adjudication.
+- Requirement provenance and evidence outrank summaries, self-checks and assertions.
+- No automatic push, merge, deployment, production rollback or Governance Memory promotion.
 - Provider/model IDs and concrete variants are supplied only during local setup.
 - Tracked examples use synthetic identifiers; personal routing profiles remain untracked.
 - Optional fallback aliases and deterministic helpers are transports, not additional governance authorities.
@@ -54,21 +54,15 @@ Optional failover routing:
    - Windows: `./scripts/install.ps1 -NonInteractive -RoutingConfigPath <profile.json>`
    - macOS/Linux: `./scripts/install.sh --routing-config <profile.json>`
 
-The installer renders seven public agents and twelve commands, preserves unrelated configuration and creates a timestamped backup. With a routing profile it writes the non-secret `opencode-governance-routing.json` manifest, renders only enabled hidden fallback aliases and installs managed Architect, Executor and Context Intelligence tools. No hidden Architect alias is created.
+The installer renders seven public agents and twelve commands, preserves unrelated configuration and creates a timestamped backup. With a routing profile it writes the non-secret routing manifest, renders only enabled hidden fallback aliases and installs ten managed Architect, Executor, Context Intelligence and Quality Gate files. No hidden Architect alias is created.
 
 ## Local configuration durability
 
-Windows desktop application updates are outside the control of this repository. Version 3.3.1 added an explicit fail-closed wrapper that preserves the external OpenCode configuration directory before an owner-triggered update.
-
-Enable persistence and create a baseline snapshot:
+Windows desktop application updates are outside the control of this repository. Version 3.3.1 added a fail-closed wrapper that preserves the external OpenCode configuration directory before an owner-triggered update.
 
 ```powershell
-./scripts/config-durability.ps1 `
-  -Action Enable `
-  -ConfigDir <opencode-config-directory>
+./scripts/config-durability.ps1 -Action Enable -ConfigDir <opencode-config-directory>
 ```
-
-Run an update through the protective wrapper:
 
 ```powershell
 ./scripts/update-opencode-safely.ps1 `
@@ -77,13 +71,11 @@ Run an update through the protective wrapper:
   -UpdateArguments @(<argument-list>)
 ```
 
-The wrapper snapshots all protected configuration files to a separate user-local durability store, runs only the supplied updater command, detects additions/removals/content drift, quarantines changed post-update state and restores the pre-update snapshot by default. Manifests contain paths, lengths and SHA-256 hashes only; configuration contents and credentials remain local.
-
-Automatic vendor updates are not intercepted. Use the wrapper when byte-for-byte configuration preservation is required. Configuration preservation does not prove schema compatibility with a newer OpenCode release. See [Local Configuration Durability](docs/local-configuration-durability.md).
+The wrapper snapshots protected configuration to a separate user-local durability store, executes only the supplied updater and restores the previous state when drift is detected. Configuration preservation does not prove schema compatibility with a newer OpenCode release. See [Local Configuration Durability](docs/local-configuration-durability.md).
 
 ## Architect failover runner
 
-Top-level Architect failover is available only for pre-execution commands:
+Top-level Architect failover is available only for:
 
 ```text
 ai-init
@@ -92,14 +84,14 @@ ai-discover
 ai-plan
 ```
 
-With Architect failover enabled, version 3.4.0 installs deterministic entrypoints inside the active OpenCode configuration directory:
+Installed entrypoints:
 
 ```text
 opencode-governance-tools/architect-attempt.ps1
 opencode-governance-tools/architect-attempt.sh
 ```
 
-Windows requires PowerShell 7 or newer. Invoke the PowerShell runner explicitly through `pwsh`; Windows PowerShell 5.1 fails before reading or modifying project state with `POWERSHELL_7_REQUIRED`.
+Windows requires PowerShell 7:
 
 ```powershell
 pwsh -NoProfile -File "<config-dir>\opencode-governance-tools\architect-attempt.ps1" `
@@ -110,30 +102,11 @@ pwsh -NoProfile -File "<config-dir>\opencode-governance-tools\architect-attempt.
   -ConfigDir "<config-dir>"
 ```
 
-macOS/Linux:
+Direct invocation inside an existing OpenCode process fails closed with `ARCHITECT_RUNNER_REQUIRED`. The 3.3.4 runner contract remains active: project content outside root `.ai/**` is fingerprinted before and after every attempt, Git and non-Git workspaces are supported, and any protected delta returns `PROJECT_STATE_CHANGED`.
 
-```bash
-"<config-dir>/opencode-governance-tools/architect-attempt.sh" \
-  --project-dir "<project>" \
-  --command ai-plan \
-  --arguments "<request>" \
-  --routing-config "<config-dir>/opencode-governance-routing.json" \
-  --config-dir "<config-dir>"
-```
+## Context Intelligence and skill routing
 
-Direct `/ai-init`, `/ai-audit`, `/ai-discover` or `/ai-plan` invocation inside an existing OpenCode process fails closed before `.ai/**` writes with `ARCHITECT_RUNNER_REQUIRED`, the exact installed runner path and the required Windows host command. The external runner marks child attempts with `[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]`; marked children continue normally and never recursively launch another runner.
-
-The runner starts a fresh `opencode run` process for each route, snapshots the complete `.ai/**` tree and restores it before an eligible retry. A fallback never continues partial output and a recovered primary never interrupts an active fallback.
-
-The 3.3.4 runner contract remains active in 3.4.0: every project entry outside root `.ai/**` is fingerprinted before and after each routed attempt using path, entry type, mode/attributes, length, SHA-256 and symlink target. Git workspaces additionally bind the fingerprint to HEAD, the index and recursive submodule state. Non-Git directories use the same content-integrity contract. Any source or project-documentation delta returns `PROJECT_STATE_CHANGED` and blocks fallback, including changes to files that were already dirty, staged or untracked.
-
-Content fingerprinting scans the complete project tree outside `.ai/**`; very large workspaces may incur additional pre/post attempt latency. This cost is intentional because classification-only Git status cannot prove immutability.
-
-Top-level automatic restart remains unavailable for `ai-workflow`, `ai-execute`, `ai-review` and `ai-release`, because those flows may already have crossed an implementation or review side-effect boundary.
-
-## Context intelligence and skill routing
-
-With failover routing installed, 3.4.0 adds:
+3.4.0 Context Intelligence remains active in 3.5.0:
 
 ```text
 opencode-governance-tools/context-intelligence.ps1
@@ -141,9 +114,9 @@ opencode-governance-tools/context-intelligence.sh
 opencode-governance-tools/context-intelligence.py
 ```
 
-The PowerShell helper runs on PowerShell 7. The Unix entrypoint invokes the managed Python 3 standard-library core. No vector database, network service or third-party package is required.
+It provides deterministic work-class budgets, at most three `DISPATCH -> EVALUATE -> REFINE` retrieval cycles, `SKILL_CAPABILITY_MANIFEST_V1` selection, external content-addressed summary caching and optional context metrics. Cached summaries remain advisory; material claims require current primary evidence.
 
-Each active task can maintain:
+Task artifacts:
 
 ```text
 .ai/tasks/<TASK-ID>/CONTEXT_BUDGET.json
@@ -153,31 +126,54 @@ Each active task can maintain:
 .ai/metrics/CONTEXT_METRICS.jsonl
 ```
 
-`CONTEXT_BUDGET_V1` derives deterministic ceilings from the exact work class. Retrieval follows at most three `DISPATCH -> EVALUATE -> REFINE` cycles and ends with `CONTEXT_SUFFICIENT` or `BLOCKED_CONTEXT_GAP`. An efficiency budget never authorizes omission of required security, migration, recovery, public-contract or operational evidence.
-
-`SKILL_CAPABILITY_MANIFEST_V1` records identity, source, trust, triggers, work classes, languages/frameworks, tools, dependencies, overlaps, conflicts, estimated context tokens and named sections. Selection prefers the highest-trust narrow applicable capability, rejects unavailable dependencies, deduplicates overlaps and loads only the selected sections within the task budget.
-
-Content summaries are stored outside the project in a user-local cache and keyed by project identity, relative-path hash, source SHA-256, schema, parser version and skill context. A cache hit is advisory routing evidence only; material claims still require current primary source inspection. Corrupt or stale entries become cache misses. The installer and uninstaller never delete the external cache automatically.
-
-`/ai-metrics` may record considered/admitted/rejected files, retrieval cycles, loaded skills, estimated skill tokens, cache hits/misses, repeated reads, budget overrides, packet references and runtime token data when the runtime exposes it. Missing token data is `UNAVAILABLE`, never estimated as fact.
-
 See [Context Intelligence and Skill Routing](docs/context-intelligence-skill-routing.md).
+
+## Quality Gates and governed learning
+
+3.5.0 installs:
+
+```text
+opencode-governance-tools/quality-gates.ps1
+opencode-governance-tools/quality-gates.sh
+opencode-governance-tools/quality-gates.py
+```
+
+No network service, vector database or third-party package is required. The PowerShell implementation runs on PowerShell 7; the Unix wrapper invokes the managed Python 3 standard-library core.
+
+Each applicable task may maintain:
+
+```text
+.ai/tasks/<TASK-ID>/QUALITY_PROFILE.json
+.ai/tasks/<TASK-ID>/DEBUG_PROOF.json
+.ai/tasks/<TASK-ID>/TDD_PROOF.json
+.ai/tasks/<TASK-ID>/EVAL_PLAN.json
+.ai/tasks/<TASK-ID>/IMPLEMENTATION_SELF_CHECK.json
+.ai/tasks/<TASK-ID>/QUALITY_VALIDATION.json
+.ai/learning/CANDIDATES.jsonl
+.ai/learning/PROMOTIONS.jsonl
+```
+
+`QUALITY_PROFILE_V1` derives required gates from work class, task kind and risk flags. Bug fixes require confirmed reproduction/root cause and a real RED→GREEN→regression sequence. Security, authorization, routing, parser, migration, public-contract and high-risk changes require TDD. AI-system behavior requires an eval plan; governed high-risk AI work uses `PASS_K`, not a single lucky `pass@k` result.
+
+`IMPLEMENTATION_SELF_CHECK_V1` catches cheap defects before review but always records `approval_authority: false`. It is not a reviewer verdict and cannot be substituted for either independent review or Final Reviewer adjudication.
+
+Learning is candidate-first and append-only. Duplicate active `dedup_key` values are rejected. Promotion requires `approved_by: FINAL_REVIEWER`, writes a `LEARNING_PROMOTION_V1` event with `memory_updated: false`, and never edits `GOVERNANCE_MEMORY.md` automatically. Updating reusable memory remains a separate Final Reviewer-controlled action based on current evidence.
+
+See [Quality Gates and Governed Learning](docs/quality-gates-governed-learning.md).
 
 ## Executor failover
 
-When enabled in the local routing profile, `/ai-execute` and the implementation phase of `/ai-workflow` use isolated Executor attempts:
+Executor failover uses isolated worktrees:
 
 ```text
 select route
 → prepare detached worktree at frozen HEAD
 → run complete Executor inside EXECUTION_ROOT
 → finalize matching complete report into binary patch
-→ promote only if real worktree state is unchanged and non-overlapping
+→ promote only if the real worktree remains unchanged and non-overlapping
 ```
 
-Eligible route failure discards the isolated worktree and restarts the complete Executor from the same packet and frozen target on the next eligible route. Failed partial changes never enter the real worktree.
-
-Managed helpers are installed under the local OpenCode configuration directory:
+Managed helpers:
 
 ```text
 opencode-governance-tools/executor-attempt.ps1
@@ -198,40 +194,29 @@ Promotion is not validation. Evidence-Driven Verification, Operational Assurance
 ├── DEPLOYMENT_SCOPE.md
 ├── PROJECT_HISTORY.md
 ├── STATUS.md
+├── learning/
+│   ├── CANDIDATES.jsonl
+│   └── PROMOTIONS.jsonl
 ├── metrics/
 │   └── CONTEXT_METRICS.jsonl
 ├── product/
-│   ├── PRODUCT_VISION.md
-│   ├── USER_AND_ROLE_MODEL.md
-│   ├── DOMAIN_AND_PROCESS_MODEL.md
-│   ├── PRODUCT_COMPLETENESS_MATRIX.md
-│   ├── PRODUCT_BLUEPRINT.md
-│   └── PRODUCT_DECISIONS.md
 ├── baseline-audits/
 └── tasks/
 ```
 
-Discovery is always `LIGHT`, `STANDARD` or `DEEP`. Domain evidence and recommendations do not become requirements automatically. A validated milestone may remain `PRODUCT_INCOMPLETE`. `PRODUCT_COMPLETENESS_VERDICT` is separate from `RELEASE_VERDICT`.
+Discovery remains `LIGHT`, `STANDARD` or `DEEP`. A validated milestone may remain `PRODUCT_INCOMPLETE`; `PRODUCT_COMPLETENESS_VERDICT` is separate from `RELEASE_VERDICT`.
 
 ## Documentation
 
-Focused references: [Product Lifecycle Governance](docs/product-lifecycle-governance.md), [Model Failover](docs/model-failover.md), [Architect Runner Integration](docs/architect-runner-integration.md), [Context Intelligence and Skill Routing](docs/context-intelligence-skill-routing.md), [Local Configuration Durability](docs/local-configuration-durability.md), [Workflow](docs/workflow.md), [Requirement Provenance](docs/requirement-provenance.md), [Context Efficiency and Resume](docs/context-efficiency-resume.md), [Evidence-Driven Verification](docs/evidence-driven-verification.md), [Operational Assurance](docs/operational-assurance.md), [Permissions](docs/permissions.md), [Project Documentation](docs/project-documentation.md) and [Troubleshooting](docs/troubleshooting.md).
+Focused references: [Product Lifecycle Governance](docs/product-lifecycle-governance.md), [Model Failover](docs/model-failover.md), [Architect Runner Integration](docs/architect-runner-integration.md), [Context Intelligence and Skill Routing](docs/context-intelligence-skill-routing.md), [Quality Gates and Governed Learning](docs/quality-gates-governed-learning.md), [Local Configuration Durability](docs/local-configuration-durability.md), [Workflow](docs/workflow.md), [Requirement Provenance](docs/requirement-provenance.md), [Context Efficiency and Resume](docs/context-efficiency-resume.md), [Evidence-Driven Verification](docs/evidence-driven-verification.md), [Operational Assurance](docs/operational-assurance.md), [Permissions](docs/permissions.md), [Project Documentation](docs/project-documentation.md) and [Troubleshooting](docs/troubleshooting.md).
 
 ## Verification
 
-Base rendered contract:
-
 - Windows: `./scripts/verify.ps1`
 - macOS/Linux: `./scripts/verify.sh`
-
-Optional routing contract:
-
-- Windows: `./scripts/verify-routing.ps1`
-- macOS/Linux: `bash ./scripts/verify-routing.sh`
-
-Local configuration durability:
-
-- Windows: `./scripts/config-durability.ps1 -Action Status`
+- Routing Windows: `./scripts/verify-routing.ps1`
+- Routing macOS/Linux: `bash ./scripts/verify-routing.sh`
+- Durability Windows: `./scripts/config-durability.ps1 -Action Status`
 
 ## License
 
