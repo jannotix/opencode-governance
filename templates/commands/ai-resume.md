@@ -24,6 +24,14 @@ Resume never installs tools, broadens permissions or performs external actions m
 
 When the frozen target changed, `REVIEW_FREEZE` evidence is stale and a new review cycle is required.
 
+## LEGACY_RUN_STATE_MIGRATION_V1
+
+Before applying the continuation gate to a task created before Governance 3.4.4, inspect the existing `RUN_STATE.json`, `.ai/STATUS.md`, `.ai/PROJECT_HISTORY.md`, the latest controlling `GOVERNANCE_RESULT`, Final Reviewer verdicts and frozen packet/target evidence. Create only the missing `top_level_command`, `current_phase`, `next_required_phase` and `terminal_reason` fields.
+
+Use only authoritative persisted evidence. Never infer completion from file presence, timestamps alone, conversation history or a model summary. Preserve every existing state field and append a migration record to `.ai/PROJECT_HISTORY.md` with the source evidence and Governance version. An original `/ai-workflow` remains `top_level_command: ai-workflow`; do not rewrite it as `ai-resume`. Map the highest proven checkpoint to `current_phase` and its required successor or validated repair route to `next_required_phase`. A proven blocker uses its exact reason and no next phase. If the original command or next required phase cannot be proven, set `current_phase: HUMAN_INPUT_REQUIRED`, `next_required_phase: null` and a precise `terminal_reason`; do not guess or restart the task.
+
+Run the continuation helper only after this migration is complete. Migration changes governance state only and never recreates stale evidence, changes source/docs or authorizes external actions.
+
 ## WORKFLOW_CONTINUATION_GATE_V1
 
 Resume preserves the original `top_level_command` recorded in `RUN_STATE.json`; an interrupted `/ai-workflow` remains `top_level_command: ai-workflow`. Require `current_phase`, `next_required_phase` and `terminal_reason` and never replace the original authority with `ai-resume`.
