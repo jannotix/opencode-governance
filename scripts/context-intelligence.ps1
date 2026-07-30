@@ -154,7 +154,8 @@ try{
   $Root=Get-ProjectRoot
   switch($Action){
     'InitializeBudget'{
-      Assert-TaskId $TaskId;if(-not$Budgets.Contains($WorkClass)){throw 'INVALID_WORK_CLASS'}
+      Assert-TaskId $TaskId
+      if(-not$Budgets.Contains($WorkClass)){throw 'INVALID_WORK_CLASS'}
       $values=$Budgets[$WorkClass];$cache=Get-CacheRoot $Root
       $result=[ordered]@{schema='CONTEXT_BUDGET_V1';task_id=$TaskId;work_class=$WorkClass;max_retrieval_cycles=$values[0];max_loaded_skills=$values[1];max_packet_references=$values[2];max_admitted_paths=$values[3];max_cycles_global=3;cache_namespace=(Get-ProjectIdentity $Root);cache_root_id=(Get-TextHash $cache);override_requires_reason=$true;created_at=(Get-Now)}
       Write-JsonFile (Join-Path (Get-TaskDir $Root $TaskId) 'CONTEXT_BUDGET.json') $result
@@ -163,24 +164,30 @@ try{
       $budget=Get-Budget $Root $TaskId
       if($Cycle-lt1-or$Cycle-gt[Math]::Min(3,[int]$budget.max_retrieval_cycles)){throw 'RETRIEVAL_CYCLE_LIMIT'}
       $record=Read-JsonFile $InputJsonPath
-      $fields=@('query','reason')+$RetrievalListFields+@('stop_reason');Assert-ExactProperties $record $fields 'RETRIEVAL_RECORD_SCHEMA_INVALID'
+      $fields=@('query','reason')+$RetrievalListFields+@('stop_reason')
+      Assert-ExactProperties $record $fields 'RETRIEVAL_RECORD_SCHEMA_INVALID'
       if([string]::IsNullOrWhiteSpace([string]$record.query)-or[string]::IsNullOrWhiteSpace([string]$record.reason)){throw 'RETRIEVAL_RECORD_INVALID'}
       foreach($field in $RetrievalListFields){if($null-eq$record.$field){throw "RETRIEVAL_RECORD_INVALID: $field"}}
-      Assert-StringList $record.candidate_paths 'candidate_paths'|Out-Null;Assert-StringList $record.admitted_paths 'admitted_paths'|Out-Null
+      Assert-StringList $record.candidate_paths 'candidate_paths'|Out-Null
+      Assert-StringList $record.admitted_paths 'admitted_paths'|Out-Null
       if([string]$record.stop_reason-notin$StopReasons){throw 'RETRIEVAL_STOP_REASON_INVALID'}
       if($record.stop_reason-eq'BLOCKED_CONTEXT_GAP'-and@($record.context_gaps).Count-eq0){throw 'BLOCKED_CONTEXT_GAP_REASON_REQUIRED'}
       if(@($record.admitted_paths).Count-gt[int]$budget.max_admitted_paths){throw 'CONTEXT_PATH_BUDGET_EXCEEDED'}
-      $path=Join-Path (Get-TaskDir $Root $TaskId) 'CONTEXT_RETRIEVAL.jsonl';$existing=Read-JsonLines $path
+      $path=Join-Path (Get-TaskDir $Root $TaskId) 'CONTEXT_RETRIEVAL.jsonl'
+      $existing=Read-JsonLines $path
       if($existing.Count-and[string]$existing[-1].stop_reason-in$TerminalReasons){throw 'RETRIEVAL_ALREADY_TERMINAL'}
       if($Cycle-ne$existing.Count+1){throw 'RETRIEVAL_CYCLE_SEQUENCE_INVALID'}
       $result=[ordered]@{schema='CONTEXT_RETRIEVAL_CYCLE_V1';task_id=$TaskId;cycle=$Cycle;recorded_at=(Get-Now);query=$record.query;reason=$record.reason;candidate_paths=@($record.candidate_paths);admitted_paths=@($record.admitted_paths);rejected_paths=@($record.rejected_paths);dependency_edges=@($record.dependency_edges);trust_boundaries=@($record.trust_boundaries);tests=@($record.tests);context_gaps=@($record.context_gaps);stop_reason=$record.stop_reason}
       Write-JsonLine $path $result
     }
     'SelectSkills'{
-      $budget=Get-Budget $Root $TaskId;$catalog=@(Read-JsonFile $CatalogPath);$criteria=Read-JsonFile $InputJsonPath
+      $budget=Get-Budget $Root $TaskId
+      $catalog=@(Read-JsonFile $CatalogPath)
+      $criteria=Read-JsonFile $InputJsonPath
       Assert-ExactProperties $criteria @('triggers','languages','frameworks','required_sections','available_tools') 'SKILL_SELECTION_INPUT_INVALID'
       foreach($field in @('triggers','languages','frameworks','required_sections','available_tools')){Assert-StringList $criteria.$field $field|Out-Null}
-      $available=@($criteria.available_tools|ForEach-Object{[string]$_});$requiredSections=@($criteria.required_sections|ForEach-Object{[string]$_}|Select-Object -Unique)
+      $available=@($criteria.available_tools|ForEach-Object{[string]$_})
+      $requiredSections=@($criteria.required_sections|ForEach-Object{[string]$_}|Select-Object -Unique)
       $candidates=@();$rejected=@()
       foreach($skill in $catalog){
         Assert-ExactProperties $skill @('schema','skill_id','version','content_sha256','source','trust_class','triggers','supported_work_classes','languages','frameworks','required_tools','external_dependencies','conflicts_with','overlaps_with','estimated_context_tokens','sections') 'SKILL_MANIFEST_SCHEMA_INVALID'
@@ -188,8 +195,14 @@ try{
         if($skill.schema-ne'SKILL_CAPABILITY_MANIFEST_V1'-or-not$TrustRank.ContainsKey([string]$skill.trust_class)-or[string]$skill.content_sha256-notmatch'^[0-9a-fA-F]{64}$'){throw 'SKILL_MANIFEST_IDENTITY_INVALID'}
         foreach($field in @('triggers','supported_work_classes','languages','frameworks','required_tools','external_dependencies','conflicts_with','overlaps_with')){Assert-StringList $skill.$field $field|Out-Null}
         if(@($skill.supported_work_classes|Where-Object{$_-notin$Budgets.Keys}).Count){throw 'SKILL_WORK_CLASS_INVALID'}
-        if($skill.estimated_context_tokens-isnot[int]-or[int]$skill.estimated_context_tokens-lt0){throw 'SKILL_TOKEN_ESTIMATE_INVALID'}
-        $sectionIds=@();foreach($section in @($skill.sections)){Assert-ExactProperties $section @('id','heading') 'SKILL_SECTIONS_INVALID';if([string]::IsNullOrWhiteSpace([string]$section.id)) {throw 'SKILL_SECTIONS_INVALID'};$sectionIds+=[string]$section.id}
+        $tokenEstimate=0
+        if(-not[int]::TryParse([string]$skill.estimated_context_tokens,[ref]$tokenEstimate)-or$tokenEstimate-lt0){throw 'SKILL_TOKEN_ESTIMATE_INVALID'}
+        $sectionIds=@()
+        foreach($section in @($skill.sections)){
+          Assert-ExactProperties $section @('id','heading') 'SKILL_SECTIONS_INVALID'
+          if([string]::IsNullOrWhiteSpace([string]$section.id)){throw 'SKILL_SECTIONS_INVALID'}
+          $sectionIds+=[string]$section.id
+        }
         if(($sectionIds|Select-Object -Unique).Count-ne$sectionIds.Count){throw 'SKILL_SECTIONS_INVALID'}
         $id=[string]$skill.skill_id;$reason=$null
         if(@($skill.supported_work_classes).Count-and[string]$budget.work_class-notin@($skill.supported_work_classes)){$reason='WORK_CLASS_NOT_APPLICABLE'}
@@ -211,7 +224,8 @@ try{
         $overlap=@($selectedIds|Where-Object{$_-in@($skill.overlaps_with)}).Count-or@($selectedInternal|Where-Object{$id-in@($_.overlaps_with)}).Count
         if($conflict){$rejected+=[ordered]@{skill_id=$id;reason='SKILL_CONFLICT'};continue}
         if($overlap){$rejected+=[ordered]@{skill_id=$id;reason='OVERLAP_DEDUPLICATED'};continue}
-        $selectedInternal+=$skill;$sectionIds=@($skill.sections|ForEach-Object{[string]$_.id})
+        $selectedInternal+=$skill
+        $sectionIds=@($skill.sections|ForEach-Object{[string]$_.id})
         $sections=if($sectionIds.Count-and$requiredSections.Count){$requiredSections}elseif(-not$sectionIds.Count){@('FULL')}else{@($sectionIds|Sort-Object)}
         $selectedPublic+=[ordered]@{skill_id=$id;version=[string]$skill.version;content_sha256=([string]$skill.content_sha256).ToLowerInvariant();source=[string]$skill.source;trust_class=[string]$skill.trust_class;estimated_context_tokens=[int]$skill.estimated_context_tokens;sections=@($sections);selection_reason='HIGHEST_TRUST_NARROW_APPLICABLE_CAPABILITY'}
       }
@@ -219,26 +233,47 @@ try{
       Write-JsonFile (Join-Path (Get-TaskDir $Root $TaskId) 'SKILL_SELECTION.json') $result
     }
     'CachePut'{
-      $info=Get-CacheInfo $Root;$summary=Read-JsonFile $InputJsonPath;Assert-Summary $summary
+      $info=Get-CacheInfo $Root
+      $summary=Read-JsonFile $InputJsonPath
+      Assert-Summary $summary
       Write-JsonFile $info.Path ([ordered]@{schema='CONTENT_SUMMARY_CACHE_ENTRY_V1';file_sha256=$info.FileHash;relative_path_hash=$info.RelativeHash;parser_version=$info.ParserVersion;skill_context_hash=$info.SkillHash;summary=$summary;stored_at=(Get-Now)})
       $result=[ordered]@{schema='CONTENT_SUMMARY_CACHE_RESULT_V1';status='PUT';cache_key=$info.Key;file_sha256=$info.FileHash}
     }
     'CacheGet'{
       $info=Get-CacheInfo $Root
-      if(-not(Test-Path -LiteralPath $info.Path -PathType Leaf)){$result=[ordered]@{schema='CONTENT_SUMMARY_CACHE_RESULT_V1';status='MISS';file_sha256=$info.FileHash}}
-      else{
-        try{$entry=Read-JsonFile $info.Path;Assert-ExactProperties $entry @('schema','file_sha256','relative_path_hash','parser_version','skill_context_hash','summary','stored_at') 'CACHE_ENTRY_INVALID';Assert-Summary $entry.summary;if($entry.schema-ne'CONTENT_SUMMARY_CACHE_ENTRY_V1'-or$entry.file_sha256-ne$info.FileHash-or$entry.relative_path_hash-ne$info.RelativeHash-or$entry.parser_version-ne$info.ParserVersion-or$entry.skill_context_hash-ne$info.SkillHash){throw 'CACHE_ENTRY_INVALID'};$result=[ordered]@{schema='CONTENT_SUMMARY_CACHE_RESULT_V1';status='HIT';file_sha256=$info.FileHash;summary=$entry.summary}}
-        catch{$result=[ordered]@{schema='CONTENT_SUMMARY_CACHE_RESULT_V1';status='MISS';file_sha256=$info.FileHash;reason='CACHE_INVALID'}}
+      if(-not(Test-Path -LiteralPath $info.Path -PathType Leaf)){
+        $result=[ordered]@{schema='CONTENT_SUMMARY_CACHE_RESULT_V1';status='MISS';file_sha256=$info.FileHash}
+      }else{
+        try{
+          $entry=Read-JsonFile $info.Path
+          Assert-ExactProperties $entry @('schema','file_sha256','relative_path_hash','parser_version','skill_context_hash','summary','stored_at') 'CACHE_ENTRY_INVALID'
+          Assert-Summary $entry.summary
+          if($entry.schema-ne'CONTENT_SUMMARY_CACHE_ENTRY_V1'-or$entry.file_sha256-ne$info.FileHash-or$entry.relative_path_hash-ne$info.RelativeHash-or$entry.parser_version-ne$info.ParserVersion-or$entry.skill_context_hash-ne$info.SkillHash){throw 'CACHE_ENTRY_INVALID'}
+          $result=[ordered]@{schema='CONTENT_SUMMARY_CACHE_RESULT_V1';status='HIT';file_sha256=$info.FileHash;summary=$entry.summary}
+        }catch{
+          $result=[ordered]@{schema='CONTENT_SUMMARY_CACHE_RESULT_V1';status='MISS';file_sha256=$info.FileHash;reason='CACHE_INVALID'}
+        }
       }
     }
     'RecordMetrics'{
-      Assert-TaskId $TaskId;$metrics=Read-JsonFile $InputJsonPath;Assert-ExactProperties $metrics $MetricFields 'CONTEXT_METRICS_FIELDS_INVALID'
-      foreach($field in $MetricFields){$value=$metrics.$field;if($field-like'*tokens'-and$value-eq'UNAVAILABLE'){continue};if($value-isnot[int]-and$value-isnot[long]){throw "CONTEXT_METRIC_INVALID: $field"};if([long]$value-lt0){throw "CONTEXT_METRIC_INVALID: $field"}}
-      $result=[ordered]@{schema='CONTEXT_METRICS_V1';task_id=$TaskId;recorded_at=(Get-Now)};foreach($field in $MetricFields){$result[$field]=$metrics.$field}
-      Write-JsonLine (Get-GovernancePath $Root @('metrics','CONTEXT_METRICS.jsonl')) $result;Write-JsonLine (Join-Path (Get-TaskDir $Root $TaskId) 'CONTEXT_METRICS.jsonl') $result
+      Assert-TaskId $TaskId
+      $metrics=Read-JsonFile $InputJsonPath
+      Assert-ExactProperties $metrics $MetricFields 'CONTEXT_METRICS_FIELDS_INVALID'
+      foreach($field in $MetricFields){
+        $value=$metrics.$field
+        if($field-like'*tokens'-and$value-eq'UNAVAILABLE'){continue}
+        if($value-isnot[int]-and$value-isnot[long]){throw "CONTEXT_METRIC_INVALID: $field"}
+        if([long]$value-lt0){throw "CONTEXT_METRIC_INVALID: $field"}
+      }
+      $result=[ordered]@{schema='CONTEXT_METRICS_V1';task_id=$TaskId;recorded_at=(Get-Now)}
+      foreach($field in $MetricFields){$result[$field]=$metrics.$field}
+      Write-JsonLine (Get-GovernancePath $Root @('metrics','CONTEXT_METRICS.jsonl')) $result
+      Write-JsonLine (Join-Path (Get-TaskDir $Root $TaskId) 'CONTEXT_METRICS.jsonl') $result
     }
     'ValidateTask'{
-      $budget=Get-Budget $Root $TaskId;$task=Get-TaskDir $Root $TaskId;$errors=@();$cycles=@()
+      $budget=Get-Budget $Root $TaskId
+      $task=Get-TaskDir $Root $TaskId
+      $errors=@();$cycles=@()
       try{$cycles=Read-JsonLines (Join-Path $task 'CONTEXT_RETRIEVAL.jsonl')}catch{$errors+='CONTEXT_RETRIEVAL_INVALID'}
       if($cycles.Count-gt[Math]::Min(3,[int]$budget.max_retrieval_cycles)){$errors+='RETRIEVAL_CYCLE_LIMIT'}
       for($i=0;$i-lt$cycles.Count;$i++){
@@ -250,11 +285,20 @@ try{
       }
       if($cycles.Count-eq0-or[string]$cycles[-1].stop_reason-notin$TerminalReasons){$errors+='TERMINAL_STATE_REQUIRED'}elseif($cycles[-1].stop_reason-eq'BLOCKED_CONTEXT_GAP'){$errors+='BLOCKED_CONTEXT_GAP'}
       $selectionPath=Join-Path $task 'SKILL_SELECTION.json'
-      if(Test-Path -LiteralPath $selectionPath -PathType Leaf){$selection=Read-JsonFile $selectionPath;if($selection.schema-ne'SKILL_SELECTION_V1'-or$selection.task_id-ne$TaskId-or$selection.work_class-ne$budget.work_class){$errors+='SKILL_SELECTION_SCHEMA_INVALID'}elseif(@($selection.selected).Count-gt[int]$budget.max_loaded_skills){$errors+='SKILL_BUDGET_EXCEEDED'}elseif(@($selection.selected|Where-Object{@($_.sections).Count-eq0}).Count){$errors+='SKILL_SECTION_SELECTION_REQUIRED'}}
+      if(Test-Path -LiteralPath $selectionPath -PathType Leaf){
+        $selection=Read-JsonFile $selectionPath
+        if($selection.schema-ne'SKILL_SELECTION_V1'-or$selection.task_id-ne$TaskId-or$selection.work_class-ne$budget.work_class){$errors+='SKILL_SELECTION_SCHEMA_INVALID'}
+        elseif(@($selection.selected).Count-gt[int]$budget.max_loaded_skills){$errors+='SKILL_BUDGET_EXCEEDED'}
+        elseif(@($selection.selected|Where-Object{@($_.sections).Count-eq0}).Count){$errors+='SKILL_SECTION_SELECTION_REQUIRED'}
+      }
       $result=[ordered]@{schema='CONTEXT_TASK_VALIDATION_V1';task_id=$TaskId;valid=($errors.Count-eq0);errors=@($errors|Sort-Object -Unique)}
     }
   }
-  $result|ConvertTo-Json -Depth 50 -Compress;$global:LASTEXITCODE=0;exit 0
+  $result|ConvertTo-Json -Depth 50 -Compress
+  $global:LASTEXITCODE=0
+  exit 0
 }catch{
-  [Console]::Error.WriteLine($_.Exception.Message);$global:LASTEXITCODE=2;exit 2
+  [Console]::Error.WriteLine($_.Exception.Message)
+  $global:LASTEXITCODE=2
+  exit 2
 }
