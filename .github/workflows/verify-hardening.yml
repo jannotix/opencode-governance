@@ -19,6 +19,7 @@ jobs:
         run: |
           python3 scripts/fix-v344-migration.py
           python3 scripts/apply-v344.py
+          python3 scripts/fix-v344-whitespace.py
       - name: Run focused regressions before commit
         run: |
           set -euo pipefail
