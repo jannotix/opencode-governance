@@ -34,7 +34,7 @@ jobs:
           assert data['architect_runner_version']=='3.4.4'
           assert data['context_intelligence_version']=='3.4.4'
           assert data['workflow_continuation_version']=='3.4.4'
-          names=['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','workflow-continuation.py']
+          names=['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','workflow-continuation.ps1','workflow-continuation.py']
           assert set(data['managed_tools'])=={str(tools/name) for name in names}
           assert all((tools/name).is_file() for name in names)
           for name in ['architect','build','plan']:
@@ -45,7 +45,7 @@ jobs:
               assert 'CONTEXT_INTELLIGENCE_ENTRY' in text and 'BLOCKED_CONTEXT_GAP' in text
           for name in ['ai-workflow','ai-resume']:
               text=(root/'commands'/f'{name}.md').read_text()
-              for marker in ['WORKFLOW_CONTINUATION_GATE_V1','WORKFLOW_CONTINUATION_CORE','CONTINUE_REQUIRED','TERMINAL_ALLOWED',str(tools/'workflow-continuation.py')]:assert marker in text
+              for marker in ['WORKFLOW_CONTINUATION_GATE_V1','WINDOWS_WORKFLOW_CONTINUATION_CORE','UNIX_WORKFLOW_CONTINUATION_CORE','CONTINUE_REQUIRED','TERMINAL_ALLOWED',str(tools/'workflow-continuation.ps1'),str(tools/'workflow-continuation.py')]:assert marker in text
           PY
           python3 tests/test-command-contracts.py --config-dir "$config"
           ./scripts/verify-routing.sh "$config"
@@ -61,7 +61,7 @@ jobs:
           ./scripts/uninstall.sh --config-dir "$config" >/dev/null
           test -f "$config/opencode-governance-tools/unrelated.txt"
           test -f "$cache/sentinel.txt"
-          for name in architect-attempt.ps1 architect-attempt.sh executor-attempt.ps1 executor-attempt.sh context-intelligence.ps1 context-intelligence.sh context-intelligence.py workflow-continuation.py; do test ! -e "$config/opencode-governance-tools/$name";done
+          for name in architect-attempt.ps1 architect-attempt.sh executor-attempt.ps1 executor-attempt.sh context-intelligence.ps1 context-intelligence.sh context-intelligence.py workflow-continuation.ps1 workflow-continuation.py; do test ! -e "$config/opencode-governance-tools/$name";done
       - name: Verify release metadata
         run: |
           test "$(cat VERSION)" = '3.4.4'
@@ -78,7 +78,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          foreach($path in 'scripts/context-intelligence.ps1','tests/test-context-intelligence.ps1','tests/test-workflow-continuation.ps1','scripts/install.ps1','scripts/uninstall.ps1','scripts/verify-routing.ps1','scripts/normalize-jsonc.ps1'){
+          foreach($path in 'scripts/context-intelligence.ps1','scripts/workflow-continuation.ps1','tests/test-context-intelligence.ps1','tests/test-workflow-continuation.ps1','scripts/install.ps1','scripts/uninstall.ps1','scripts/verify-routing.ps1','scripts/normalize-jsonc.ps1'){
             $errors=$null
             [Management.Automation.Language.Parser]::ParseFile((Join-Path $env:GITHUB_WORKSPACE $path),[ref]$null,[ref]$errors)|Out-Null
             if($errors.Count){throw "$path`n$($errors|Out-String)"}
@@ -101,21 +101,21 @@ jobs:
           if($manifest.architect_runner_version-ne'3.4.4'){throw 'Architect runner version mismatch'}
           if($manifest.context_intelligence_version-ne'3.4.4'){throw 'Context Intelligence version mismatch'}
           if($manifest.workflow_continuation_version-ne'3.4.4'){throw 'Workflow continuation version mismatch'}
-          $names=@('architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','workflow-continuation.py')
-          if(@($manifest.managed_tools).Count-ne8){throw 'Expected eight managed tools'}
+          $names=@('architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','workflow-continuation.ps1','workflow-continuation.py')
+          if(@($manifest.managed_tools).Count-ne9){throw 'Expected nine managed tools'}
           foreach($name in $names){if(-not(Test-Path (Join-Path $tools $name) -PathType Leaf)){throw "Missing tool: $name"}}
           foreach($name in 'architect','build','plan'){
             $text=Get-Content (Join-Path $config "agents/$name.md") -Raw
             foreach($marker in 'CONTEXT_INTELLIGENCE_V1','CONTEXT_BUDGET.json','SKILL_CAPABILITY_MANIFEST_V1','CONTEXT_SUFFICIENT','BLOCKED_CONTEXT_GAP','Governance state paths may not traverse symbolic links or reparse points.',(Join-Path $tools 'context-intelligence.ps1'),'WORKFLOW_CONTINUATION_GATE_V1'){if($text-notlike"*$marker*"){throw "$name missing $marker"}}
           }
           foreach($name in 'ai-workflow','ai-resume','ai-metrics'){$text=Get-Content (Join-Path $config "commands/$name.md") -Raw;if($text-notlike'*CONTEXT_INTELLIGENCE_ENTRY*'-or$text-notlike'*BLOCKED_CONTEXT_GAP*'){throw "$name context entry missing"}}
-          foreach($name in 'ai-workflow','ai-resume'){$text=Get-Content (Join-Path $config "commands/$name.md") -Raw;foreach($marker in 'WORKFLOW_CONTINUATION_GATE_V1','WORKFLOW_CONTINUATION_CORE','CONTINUE_REQUIRED','TERMINAL_ALLOWED',(Join-Path $tools 'workflow-continuation.py')){if($text-notlike"*$marker*"){throw "$name workflow continuation marker missing: $marker"}}}
+          foreach($name in 'ai-workflow','ai-resume'){$text=Get-Content (Join-Path $config "commands/$name.md") -Raw;foreach($marker in 'WORKFLOW_CONTINUATION_GATE_V1','WINDOWS_WORKFLOW_CONTINUATION_CORE','UNIX_WORKFLOW_CONTINUATION_CORE','CONTINUE_REQUIRED','TERMINAL_ALLOWED',(Join-Path $tools 'workflow-continuation.ps1'),(Join-Path $tools 'workflow-continuation.py')){if($text-notlike"*$marker*"){throw "$name workflow continuation marker missing: $marker"}}}
           python tests/test-command-contracts.py --config-dir $config
           ./scripts/verify-routing.ps1 -ConfigDir $config
           $project=Join-Path $env:RUNNER_TEMP 'v34-installed-project';New-Item -ItemType Directory -Force -Path $project|Out-Null
           & (Join-Path $tools 'context-intelligence.ps1') -Action InitializeBudget -ProjectDir $project -TaskId INSTALLED -WorkClass PATCH -CacheRoot (Join-Path $env:RUNNER_TEMP 'v34-installed-cache')|Out-Null
           $runState=Join-Path $env:RUNNER_TEMP 'v34-run-state.json';@{top_level_command='ai-workflow';current_phase='AUDIT_PASS';next_required_phase='IDEA_INTAKE';terminal_reason=$null}|ConvertTo-Json|Set-Content $runState -Encoding utf8
-          & python (Join-Path $tools 'workflow-continuation.py') --run-state $runState --expected-command ai-workflow|Out-Null
+          & pwsh -NoProfile -File (Join-Path $tools 'workflow-continuation.ps1') -RunStatePath $runState -ExpectedCommand ai-workflow|Out-Null
           if($LASTEXITCODE-ne3){throw "Expected continuation exit 3, got $LASTEXITCODE"}
           'preserve'|Set-Content (Join-Path $tools 'unrelated.txt');./scripts/uninstall.ps1 -ConfigDir $config|Out-Null
           if(-not(Test-Path (Join-Path $tools 'unrelated.txt'))){throw 'Unrelated tool removed'}
