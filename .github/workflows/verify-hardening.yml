@@ -34,6 +34,7 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git restore .github/workflows/verify-v332.yml .github/workflows/verify-v333.yml .github/workflows/verify-v340.yml
           git add -A
           git commit -m 'release: prepare OpenCode Governance 3.4.4'
           git push origin HEAD:release/v3.4.4-deterministic-workflow-continuation
