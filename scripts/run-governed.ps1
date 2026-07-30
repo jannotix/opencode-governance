@@ -25,15 +25,29 @@ if($TimeoutSeconds -lt 30){throw 'TimeoutSeconds must be at least 30.'}
 try{$Routing=Get-Content -LiteralPath $RoutingConfigPath -Raw|ConvertFrom-Json}catch{throw 'Routing profile is invalid JSON.'}
 if([string]$Routing.schema_version -ne '1.0'){throw 'Routing schema_version must be 1.0.'}
 if($null-eq$Routing.settings-or$null-eq$Routing.roles){throw 'Routing profile is missing settings or roles.'}
-if('architect' -notin @($Routing.settings.enabled_roles)){throw 'Architect failover is not enabled in the routing profile.'}
-if($Routing.settings.allow_degraded_independence-ne$false){throw 'Routing must fail closed on degraded model independence.'}
-$Architect=$Routing.roles.architect
-if(-not $Architect -or @($Architect.fallbacks).Count -eq 0){throw 'Architect failover requires at least one fallback.'}
 $AllowedFailures=@('PROVIDER_UNAVAILABLE','RATE_LIMIT','PLAN_QUOTA_EXHAUSTED','MODEL_RETIRED','MODEL_TEMPORARILY_UNAVAILABLE','BOUNDED_TIMEOUT')
-$Eligible=@($Routing.settings.eligible_failures|ForEach-Object{[string]$_})
-if(@($Eligible|Where-Object{$_-notin$AllowedFailures}).Count){throw 'Routing profile contains an unsupported eligible failure.'}
-$DefaultCooldown=[int]$Routing.settings.default_cooldown_seconds
-if($DefaultCooldown-lt60-or$DefaultCooldown-gt86400){throw 'default cooldown must be between 60 and 86400 seconds.'}
+$AllowedOnlyOn=$AllowedFailures+@('MODEL_UNAVAILABLE_ON_ALL_CONFIGURED_PROVIDERS')
+function Get-JsonArray([object]$Owner,[string]$Name,[string]$Context,[bool]$Required=$true){
+  $Property=$Owner.PSObject.Properties[$Name]
+  if($null-eq$Property){if($Required){throw "$Context must be an array."};return}
+  $Value=$Property.Value
+  if($Value-is[string]-or$Value-isnot[System.Collections.IEnumerable]){throw "$Context must be an array."}
+  @($Value)
+}
+function Test-JsonInteger([object]$Value){($Value-is[int])-or($Value-is[long])}
+$Enabled=@(Get-JsonArray $Routing.settings 'enabled_roles' 'settings.enabled_roles')
+if(@($Enabled|Where-Object{$_-isnot[string]-or[string]::IsNullOrWhiteSpace([string]$_)}).Count-gt0){throw 'settings.enabled_roles contains an invalid value.'}
+if('architect'-notin@($Enabled|ForEach-Object{[string]$_})){throw 'Architect failover is not enabled in the routing profile.'}
+$Eligible=@(Get-JsonArray $Routing.settings 'eligible_failures' 'settings.eligible_failures')
+if(@($Eligible|Where-Object{$_-isnot[string]-or[string]::IsNullOrWhiteSpace([string]$_)-or([string]$_-notin$AllowedFailures)}).Count-gt0){throw 'Routing profile contains an unsupported eligible failure.'}
+if($Routing.settings.allow_degraded_independence-isnot[bool]-or$Routing.settings.allow_degraded_independence-ne$false){throw 'Routing must fail closed on degraded model independence.'}
+$CooldownValue=$Routing.settings.default_cooldown_seconds
+if(-not(Test-JsonInteger $CooldownValue)-or[long]$CooldownValue-lt60-or[long]$CooldownValue-gt86400){throw 'default cooldown must be an integer between 60 and 86400 seconds.'}
+$DefaultCooldown=[long]$CooldownValue
+$Architect=$Routing.roles.architect
+if($null-eq$Architect){throw 'Architect role is missing from the routing profile.'}
+$Fallbacks=@(Get-JsonArray $Architect 'fallbacks' 'architect fallbacks' $false)
+if($Fallbacks.Count-eq0){throw 'Architect failover requires at least one fallback.'}
 $StatePath=Join-Path $ConfigDir 'opencode-governance-routing-state.tsv'
 New-Item -ItemType Directory -Force -Path $ConfigDir|Out-Null
 $Marker='[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]'
@@ -41,13 +55,14 @@ $env:OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE='1'
 $RoutedArguments=if($Arguments -like "*$Marker*"){$Arguments}elseif([string]::IsNullOrWhiteSpace($Arguments)){$Marker}else{"$Arguments`n`n$Marker"}
 
 function Get-OnlyOn([object]$Candidate){
-  if(-not $Candidate.PSObject.Properties['only_on']){throw 'Every route candidate must define only_on.'}
-  @($Candidate.only_on|Where-Object{-not[string]::IsNullOrWhiteSpace([string]$_)}|ForEach-Object{[string]$_})
+  $OnlyOn=@(Get-JsonArray $Candidate 'only_on' 'Every route candidate only_on')
+  if(@($OnlyOn|Where-Object{$_-isnot[string]-or[string]::IsNullOrWhiteSpace([string]$_)-or([string]$_-notin$AllowedOnlyOn)}).Count-gt0){throw 'Every route candidate only_on contains an unsupported value.'}
+  @($OnlyOn|ForEach-Object{[string]$_})
 }
 function Get-RoutePriority([object]$Route){
-  $priority=0
-  if(-not[int]::TryParse([string]$Route.priority,[ref]$priority)-or$priority-lt1){throw 'Architect fallback priority must be a positive integer.'}
-  $priority
+  $PriorityValue=$Route.priority
+  if(-not(Test-JsonInteger $PriorityValue)-or[long]$PriorityValue-lt1){throw 'Architect fallback priority must be a positive integer.'}
+  [long]$PriorityValue
 }
 function Validate-Route([object]$Route,[bool]$NeedsPriority){
   if($null-eq$Route-or[string]$Route.model-notmatch'^[^/\s]+/\S+$'){throw "Invalid Architect route model: $($Route.model)"}
@@ -63,13 +78,13 @@ function Validate-Route([object]$Route,[bool]$NeedsPriority){
 }
 Validate-Route $Architect.primary $false
 $Priorities=@()
-foreach($route in @($Architect.fallbacks)){
+foreach($route in $Fallbacks){
   Validate-Route $route $true
   $priority=Get-RoutePriority $route
   if($priority-in$Priorities){throw 'Architect fallback priorities must be unique.'}
   $Priorities+=$priority
 }
-$Routes=@([pscustomobject]@{candidate=$Architect.primary;priority=0;route='architect-primary'})+@($Architect.fallbacks|Sort-Object{Get-RoutePriority $_}|ForEach-Object{$priority=Get-RoutePriority $_;[pscustomobject]@{candidate=$_;priority=$priority;route="architect-fallback-$priority"}})
+$Routes=@([pscustomobject]@{candidate=$Architect.primary;priority=0;route='architect-primary'})+@($Fallbacks|Sort-Object{Get-RoutePriority $_}|ForEach-Object{$priority=Get-RoutePriority $_;[pscustomobject]@{candidate=$_;priority=$priority;route="architect-fallback-$priority"}})
 
 function Get-Epoch(){[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()}
 function Load-Cooldowns(){

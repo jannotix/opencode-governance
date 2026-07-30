@@ -4,7 +4,9 @@ Provider- and model-agnostic product-lifecycle and engineering governance for Op
 
 > Community project. Not affiliated with or maintained by the OpenCode team.
 
-Current release: **3.4.1 — Cleanup & Hardening**.
+Current release: **3.4.2 — Cross-Platform Schema Parity**.
+
+Version 3.4.2 makes routing-profile and skill-manifest JSON type validation identical across Windows and Unix entrypoints; scalar strings no longer pass where the schema requires arrays or integers.
 
 OpenCode Governance turns an ordinary AI coding session into a controlled engineering workflow. It does not replace OpenCode and it does not provide an AI model. It installs a set of specialized agents, commands, state contracts and deterministic helpers that force planning, implementation, verification and review to use the same approved requirements and current repository evidence.
 

@@ -195,8 +195,9 @@ try{
         if($skill.schema-ne'SKILL_CAPABILITY_MANIFEST_V1'-or-not$TrustRank.ContainsKey([string]$skill.trust_class)-or[string]$skill.content_sha256-notmatch'^[0-9a-fA-F]{64}$'){throw 'SKILL_MANIFEST_IDENTITY_INVALID'}
         foreach($field in @('triggers','supported_work_classes','languages','frameworks','required_tools','external_dependencies','conflicts_with','overlaps_with')){Assert-StringList $skill.$field $field|Out-Null}
         if(@($skill.supported_work_classes|Where-Object{$_-notin$Budgets.Keys}).Count){throw 'SKILL_WORK_CLASS_INVALID'}
-        $tokenEstimate=0
-        if(-not[int]::TryParse([string]$skill.estimated_context_tokens,[ref]$tokenEstimate)-or$tokenEstimate-lt0){throw 'SKILL_TOKEN_ESTIMATE_INVALID'}
+        $tokenEstimateValue=$skill.estimated_context_tokens
+        if(($tokenEstimateValue-isnot[int]-and$tokenEstimateValue-isnot[long])-or[long]$tokenEstimateValue-lt0-or[long]$tokenEstimateValue-gt[int]::MaxValue){throw 'SKILL_TOKEN_ESTIMATE_INVALID'}
+        $tokenEstimate=[int]$tokenEstimateValue
         $sectionIds=@()
         foreach($section in @($skill.sections)){
           Assert-ExactProperties $section @('id','heading') 'SKILL_SECTIONS_INVALID'
@@ -227,7 +228,7 @@ try{
         $selectedInternal+=$skill
         $sectionIds=@($skill.sections|ForEach-Object{[string]$_.id})
         $sections=if($sectionIds.Count-and$requiredSections.Count){$requiredSections}elseif(-not$sectionIds.Count){@('FULL')}else{@($sectionIds|Sort-Object)}
-        $selectedPublic+=[ordered]@{skill_id=$id;version=[string]$skill.version;content_sha256=([string]$skill.content_sha256).ToLowerInvariant();source=[string]$skill.source;trust_class=[string]$skill.trust_class;estimated_context_tokens=[int]$skill.estimated_context_tokens;sections=@($sections);selection_reason='HIGHEST_TRUST_NARROW_APPLICABLE_CAPABILITY'}
+        $selectedPublic+=[ordered]@{skill_id=$id;version=[string]$skill.version;content_sha256=([string]$skill.content_sha256).ToLowerInvariant();source=[string]$skill.source;trust_class=[string]$skill.trust_class;estimated_context_tokens=$tokenEstimate;sections=@($sections);selection_reason='HIGHEST_TRUST_NARROW_APPLICABLE_CAPABILITY'}
       }
       $result=[ordered]@{schema='SKILL_SELECTION_V1';task_id=$TaskId;work_class=[string]$budget.work_class;max_loaded_skills=[int]$budget.max_loaded_skills;selected=@($selectedPublic);rejected=@($rejected|Sort-Object skill_id);selected_at=(Get-Now)}
       Write-JsonFile (Join-Path (Get-TaskDir $Root $TaskId) 'SKILL_SELECTION.json') $result
