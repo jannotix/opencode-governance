@@ -33,7 +33,7 @@ jobs:
         shell: pwsh
         run: |
           $errors=$null
-          foreach($path in 'tests/test-runner-contract.ps1','tests/test-jsonc-preservation.ps1','tests/test-jsonc-readable.ps1','tests/test-workflow-continuation.ps1','scripts/run-governed.ps1','scripts/install.ps1','scripts/normalize-jsonc.ps1'){
+          foreach($path in 'tests/test-runner-contract.ps1','tests/test-jsonc-preservation.ps1','tests/test-jsonc-readable.ps1','tests/test-workflow-continuation.ps1','scripts/workflow-continuation.ps1','scripts/run-governed.ps1','scripts/install.ps1','scripts/normalize-jsonc.ps1'){
             [Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path),[ref]$null,[ref]$errors)|Out-Null
             if($errors.Count){throw "$path`n$($errors|Out-String)"}
           }
