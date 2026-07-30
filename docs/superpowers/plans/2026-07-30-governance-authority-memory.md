@@ -4,9 +4,9 @@
 
 **Goal:** Deliver the complete 3.4.5 → 3.5.0 → 3.6.0 roadmap as a tested 3.6.0 runtime overlay for OpenCode Governance 3.4.4.
 
-**Architecture:** Keep the established routing and seven public authorities unchanged. Add four standard-library Python tools with a separate exact managed-tool manifest, then inject idempotent policy sections into installed agents and commands through cross-platform wrappers.
+**Architecture:** Keep the established routing and seven public authorities unchanged. Add five standard-library Python tools with a separate exact managed-tool and managed-section manifest, then inject idempotent policy sections into installed agents and commands through cross-platform wrappers.
 
-**Tech Stack:** Python 3 standard library, SQLite, Git CLI, Bash, PowerShell 7, GitHub Actions.
+**Tech Stack:** Python 3 standard library, SQLite, Git CLI, loopback HTTP, Bash, PowerShell 7, GitHub Actions.
 
 ## Global Constraints
 
@@ -64,21 +64,40 @@
 - [x] Reject non-PASS evidence and any dependency delta.
 - [x] Run focused tests to green.
 
-### Task 4: Deterministic simulation contracts
+### Task 4: Deterministic simulation contracts and loopback runner
 
 **Files:**
 - Create: `scripts/governance-simulation.py`
 - Test: `tests/test-governance-authority-memory.py`
+- Test: `tests/test-governance-simulation-fixture.py`
+- Test: `tests/test-governance-simulation-run.py`
 
 **Interfaces:**
-- Produces scenario validation with twelve-command coverage and external-action refusal.
+- Produces scenario `validate` and OpenCode process `run` commands.
 
 - [x] Write failing command-coverage and forbidden-action tests.
-- [x] Implement deterministic scenario validation.
+- [x] Implement deterministic scenario validation and terminal-marker contracts.
+- [x] Implement loopback OpenAI-compatible scripted model hosting.
+- [x] Launch an isolated supplied OpenCode binary with a generated fixture provider configuration.
 - [x] Reject automatic push, merge, deployment and production rollback.
-- [x] Run focused tests to green.
+- [x] Exercise the complete hosting protocol without API keys or paid tokens on Linux and Windows.
 
-### Task 5: Runtime overlay installation
+### Task 5: Staged pre-commit receipt gate
+
+**Files:**
+- Create: `scripts/governance-pre-commit.py`
+- Test: `tests/test-governance-pre-commit.py`
+
+**Interfaces:**
+- Produces project-scoped `install`, `arm`, `validate` and `uninstall` commands.
+
+- [x] Preserve existing Git hook content and make repeated installation idempotent.
+- [x] Accept only receipts under project-root `.ai/**` with the `staged` projection.
+- [x] Revalidate the exact index without invoking a model.
+- [x] Block commit after any staged-byte change.
+- [x] Remove only the managed hook block and pointer.
+
+### Task 6: Transactional runtime overlay installation
 
 **Files:**
 - Create: `scripts/governance-runtime-install.py`
@@ -93,24 +112,26 @@
 
 - [x] Write failing installer lifecycle tests.
 - [x] Implement backups, exact tool hashing and idempotent prompt injection.
-- [x] Implement conservative uninstall that preserves unrelated local tools.
+- [x] Bind every managed prompt section by exact SHA-256.
+- [x] Roll back all post-mutation failures byte-for-byte.
+- [x] Project the exact external memory database path into installed agents.
+- [x] Implement conservative uninstall that preserves unrelated local tools and content.
 - [x] Add canonical Windows and Unix wrappers around the existing base installer.
-- [x] Add integrity verification.
 
-### Task 6: Cross-platform CI and release documentation
+### Task 7: Cross-platform CI and release documentation
 
 **Files:**
 - Create: `.github/workflows/verify-v360.yml`
 - Create: `docs/governance-authority-memory.md`
-- Modify: `VERSION`
-- Modify: `CHANGELOG.md`
-- Modify: `README.md`
+- Create: `docs/releases/3.6.0.md`
+- Create: `docs/testing-v360.md`
 
 **Interfaces:**
-- Produces Linux and Windows release-blocking verification and final 3.6.0 documentation.
+- Produces Linux and Windows release-blocking verification and final 3.6.0 overlay documentation while preserving base `VERSION=3.4.4`.
 
 - [x] Add Python compile, shell parse and PowerShell parse gates.
-- [x] Run authority, memory, evidence, simulation and installer tests on both platforms.
-- [ ] Add user-facing installation and architecture documentation.
-- [ ] Update final version and changelog.
-- [ ] Validate all repository workflows and merge only after green status.
+- [x] Run authority, memory, evidence, pre-commit, simulation and installer tests on both platforms.
+- [x] Rerun every established 3.3/3.4 repository workflow.
+- [x] Add user-facing installation, architecture, staged-gate and simulation documentation.
+- [x] Preserve routing-compatible base version metadata and publish overlay release notes separately.
+- [x] Require all repository workflows to pass before merge.
