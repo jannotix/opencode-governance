@@ -114,6 +114,7 @@ def main() -> None:
         "templates/commands/ai-resume.md",
         "templates/agents/architect.md",
         "templates/agents/build.md",
+        "templates/agents/plan.md",
     ):
         text = (ROOT / relative).read_text(encoding="utf-8")
         for marker in (
@@ -123,9 +124,10 @@ def main() -> None:
             "next_required_phase",
             "terminal_reason",
             "CONTINUE_REQUIRED",
-            "TERMINAL_ALLOWED",
         ):
             assert marker in text, f"{relative} missing {marker}"
+        if relative != "templates/agents/plan.md":
+            assert "TERMINAL_ALLOWED" in text, f"{relative} missing TERMINAL_ALLOWED"
 
     print("PASS: deterministic workflow continuation contract")
 
