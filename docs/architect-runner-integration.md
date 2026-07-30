@@ -1,6 +1,6 @@
 # Architect Runner Integration
 
-OpenCode Governance 3.3.2 fixed the `ARCHITECT_RUNNER_UNAVAILABLE` installation defect for Architect pre-execution failover. Version 3.3.3 added the PowerShell 7 host contract, and 3.3.4 added content-aware project-state integrity plus non-Git workspace support. Version 3.4.1 hardens routing validation, cooldown parity, managed-tool backup and retained-log privacy. Version 3.4.2 enforces identical JSON array and integer types across Windows and Unix entrypoints. Version 3.4.4 preserves readable JSONC URL literals and publishes releases through verified repository metadata.
+OpenCode Governance 3.3.2 fixed the `ARCHITECT_RUNNER_UNAVAILABLE` installation defect for Architect pre-execution failover. Version 3.3.3 added the PowerShell 7 host contract, and 3.3.4 added content-aware project-state integrity plus non-Git workspace support. Version 3.4.1 hardens routing validation, cooldown parity, managed-tool backup and retained-log privacy. Version 3.4.2 enforces identical JSON array and integer types across Windows and Unix entrypoints. Version 3.4.3 preserves readable JSONC URL literals and publishes releases through verified repository metadata. Version 3.4.4 adds deterministic workflow continuation and executable Architect runner handoffs.
 
 ## Scope
 
@@ -19,7 +19,7 @@ The runner is not used for `ai-workflow`, `ai-execute`, `ai-review` or `ai-relea
 
 ## Installed tools
 
-With routing enabled, the current installation records seven managed tools:
+With routing enabled, the current installation records nine managed tools:
 
 ```text
 opencode-governance-tools/architect-attempt.ps1
@@ -29,6 +29,8 @@ opencode-governance-tools/executor-attempt.sh
 opencode-governance-tools/context-intelligence.ps1
 opencode-governance-tools/context-intelligence.sh
 opencode-governance-tools/context-intelligence.py
+opencode-governance-tools/workflow-continuation.ps1
+opencode-governance-tools/workflow-continuation.py
 ```
 
 The 3.4.4 routing manifest records:
@@ -37,6 +39,7 @@ The 3.4.4 routing manifest records:
 governance_version: 3.4.4
 architect_runner_version: 3.4.4
 context_intelligence_version: 3.4.4
+workflow_continuation_version: 3.4.4
 ```
 
 Before replacing an existing routing installation, the wrapper validates the complete new profile. An invalid profile cannot remove the current manifest, aliases or managed tools. Every existing managed tool is copied into the timestamped installation backup before replacement.
@@ -80,9 +83,11 @@ WINDOWS_HOST: pwsh -NoProfile -File
 WINDOWS_RUNNER: <exact-installed-path>
 UNIX_RUNNER: <exact-installed-path>
 PROJECT_DIR: <CURRENT_PROJECT_ROOT>
+WINDOWS_COMMAND: <complete executable command>
+UNIX_COMMAND: <complete executable command>
 ```
 
-The agent must not invent another path and must not launch a nested runner from inside the active OpenCode process.
+The agent must return both complete commands with the actual project root and original arguments substituted. It must not invent another path or launch a nested runner from inside the active OpenCode process.
 
 ## Routed child marker
 
@@ -179,7 +184,7 @@ pwsh -NoProfile -File `
 bash ./scripts/verify-routing.sh <config-dir>
 ```
 
-The routing verifier checks exact managed tool paths, installed files, Architect/Build/Plan policy markers, command entry gates, project-state fingerprint markers, cooldown validation, Context Intelligence hardening, hidden-route consistency and the preserved Executor routing contract. PowerShell wrappers rely on terminating errors from PowerShell child scripts and never infer their outcome from a pre-existing native `$LASTEXITCODE` value.
+The routing verifier checks exact managed tool paths, installed files, Architect/Build/Plan policy markers, command entry gates, project-state fingerprint markers, cooldown validation, Context Intelligence hardening, workflow-continuation helpers, hidden-route consistency and the preserved Executor routing contract. PowerShell wrappers rely on terminating errors from PowerShell child scripts and never infer their outcome from a pre-existing native `$LASTEXITCODE` value.
 
 ## Distinguishing workspace errors
 
@@ -189,4 +194,4 @@ The routing verifier checks exact managed tool paths, installed files, Architect
 
 `DISCOVERY_BLOCKED_WRONG_WORKSPACE` is a different, correct fail-closed condition: a prompt intended for the Governance repository was executed inside an application repository, or vice versa. Version 3.4.1 does not weaken workspace validation.
 
-Version 3.4.4 also installs `workflow-continuation.py`; `/ai-workflow` and `/ai-resume` must obtain `TERMINAL_ALLOWED` before reporting completion. `CONTINUE_REQUIRED` preserves the current lifecycle and `INVALID_RUN_STATE` fails closed.
+Version 3.4.4 installs `workflow-continuation.ps1` and `workflow-continuation.py`; `/ai-workflow` and `/ai-resume` must obtain `TERMINAL_ALLOWED` before reporting completion. `CONTINUE_REQUIRED` preserves the current lifecycle and `INVALID_RUN_STATE` fails closed.
