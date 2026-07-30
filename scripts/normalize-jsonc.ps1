@@ -1,4 +1,7 @@
-param([Parameter(Mandatory)][string]$Path)
+param(
+  [Parameter(Mandatory)][string]$Path,
+  [switch]$SetDefaultAgent
+)
 
 $ErrorActionPreference='Stop'
 if($PSVersionTable.PSVersion.Major-lt7){throw 'POWERSHELL_7_REQUIRED'}
@@ -48,5 +51,6 @@ $Raw=Get-Content -LiteralPath $Path -Raw
 $Clean=Remove-TrailingCommas (Remove-JsoncComments $Raw)
 try{$Value=if([string]::IsNullOrWhiteSpace($Clean)){[pscustomobject][ordered]@{'$schema'='https://opencode.ai/config.json'}}else{$Clean|ConvertFrom-Json}}catch{throw "Cannot safely parse $Path: $($_.Exception.Message)"}
 if($Value-isnot[pscustomobject]){throw "OpenCode configuration root must be an object: $Path"}
+if($SetDefaultAgent){$Value|Add-Member NoteProperty default_agent 'architect' -Force}
 $Protected=(($Value|ConvertTo-Json -Depth 50).Replace('/','\u002f'))+[Environment]::NewLine
 [IO.File]::WriteAllText($Path,$Protected,(New-Object Text.UTF8Encoding($false)))
