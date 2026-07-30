@@ -83,6 +83,26 @@ jobs:
       - name: Apply the schema parity patch
         run: /tmp/v342-apply.sh
 
+      - name: Align Unix installer diagnostics
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/install.sh')
+          text = path.read_text(encoding='utf-8')
+          old = """enabled=settings.get('enabled_roles');eligible=settings.get('eligible_failures')
+          if not isinstance(enabled,list) or any(value not in role_names for value in enabled): raise SystemExit('Routing profile contains an unsupported enabled role.')
+          if not isinstance(eligible,list) or any(value not in failures for value in eligible): raise SystemExit('Routing profile contains an unsupported eligible failure.')"""
+          new = """enabled=settings.get('enabled_roles');eligible=settings.get('eligible_failures')
+          if not isinstance(enabled,list): raise SystemExit('settings.enabled_roles must be an array.')
+          if any(value not in role_names for value in enabled): raise SystemExit('Routing profile contains an unsupported enabled role.')
+          if not isinstance(eligible,list): raise SystemExit('settings.eligible_failures must be an array.')
+          if any(value not in failures for value in eligible): raise SystemExit('Routing profile contains an unsupported eligible failure.')"""
+          if text.count(old) != 1:
+              raise SystemExit('Unix routing settings validation block was not found exactly once.')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+
       - name: Run focused Windows and Unix regressions
         run: /tmp/v342-validate.sh
 
