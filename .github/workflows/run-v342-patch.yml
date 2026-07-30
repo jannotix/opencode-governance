@@ -121,12 +121,16 @@ jobs:
       - name: Run focused Windows and Unix regressions
         run: /tmp/v342-validate.sh
 
-      - name: Commit the validated patch
+      - name: Commit verified code and documentation
         run: |
-          rm -f .github/workflows/apply-v342-schema-parity.yml .github/workflows/run-v342-patch.yml
+          git restore --source=HEAD -- .github/workflows/verify-hardening.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
+          if ! git diff --cached --quiet -- .github/workflows; then
+            echo 'Workflow changes must be committed through the authorized GitHub connector.' >&2
+            exit 1
+          fi
           git diff --cached --check
           git commit -m 'fix: enforce cross-platform routing schema parity'
           git push origin HEAD:fix/v3.4.2-routing-schema-parity
