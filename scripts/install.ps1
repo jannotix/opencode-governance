@@ -116,7 +116,9 @@ try{
         $ContextToolPs=Join-Path $ToolsDir 'context-intelligence.ps1'
         $ContextToolSh=Join-Path $ToolsDir 'context-intelligence.sh'
         $ContextToolPy=Join-Path $ToolsDir 'context-intelligence.py'
-        foreach($ManagedPath in @($ArchitectRunnerPs,$ArchitectRunnerSh,$ContextToolPs,$ContextToolSh,$ContextToolPy)){
+        $WorkflowGatePs=Join-Path $ToolsDir 'workflow-continuation.ps1'
+        $WorkflowGatePy=Join-Path $ToolsDir 'workflow-continuation.py'
+        foreach($ManagedPath in @($ArchitectRunnerPs,$ArchitectRunnerSh,$ContextToolPs,$ContextToolSh,$ContextToolPy,$WorkflowGatePs,$WorkflowGatePy)){
             if(Test-Path -LiteralPath $ManagedPath -PathType Leaf){Copy-Item -LiteralPath $ManagedPath -Destination (Join-Path $BackupDir.FullName ([IO.Path]::GetFileName($ManagedPath)))-Force}
         }
         Copy-Item (Join-Path $PSScriptRoot 'run-governed.ps1') $ArchitectRunnerPs -Force
@@ -124,16 +126,19 @@ try{
         Copy-Item (Join-Path $PSScriptRoot 'context-intelligence.ps1') $ContextToolPs -Force
         Copy-Item (Join-Path $PSScriptRoot 'context-intelligence.sh') $ContextToolSh -Force
         Copy-Item (Join-Path $PSScriptRoot 'context-intelligence.py') $ContextToolPy -Force
+        Copy-Item (Join-Path $PSScriptRoot 'workflow-continuation.ps1') $WorkflowGatePs -Force
+        Copy-Item (Join-Path $PSScriptRoot 'workflow-continuation.py') $WorkflowGatePy -Force
 
         try{$Manifest=Get-Content -LiteralPath $ManifestPath -Raw|ConvertFrom-Json}catch{throw 'Routing manifest is invalid after core installation.'}
         if([string]$Manifest.schema_version-ne'1.0'){throw 'Routing manifest schema_version must be 1.0.'}
-        $Manifest|Add-Member NoteProperty governance_version '3.4.3' -Force
-        $Manifest|Add-Member NoteProperty architect_runner_version '3.4.3' -Force
-        $Manifest|Add-Member NoteProperty context_intelligence_version '3.4.3' -Force
+        $Manifest|Add-Member NoteProperty governance_version '3.4.4' -Force
+        $Manifest|Add-Member NoteProperty architect_runner_version '3.4.4' -Force
+        $Manifest|Add-Member NoteProperty context_intelligence_version '3.4.4' -Force
+        $Manifest|Add-Member NoteProperty workflow_continuation_version '3.4.4' -Force
         $Manifest|Add-Member NoteProperty managed_tools @(
             $ArchitectRunnerPs,$ArchitectRunnerSh,
             (Join-Path $ToolsDir 'executor-attempt.ps1'),(Join-Path $ToolsDir 'executor-attempt.sh'),
-            $ContextToolPs,$ContextToolSh,$ContextToolPy
+            $ContextToolPs,$ContextToolSh,$ContextToolPy,$WorkflowGatePs,$WorkflowGatePy
         ) -Force
         [IO.File]::WriteAllText($ManifestPath,(($Manifest|ConvertTo-Json -Depth 30)+[Environment]::NewLine),(New-Object Text.UTF8Encoding($false)))
 
@@ -201,11 +206,13 @@ WINDOWS_HOST: pwsh -NoProfile -File
 WINDOWS_RUNNER: $ArchitectRunnerPs
 UNIX_RUNNER: $ArchitectRunnerSh
 PROJECT_DIR: <CURRENT_PROJECT_ROOT>
+WINDOWS_COMMAND: pwsh -NoProfile -File "$ArchitectRunnerPs" -ProjectDir "<CURRENT_PROJECT_ROOT>" -Command $Command -Arguments "<ORIGINAL_ARGUMENTS>"
+UNIX_COMMAND: "$ArchitectRunnerSh" --project-dir "<CURRENT_PROJECT_ROOT>" --command $Command --arguments "<ORIGINAL_ARGUMENTS>"
 ``````
 
 The external runner supports Git and non-Git project directories. It fingerprints all source and project-documentation content outside root ``.ai/**`` before and after each attempt and returns ``PROJECT_STATE_CHANGED`` on any delta.
 
-Do not create, edit or delete ``.ai/**``. Do not invoke the runner from inside this OpenCode process. Tell the owner to run ``pwsh -NoProfile -File "$ArchitectRunnerPs"`` with the current project root and ``-Command $Command`` on Windows, or the installed Unix runner with ``--command $Command``. Do not invent another runner path.
+Do not create, edit or delete ``.ai/**``. Do not invoke the runner from inside this OpenCode process. Return the complete ``WINDOWS_COMMAND`` and ``UNIX_COMMAND`` values with the actual current project root and original arguments substituted so the owner can copy and execute them. Do not invent another runner path.
 
 When the exact marker is present, this is already a transactional child attempt; continue with the command contract below.
 "@
@@ -231,8 +238,28 @@ Use ``$ContextToolPs`` through ``pwsh -NoProfile -File`` on Windows or ``$Contex
             [IO.File]::WriteAllText($CommandPath,$Text,(New-Object Text.UTF8Encoding($false)))
         }
 
+        foreach($Command in @('ai-workflow','ai-resume')){
+            $CommandPath=Join-Path $ConfigDir "commands/$Command.md"
+            $Text=Get-Content -LiteralPath $CommandPath -Raw
+            $Text=[regex]::Replace($Text,'(?s)\r?\n## WORKFLOW_CONTINUATION_GATE_V1\r?\n.*?(?=\r?\n## |\z)','')
+            $ExpectedCommand=$Command
+            $WorkflowEntry=@"
+
+## WORKFLOW_CONTINUATION_GATE_V1
+
+WINDOWS_WORKFLOW_CONTINUATION_CORE: $WorkflowGatePs
+UNIX_WORKFLOW_CONTINUATION_CORE: $WorkflowGatePy
+
+Persist ``top_level_command``, ``current_phase``, ``next_required_phase`` and ``terminal_reason`` in the authoritative task ``RUN_STATE.json``. Before a final response on Windows, invoke ``pwsh -NoProfile -File "$WorkflowGatePs" -RunStatePath "<AUTHORITATIVE_RUN_STATE_PATH>" -ExpectedCommand $ExpectedCommand``. On Unix, invoke ``python3 "$WorkflowGatePy" --run-state "<AUTHORITATIVE_RUN_STATE_PATH>" --expected-command $ExpectedCommand``. Exit 3/``CONTINUE_REQUIRED`` requires continuation at the recorded next phase. Exit 0/``TERMINAL_ALLOWED`` permits only ``LOCAL_COMMITTED`` or an explicit blocker. Exit 2/``INVALID_RUN_STATE`` blocks completion.
+"@
+            $FrontMatter=[regex]::Match($Text,'(?s)\A---\r?\n.*?\r?\n---\r?\n')
+            if(-not$FrontMatter.Success){throw "Command front matter not found: $CommandPath"}
+            $Text=$Text.Insert($FrontMatter.Length,$WorkflowEntry)
+            [IO.File]::WriteAllText($CommandPath,$Text,(New-Object Text.UTF8Encoding($false)))
+        }
+
         & (Join-Path $PSScriptRoot 'verify-routing.ps1') -ConfigDir $ConfigDir
-        Write-Host 'Installed OpenCode Governance v3.4.3 — Release Integrity & JSONC Readability.'
+        Write-Host 'Installed OpenCode Governance v3.4.4 — Deterministic Workflow Continuation.'
         Write-Host 'Routing preflight, complete managed-tool backup and hardened context paths are enabled without changing model selection.'
     }
 

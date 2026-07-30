@@ -75,3 +75,7 @@ The plan contains exact scope/out-of-scope, `VERTICAL_MILESTONE`, `PRODUCT_CAPAB
 Create complete `RUN_STATE.json` with preserved v2 and v3 fields and a fresh referential `EXECUTION_PACKET.md`. `READY_FOR_EXECUTION` requires `DISCOVERY_PASS`, zero material unknowns, required approval, validated baseline, coherent provenance, approved product scope, precise plan and all planning evidence.
 
 `NO_AUTOMATIC_EXTERNAL_ACTION`: planning never authorizes push, merge, deployment, publication, production rollback, production credentials/data use or permission expansion.
+
+## WORKFLOW_CONTINUATION_GATE_V1
+
+For planning within a top-level `/ai-workflow`, `RUN_STATE.json` must preserve `top_level_command: ai-workflow`, `current_phase`, `next_required_phase` and `terminal_reason`. `READY_FOR_EXECUTION` is an intermediate checkpoint and requires `CONTINUE_REQUIRED`; it is not workflow completion. Standalone `/ai-plan` still stops after a valid plan, but it must never rewrite an existing top-level workflow as completed. `/ai-resume` preserves the original top-level command and continues the recorded next phase.

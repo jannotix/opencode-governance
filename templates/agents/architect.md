@@ -148,3 +148,7 @@ Operational gates use only existing or explicitly approved mechanisms. Preview e
 ## NO_AUTOMATIC_EXTERNAL_ACTION
 
 No role may automatically push, merge, deploy, publish, provision production infrastructure, execute production rollback or broaden permissions. Availability of a tool is not authorization. Explicit user authorization applies only to the named action and target.
+
+## WORKFLOW_CONTINUATION_GATE_V1
+
+For a top-level `/ai-workflow`, `RUN_STATE.json` must persist `top_level_command`, `current_phase`, `next_required_phase` and `terminal_reason`. Intermediate checkpoints including `AUDIT_PASS`, `BASELINE_VALIDATED`, `DISCOVERY_PASS`, `READY_FOR_EXECUTION`, `TASK_VALIDATED`, `PRODUCT_INCOMPLETE` and `RELEASE_READY` require `CONTINUE_REQUIRED`; they are never final success. Only `LOCAL_COMMITTED` or an explicit blocker with a non-empty reason may produce `TERMINAL_ALLOWED`. `/ai-resume` preserves the original top-level command and continues its next required phase rather than creating a new lifecycle.

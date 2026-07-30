@@ -12,13 +12,16 @@ jobs:
           show-progress: false
       - name: Validate hardening tests and scripts
         run: |
-          python3 -m py_compile tests/test-hardening.py tests/test-jsonc-preservation.py tests/test-jsonc-readable.py scripts/context-intelligence.py scripts/normalize-jsonc.py
-          bash -n scripts/install.sh scripts/install-core.sh scripts/run-governed.sh
+          python3 -m py_compile tests/test-hardening.py tests/test-jsonc-preservation.py tests/test-jsonc-readable.py tests/test-workflow-continuation.py tests/test-command-contracts.py scripts/context-intelligence.py scripts/normalize-jsonc.py scripts/workflow-continuation.py
+          bash -n scripts/install.sh scripts/install-core.sh scripts/run-governed.sh tests/test-workflow-continuation.sh
       - name: Run hardening regressions
         run: |
           python3 tests/test-hardening.py
           python3 tests/test-jsonc-preservation.py
           python3 tests/test-jsonc-readable.py
+          python3 tests/test-workflow-continuation.py
+          bash tests/test-workflow-continuation.sh
+          python3 tests/test-command-contracts.py
 
   windows-hardening:
     runs-on: windows-latest
@@ -30,7 +33,7 @@ jobs:
         shell: pwsh
         run: |
           $errors=$null
-          foreach($path in 'tests/test-runner-contract.ps1','tests/test-jsonc-preservation.ps1','tests/test-jsonc-readable.ps1','scripts/run-governed.ps1','scripts/install.ps1','scripts/normalize-jsonc.ps1'){
+          foreach($path in 'tests/test-runner-contract.ps1','tests/test-jsonc-preservation.ps1','tests/test-jsonc-readable.ps1','tests/test-workflow-continuation.ps1','scripts/workflow-continuation.ps1','scripts/run-governed.ps1','scripts/install.ps1','scripts/normalize-jsonc.ps1'){
             [Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path),[ref]$null,[ref]$errors)|Out-Null
             if($errors.Count){throw "$path`n$($errors|Out-String)"}
           }
@@ -40,3 +43,5 @@ jobs:
           pwsh -NoProfile -File tests/test-runner-contract.ps1
           pwsh -NoProfile -File tests/test-jsonc-preservation.ps1
           pwsh -NoProfile -File tests/test-jsonc-readable.ps1
+          pwsh -NoProfile -File tests/test-workflow-continuation.ps1
+          python tests/test-command-contracts.py

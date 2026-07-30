@@ -31,3 +31,11 @@ Never automatically restart the complete top-level `/ai-workflow` process after 
 After accepted promotion, persist exact Executor evidence under real `.ai/**`, rerun all dependent validation against the real worktree, and only then enter `TASK_VALIDATED`. At `TASK_VALIDATED`, apply `REVIEW_FREEZE`, create same-target isolated reviewer packets, request both reviews before consuming either and create `FINAL_PACKET.md` only after both finish. Final Reviewer controls all repair direction.
 
 `IMPLEMENTATION_DEFECT` triggers only validated corrections, a fresh correction packet and fresh dependent evidence. Each correction cycle freezes the then-current real target and may use bounded isolated Executor routing, but never reuses an earlier attempt or packet. `PLAN_DEFECT` reopens provenance/discovery/planning. `BOUNDED_REPAIR` stops after three failed cycles. Closed-loop learning persists only Final Reviewer-approved scoped evidence. No unbounded task queue or route loop and `NO_AUTOMATIC_EXTERNAL_ACTION` applies.
+
+## WORKFLOW_CONTINUATION_GATE_V1
+
+Persist `top_level_command: ai-workflow`, `current_phase`, `next_required_phase` and `terminal_reason` in `RUN_STATE.json` at every phase boundary. `AUDIT_PASS`, `BASELINE_VALIDATED`, `DISCOVERY_PASS`, `READY_FOR_EXECUTION`, `TASK_VALIDATED`, `PRODUCT_INCOMPLETE`, `RELEASE_READY` and every other intermediate checkpoint are not completion.
+
+Before emitting a final task response, execute the installed `workflow-continuation.py` against the authoritative task `RUN_STATE.json` with `--expected-command ai-workflow`. Exit `3` and decision `CONTINUE_REQUIRED` require immediate continuation in the same top-level workflow at `next_required_phase`; do not ask the owner to invoke `/ai-plan`, `/ai-execute` or another phase manually when no real blocker exists. Exit `0` and `TERMINAL_ALLOWED` permit a final response only for `LOCAL_COMMITTED` or an explicit blocker with a non-empty `terminal_reason`. Exit `2` is `INVALID_RUN_STATE` and blocks completion until state is repaired from authoritative evidence.
+
+A final `GOVERNANCE_RESULT` must match the gate decision. Never present an audit, plan, validation, review, milestone or release-readiness checkpoint as workflow completion.

@@ -203,6 +203,11 @@ foreach ($Marker in @('BASELINE_DUAL_AUDIT','REQUIREMENT_PROVENANCE')) { Require
 foreach ($Marker in @('REQUIREMENT_PROVENANCE','NO_AUTOMATIC_EXTERNAL_ACTION')) { Require-Text (Join-Path $ConfigDir 'agents\plan.md') $Marker }
 foreach ($Marker in @('EVIDENCE_FRESHNESS','REVIEW_FREEZE','NO_AUTOMATIC_EXTERNAL_ACTION','PLAN_CONFLICT')) { Require-Text (Join-Path $ConfigDir 'agents\executor.md') $Marker }
 foreach ($Command in @('ai-init','ai-discover','ai-plan','ai-workflow','ai-execute','ai-review','ai-release')) { Require-Text (Join-Path $ConfigDir "commands\$Command.md") 'NO_AUTOMATIC_EXTERNAL_ACTION' }
+foreach ($Marker in @('WORKFLOW_CONTINUATION_GATE_V1','CONTINUE_REQUIRED','TERMINAL_ALLOWED')) {
+    Require-Text (Join-Path $ConfigDir 'commands\ai-workflow.md') $Marker
+    Require-Text (Join-Path $ConfigDir 'commands\ai-resume.md') $Marker
+}
+Require-Text (Join-Path $ConfigDir 'commands\ai-resume.md') 'LEGACY_RUN_STATE_MIGRATION_V1'
 foreach ($Command in @('ai-workflow','ai-review','ai-resume')) { Require-Text (Join-Path $ConfigDir "commands\$Command.md") 'REVIEW_FREEZE' }
 
 foreach ($Directory in @((Join-Path $ConfigDir 'agents'), (Join-Path $ConfigDir 'commands'))) {

@@ -2,6 +2,14 @@
 
 All released versions are recorded in this single file. Dates use `YYYY-MM-DD`.
 
+## 3.4.4 - 2026-07-30
+
+- Added `WORKFLOW_CONTINUATION_GATE_V1`, an installed deterministic helper that rejects `/ai-workflow` completion at intermediate phases such as `AUDIT_PASS`, `TASK_VALIDATED` or `PRODUCT_INCOMPLETE`.
+- Extended `RUN_STATE.json` with `top_level_command`, `current_phase`, `next_required_phase` and `terminal_reason`; `/ai-resume` preserves the original `/ai-workflow` authority instead of starting a new lifecycle.
+- Kept `ARCHITECT_RUNNER_REQUIRED` fail-closed while adding complete Windows and Unix handoff commands with project, command and original arguments.
+- Added cross-platform contract tests for all twelve `/ai-*` commands and executable continuation-gate regressions.
+- Preserved providers, models, variants, fallback order, priorities, work classes, reviewer independence, authentication and external-action boundaries.
+
 ## 3.4.3 - 2026-07-30
 
 - Preserved literal `/` characters in normalized OpenCode JSONC so schema and provider URLs remain readable while comment markers inside strings stay safe.

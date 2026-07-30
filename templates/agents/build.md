@@ -78,3 +78,7 @@ Executor reaches `TASK_VALIDATED` only after implementation, documentation sync 
 For product delivery, update exact completed and remaining capability IDs. A vertical milestone may be usable but stays `PRODUCT_INCOMPLETE`. Release runs `PRODUCT_COMPLETENESS_RECONCILIATION` and separate production readiness.
 
 `EVIDENCE_FRESHNESS` invalidates only dependent proof after source, contract, dependency, migration, environment, validation, preview, tool, recovery or isolation change. `CLOSED_LOOP_LEARNING` requires Final Reviewer approval. `NO_AUTOMATIC_EXTERNAL_ACTION`: never push, merge, deploy, publish, rollback or widen permissions automatically.
+
+## WORKFLOW_CONTINUATION_GATE_V1
+
+For a top-level `/ai-workflow`, `RUN_STATE.json` must persist `top_level_command`, `current_phase`, `next_required_phase` and `terminal_reason`. Intermediate checkpoints including `AUDIT_PASS`, `BASELINE_VALIDATED`, `DISCOVERY_PASS`, `READY_FOR_EXECUTION`, `TASK_VALIDATED`, `PRODUCT_INCOMPLETE` and `RELEASE_READY` require `CONTINUE_REQUIRED`; they are never final success. Only `LOCAL_COMMITTED` or an explicit blocker with a non-empty reason may produce `TERMINAL_ALLOWED`. `/ai-resume` preserves the original top-level command and continues its next required phase rather than creating a new lifecycle.
