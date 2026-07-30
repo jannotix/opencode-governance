@@ -1,9 +1,9 @@
 name: Apply v3.4.3 release metadata
 
 on:
-  push:
+  pull_request:
     branches:
-      - release/v3.4.3-integrity-jsonc
+      - main
 
 permissions:
   contents: write
@@ -14,12 +14,12 @@ concurrency:
 
 jobs:
   apply:
-    if: github.actor != 'github-actions[bot]'
+    if: github.head_ref == 'release/v3.4.3-integrity-jsonc' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: release/v3.4.3-integrity-jsonc
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
 
       - name: Apply release metadata
