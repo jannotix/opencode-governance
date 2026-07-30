@@ -10,12 +10,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           show-progress: false
-      - name: Validate hardening test and scripts
+      - name: Validate hardening tests and scripts
         run: |
-          python3 -m py_compile tests/test-hardening.py scripts/context-intelligence.py
+          python3 -m py_compile tests/test-hardening.py tests/test-jsonc-preservation.py scripts/context-intelligence.py
           bash -n scripts/install.sh scripts/install-core.sh scripts/run-governed.sh
       - name: Run hardening regressions
-        run: python3 tests/test-hardening.py
+        run: |
+          python3 tests/test-hardening.py
+          python3 tests/test-jsonc-preservation.py
 
   windows-hardening:
     runs-on: windows-latest
@@ -27,11 +29,13 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          foreach($path in 'tests/test-runner-contract.ps1','scripts/run-governed.ps1'){
+          foreach($path in 'tests/test-runner-contract.ps1','tests/test-jsonc-preservation.ps1','scripts/run-governed.ps1','scripts/install.ps1'){
             $errors=$null
             [Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path),[ref]$null,[ref]$errors)|Out-Null
             if($errors.Count){throw "$path`n$($errors|Out-String)"}
           }
-      - name: Run PowerShell runner contract regressions
+      - name: Run Windows hardening regressions
         shell: pwsh
-        run: pwsh -NoProfile -File tests/test-runner-contract.ps1
+        run: |
+          pwsh -NoProfile -File tests/test-runner-contract.ps1
+          pwsh -NoProfile -File tests/test-jsonc-preservation.ps1
