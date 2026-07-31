@@ -34,7 +34,7 @@ After accepted promotion, persist exact Executor evidence under real `.ai/**`, r
 
 ## WORKFLOW_CONTINUATION_GATE_V1
 
-Persist `top_level_command: ai-workflow`, `current_phase`, `next_required_phase` and `terminal_reason` in `RUN_STATE.json` at every phase boundary. `AUDIT_PASS`, `BASELINE_VALIDATED`, `DISCOVERY_PASS`, `READY_FOR_EXECUTION`, `TASK_VALIDATED`, `PRODUCT_INCOMPLETE`, `RELEASE_READY` and every other intermediate checkpoint are not completion.
+Persist `top_level_command: ai-workflow`, `current_phase`, `next_required_phase`, `terminal_reason` and a typed `next_action` in `RUN_STATE.json` at every phase boundary. Non-terminal states require `next_action` as either `execute` (real `/ai-*` command, exact arguments, expected postcondition) or `human_decision` (decision required and concrete choices). Narrative “retry” or “continue” is not executable authority. `AUDIT_PASS`, `BASELINE_VALIDATED`, `DISCOVERY_PASS`, `READY_FOR_EXECUTION`, `TASK_VALIDATED`, `PRODUCT_INCOMPLETE`, `RELEASE_READY` and every other intermediate checkpoint are not completion.
 
 Before emitting a final task response, execute the installed `workflow-continuation.py` against the authoritative task `RUN_STATE.json` with `--expected-command ai-workflow`. Exit `3` and decision `CONTINUE_REQUIRED` require immediate continuation in the same top-level workflow at `next_required_phase`; do not ask the owner to invoke `/ai-plan`, `/ai-execute` or another phase manually when no real blocker exists. Exit `0` and `TERMINAL_ALLOWED` permit a final response only for `LOCAL_COMMITTED` or an explicit blocker with a non-empty `terminal_reason`. Exit `2` is `INVALID_RUN_STATE` and blocks completion until state is repaired from authoritative evidence.
 

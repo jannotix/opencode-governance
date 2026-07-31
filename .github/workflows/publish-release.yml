@@ -97,22 +97,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
-      - name: Repair historical release tag integrity
-        run: |
-          set -euo pipefail
-          git fetch --force --tags origin
-          expected_341='36c205d478b140674a65da7dc71e05772517b4df'
-          expected_342='f603e4a92a6b7b4290fe9e0fc62c46f53cf7245d'
-          test "$(git show "$expected_341:VERSION" | tr -d '\r\n')" = '3.4.1'
-          git show "$expected_341:README.md" | grep -Fq 'Current release: **3.4.1 — Cleanup & Hardening**.'
-          current_341="$(git rev-list -n 1 3.4.1 2>/dev/null || true)"
-          if [[ "$current_341" != "$expected_341" ]]; then
-            git tag -d 3.4.1 2>/dev/null || true
-            git tag -a 3.4.1 "$expected_341" -m 'OpenCode Governance 3.4.1 — Cleanup & Hardening'
-            git push --force origin refs/tags/3.4.1
-          fi
-          test "$(git rev-list -n 1 3.4.2)" = "$expected_342"
-
       - name: Create verified tag
         run: |
           set -euo pipefail

@@ -1,8 +1,12 @@
 .DS_Store
 Thumbs.db
+desktop.ini
 *.tmp
 *.bak
 *.log
+*.swp
+*~
+
 .env
 .env.*
 !.env.example
@@ -10,3 +14,21 @@ Thumbs.db
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+.venv/
+venv/
+env/
+
+.idea/
+.vscode/
+*.code-workspace
+
+# Local agent / plan residue
+*.plan.md
+.codex/
+.claude/
+.opencode-tmp/

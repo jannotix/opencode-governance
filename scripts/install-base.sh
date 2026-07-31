@@ -93,7 +93,19 @@ if [[ -f "$JSONC_TARGET" ]]; then
 fi
 
 "$SCRIPT_DIR/install-core.sh" "$@"
-backup_dir="$(find "$CONFIG_DIR/backups" -mindepth 1 -maxdepth 1 -type d -name 'opencode-governance-*' -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -n1 | cut -d' ' -f2-)"
+# Portable backup discovery (GNU and BSD find; no -printf dependency).
+backup_dir="$(
+  python3 - "$CONFIG_DIR/backups" <<'PY'
+import pathlib, sys
+root = pathlib.Path(sys.argv[1])
+if not root.is_dir():
+    raise SystemExit(0)
+candidates = [path for path in root.iterdir() if path.is_dir() and path.name.startswith("opencode-governance-")]
+if not candidates:
+    raise SystemExit(0)
+print(max(candidates, key=lambda path: path.stat().st_mtime))
+PY
+)"
 if [[ -z "$backup_dir" || ! -d "$backup_dir" ]]; then echo 'Installer backup directory was not created.' >&2;exit 1;fi
 if [[ -n "$JSONC_BACKUP" && -f "$JSONC_BACKUP" ]]; then cp -p "$JSONC_BACKUP" "$backup_dir/$(basename "$JSONC_TARGET")";fi
 

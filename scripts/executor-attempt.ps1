@@ -457,7 +457,11 @@ function Promote-Attempt([object]$Routing) {
     Invoke-Git $Project @('apply','--binary',$Attempt.paths.patch) | Out-Null
     $ReverseCheck = Invoke-Git $Project @('apply','--check','--reverse','--binary',$Attempt.paths.patch) -AllowFailure
     if ($ReverseCheck.ExitCode -ne 0) {
-        throw 'EXECUTOR_FAILOVER_BLOCKED: applied patch verification failed.'
+        $Undo = Invoke-Git $Project @('apply','--reverse','--binary',$Attempt.paths.patch) -AllowFailure
+        if ($Undo.ExitCode -ne 0) {
+            throw 'EXECUTOR_FAILOVER_BLOCKED: applied patch verification failed and automatic reverse failed; worktree may be dirty.'
+        }
+        throw 'EXECUTOR_FAILOVER_BLOCKED: applied patch verification failed; promotion reversed.'
     }
 
     Invoke-Git $Project @('worktree','remove','--force',[string]$Data.execution_root) | Out-Null

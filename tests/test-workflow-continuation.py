@@ -9,6 +9,13 @@ import tempfile
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CORE = ROOT / "scripts" / "workflow-continuation.py"
 
+DEFAULT_ACTION = {
+    "kind": "execute",
+    "command": "/ai-plan",
+    "arguments": [],
+    "expected_postcondition": "READY_FOR_EXECUTION",
+}
+
 
 def run_gate(state: dict[str, object], expected_command: str = "ai-workflow") -> tuple[int, dict[str, object], str]:
     with tempfile.TemporaryDirectory(prefix="opencode-workflow-continuation-") as directory:
@@ -25,19 +32,23 @@ def run_gate(state: dict[str, object], expected_command: str = "ai-workflow") ->
         return result.returncode, payload, result.stderr
 
 
+def continuing(phase: str, next_phase: str) -> dict[str, object]:
+    return {
+        "top_level_command": "ai-workflow",
+        "current_phase": phase,
+        "next_required_phase": next_phase,
+        "terminal_reason": None,
+        "next_action": DEFAULT_ACTION,
+    }
+
+
 def main() -> None:
-    code, payload, _ = run_gate(
-        {
-            "top_level_command": "ai-workflow",
-            "current_phase": "AUDIT_PASS",
-            "next_required_phase": "IDEA_INTAKE",
-            "terminal_reason": None,
-        }
-    )
+    code, payload, _ = run_gate(continuing("AUDIT_PASS", "IDEA_INTAKE"))
     assert code == 3
     assert payload["decision"] == "CONTINUE_REQUIRED"
     assert payload["current_phase"] == "AUDIT_PASS"
     assert payload["next_required_phase"] == "IDEA_INTAKE"
+    assert payload["next_action_kind"] == "execute"
 
     for phase, next_phase in (
         ("BASELINE_DEFECT", "BASELINE_DUAL_AUDIT"),
@@ -48,16 +59,20 @@ def main() -> None:
         ("PRODUCT_DEFECT", "IMPLEMENTING"),
         ("NOT_READY_FOR_PRODUCTION", "VALIDATED_LEARNING"),
     ):
-        code, payload, _ = run_gate(
-            {
-                "top_level_command": "ai-workflow",
-                "current_phase": phase,
-                "next_required_phase": next_phase,
-                "terminal_reason": None,
-            }
-        )
+        code, payload, _ = run_gate(continuing(phase, next_phase))
         assert code == 3, (phase, payload)
         assert payload["decision"] == "CONTINUE_REQUIRED"
+
+    code, payload, _ = run_gate(
+        {
+            "top_level_command": "ai-workflow",
+            "current_phase": "AUDIT_PASS",
+            "next_required_phase": "IDEA_INTAKE",
+            "terminal_reason": None,
+        }
+    )
+    assert code == 2
+    assert payload["error"] == "ACTIONABLE_CONTINUATION_REQUIRED"
 
     code, payload, _ = run_gate(
         {
@@ -99,6 +114,7 @@ def main() -> None:
             "current_phase": "UNRECOGNIZED_PHASE",
             "next_required_phase": "IMPLEMENTING",
             "terminal_reason": None,
+            "next_action": DEFAULT_ACTION,
         }
     )
     assert code == 2
@@ -110,6 +126,7 @@ def main() -> None:
             "current_phase": "AUDIT_PASS",
             "next_required_phase": "IDEA_INTAKE",
             "terminal_reason": None,
+            "next_action": DEFAULT_ACTION,
         },
         expected_command="ai-resume",
     )
@@ -117,12 +134,7 @@ def main() -> None:
     assert payload["error"] == "ORIGINAL_TOP_LEVEL_COMMAND_REQUIRED"
 
     code, payload, _ = run_gate(
-        {
-            "top_level_command": "ai-workflow",
-            "current_phase": "AUDIT_PASS",
-            "next_required_phase": "IDEA_INTAKE",
-            "terminal_reason": None,
-        },
+        continuing("AUDIT_PASS", "IDEA_INTAKE"),
         expected_command="ai-resume",
     )
     assert code == 3

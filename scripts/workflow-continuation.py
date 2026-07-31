@@ -84,6 +84,20 @@ REQUIRED_FIELDS = {
     "next_required_phase",
     "terminal_reason",
 }
+KNOWN_COMMANDS = {
+    "/ai-init",
+    "/ai-audit",
+    "/ai-docs",
+    "/ai-discover",
+    "/ai-plan",
+    "/ai-execute",
+    "/ai-review",
+    "/ai-workflow",
+    "/ai-status",
+    "/ai-resume",
+    "/ai-metrics",
+    "/ai-release",
+}
 
 
 def result(**values: Any) -> dict[str, Any]:
@@ -148,6 +162,24 @@ def evaluate(state: dict[str, Any], expected_command: str) -> tuple[int, dict[st
             return 2, result(decision="INVALID_RUN_STATE", error="NEXT_REQUIRED_PHASE_REQUIRED")
         if reason not in (None, ""):
             return 2, result(decision="INVALID_RUN_STATE", error="NON_TERMINAL_REASON_FORBIDDEN")
+        action = state.get("next_action")
+        if not isinstance(action, dict):
+            return 2, result(decision="INVALID_RUN_STATE", error="ACTIONABLE_CONTINUATION_REQUIRED")
+        kind = action.get("kind")
+        if kind == "execute":
+            action_command = action.get("command")
+            if action_command not in KNOWN_COMMANDS:
+                return 2, result(decision="INVALID_RUN_STATE", error="NON_EXECUTABLE_CONTINUATION")
+            arguments = action.get("arguments", [])
+            if not isinstance(arguments, list) or any(not isinstance(item, str) for item in arguments):
+                return 2, result(decision="INVALID_RUN_STATE", error="INVALID_CONTINUATION_ARGUMENTS")
+            if not action.get("expected_postcondition"):
+                return 2, result(decision="INVALID_RUN_STATE", error="CONTINUATION_POSTCONDITION_REQUIRED")
+        elif kind == "human_decision":
+            if not action.get("decision_required") or not isinstance(action.get("available_choices"), list):
+                return 2, result(decision="INVALID_RUN_STATE", error="INVALID_HUMAN_DECISION")
+        else:
+            return 2, result(decision="INVALID_RUN_STATE", error="NON_EXECUTABLE_CONTINUATION")
         return 3, result(
             decision="CONTINUE_REQUIRED",
             terminal_class=None,
@@ -155,6 +187,7 @@ def evaluate(state: dict[str, Any], expected_command: str) -> tuple[int, dict[st
             current_phase=phase,
             next_required_phase=next_phase.strip(),
             terminal_reason=None,
+            next_action_kind=kind,
         )
 
     return 2, result(decision="INVALID_RUN_STATE", error="UNKNOWN_WORKFLOW_PHASE", current_phase=phase)

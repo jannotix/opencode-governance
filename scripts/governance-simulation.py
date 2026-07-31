@@ -31,8 +31,13 @@ FORBIDDEN_EXTERNAL_ACTIONS = (
     "git push",
     "git merge",
     "gh pr merge",
+    "gh release",
     "deploy",
     "production rollback",
+    "kubectl apply",
+    "terraform apply",
+    "rm -rf /",
+    "format c:",
 )
 
 
@@ -191,7 +196,7 @@ def write_opencode_config(config_dir: pathlib.Path, base_url: str) -> None:
                 "mode": "primary",
                 "model": "fixture/fixture",
                 "prompt": "Follow the fixture tool sequence exactly and return its final terminal marker.",
-                "permission": {"bash": "allow", "task": "allow", "edit": "deny"},
+                "permission": {"bash": "deny", "task": "allow", "edit": "deny"},
             }
         },
     }

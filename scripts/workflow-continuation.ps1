@@ -66,6 +66,22 @@ if($Phase-in$TerminalBlockers){
 if($Phase-in$NonTerminal){
     if($null-eq$Next-or[string]::IsNullOrWhiteSpace([string]$Next)){Emit 2 @{decision='INVALID_RUN_STATE';error='NEXT_REQUIRED_PHASE_REQUIRED'}}
     if($null-ne$Reason-and-not[string]::IsNullOrWhiteSpace([string]$Reason)){Emit 2 @{decision='INVALID_RUN_STATE';error='NON_TERMINAL_REASON_FORBIDDEN'}}
-    Emit 3 @{decision='CONTINUE_REQUIRED';terminal_class=$null;top_level_command=$Command;current_phase=$Phase;next_required_phase=([string]$Next).Trim();terminal_reason=$null}
+    $Action=$State.next_action
+    if($null-eq$Action){Emit 2 @{decision='INVALID_RUN_STATE';error='ACTIONABLE_CONTINUATION_REQUIRED'}}
+    $Kind=[string]$Action.kind
+    $KnownCommands=@('/ai-init','/ai-audit','/ai-docs','/ai-discover','/ai-plan','/ai-execute','/ai-review','/ai-workflow','/ai-status','/ai-resume','/ai-metrics','/ai-release')
+    if($Kind-eq'execute'){
+        $ActionCommand=[string]$Action.command
+        if($KnownCommands-notcontains$ActionCommand){Emit 2 @{decision='INVALID_RUN_STATE';error='NON_EXECUTABLE_CONTINUATION'}}
+        $Arguments=@($Action.arguments)
+        if($null-eq$Action.arguments){$Arguments=@()}
+        if(@($Arguments|Where-Object{$_ -isnot [string]}).Count-gt0){Emit 2 @{decision='INVALID_RUN_STATE';error='INVALID_CONTINUATION_ARGUMENTS'}}
+        if([string]::IsNullOrWhiteSpace([string]$Action.expected_postcondition)){Emit 2 @{decision='INVALID_RUN_STATE';error='CONTINUATION_POSTCONDITION_REQUIRED'}}
+    }elseif($Kind-eq'human_decision'){
+        if([string]::IsNullOrWhiteSpace([string]$Action.decision_required)-or$null-eq$Action.available_choices){Emit 2 @{decision='INVALID_RUN_STATE';error='INVALID_HUMAN_DECISION'}}
+    }else{
+        Emit 2 @{decision='INVALID_RUN_STATE';error='NON_EXECUTABLE_CONTINUATION'}
+    }
+    Emit 3 @{decision='CONTINUE_REQUIRED';terminal_class=$null;top_level_command=$Command;current_phase=$Phase;next_required_phase=([string]$Next).Trim();terminal_reason=$null;next_action_kind=$Kind}
 }
 Emit 2 @{decision='INVALID_RUN_STATE';error='UNKNOWN_WORKFLOW_PHASE';current_phase=$Phase}

@@ -1,6 +1,6 @@
 # Context Intelligence and Skill Routing
 
-OpenCode Governance 3.4 introduced a deterministic local-first context layer for bounded retrieval, skill capability selection, content-summary reuse and efficiency metrics. Version 3.4.1 hardens path containment, required-section routing and terminal-state validation. Version 3.4.2 rejects string-encoded token estimates and aligns the PowerShell schema with the Python core. Version 3.4.3 keeps normalized URL literals human-readable on both platforms. Version 3.4.4 adds a separate deterministic workflow-continuation gate without changing Context Intelligence model selection.
+OpenCode Governance provides a deterministic local-first context layer for bounded retrieval, skill capability selection, content-summary reuse and efficiency metrics. Path containment, required-section routing, terminal-state validation and workflow-continuation gates are part of the current 3.6.0 surface.
 
 The feature extends existing `.ai/**` authority and evidence contracts. It does not introduce a vector database, network retrieval service, second memory authority or autonomous permission layer.
 
@@ -14,17 +14,17 @@ opencode-governance-tools/context-intelligence.sh
 opencode-governance-tools/context-intelligence.py
 ```
 
-The complete 3.4.4 managed tool set also includes `workflow-continuation.ps1` and `workflow-continuation.py` alongside the Architect and Executor runners.
+The complete managed tool set also includes `workflow-continuation.ps1` and `workflow-continuation.py` alongside the Architect and Executor runners.
 
 Windows uses `context-intelligence.ps1` through PowerShell 7. Unix uses `context-intelligence.sh`, which invokes the managed Python 3 standard-library core.
 
 The current routing manifest records:
 
 ```text
-governance_version: 3.4.4
-architect_runner_version: 3.4.4
-context_intelligence_version: 3.4.4
-workflow_continuation_version: 3.4.4
+governance_version: 3.6.0
+architect_runner_version: 3.6.0
+context_intelligence_version: 3.6.0
+workflow_continuation_version: 3.6.0
 ```
 
 ## Task artifacts
@@ -248,4 +248,4 @@ Routing verification remains compatible with:
 
 A 3.4.4 installation preserves existing providers, models, variants, fallback priorities, `only_on`, hidden aliases and Executor work classes. Context Intelligence adds transport and context-control capabilities only; it does not select or rebalance models.
 
-Version 3.4.4 also installs `workflow-continuation.ps1` and `workflow-continuation.py`; `/ai-workflow` and `/ai-resume` must obtain `TERMINAL_ALLOWED` before reporting completion. `CONTINUE_REQUIRED` preserves the current lifecycle and `INVALID_RUN_STATE` fails closed.
+The installation also includes `workflow-continuation.ps1` and `workflow-continuation.py`; `/ai-workflow` and `/ai-resume` must obtain `TERMINAL_ALLOWED` before reporting completion. `CONTINUE_REQUIRED` preserves the current lifecycle and `INVALID_RUN_STATE` fails closed.

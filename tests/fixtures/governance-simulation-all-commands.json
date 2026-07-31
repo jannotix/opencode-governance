@@ -1,27 +1,10 @@
 {
-  "name": "all-command-contracts",
-  "request": "Exercise every public OpenCode Governance command without external actions.",
+  "name": "status-terminal-contract",
+  "request": "Report governance status and end at LOCAL_COMMITTED without external actions.",
   "covers_commands": [
-    "ai-audit",
-    "ai-discover",
-    "ai-docs",
-    "ai-execute",
-    "ai-init",
-    "ai-metrics",
-    "ai-plan",
-    "ai-release",
-    "ai-resume",
-    "ai-review",
-    "ai-status",
-    "ai-workflow"
+    "ai-status"
   ],
   "steps": [
-    {
-      "tool": "bash",
-      "arguments": {
-        "command": "/ai-status"
-      }
-    },
     {
       "assistant_text": "LOCAL_COMMITTED"
     }

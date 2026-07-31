@@ -1,6 +1,6 @@
 # Architect Runner Integration
 
-OpenCode Governance 3.3.2 fixed the `ARCHITECT_RUNNER_UNAVAILABLE` installation defect for Architect pre-execution failover. Version 3.3.3 added the PowerShell 7 host contract, and 3.3.4 added content-aware project-state integrity plus non-Git workspace support. Version 3.4.1 hardens routing validation, cooldown parity, managed-tool backup and retained-log privacy. Version 3.4.2 enforces identical JSON array and integer types across Windows and Unix entrypoints. Version 3.4.3 preserves readable JSONC URL literals and publishes releases through verified repository metadata. Version 3.4.4 adds deterministic workflow continuation and executable Architect runner handoffs.
+OpenCode Governance installs deterministic Architect runners (`architect-attempt.ps1|.sh`) with transactional failover, PowerShell 7 host checks, content-aware project-state integrity, routing validation and workflow-continuation gates. This document describes the current 3.6.0 surface.
 
 ## Scope
 
@@ -19,7 +19,7 @@ The runner is not used for `ai-workflow`, `ai-execute`, `ai-review` or `ai-relea
 
 ## Installed tools
 
-With routing enabled, the current installation records nine managed tools:
+With routing and 3.6.0 capabilities enabled, the installation records fourteen managed tools, including:
 
 ```text
 opencode-governance-tools/architect-attempt.ps1
@@ -31,15 +31,20 @@ opencode-governance-tools/context-intelligence.sh
 opencode-governance-tools/context-intelligence.py
 opencode-governance-tools/workflow-continuation.ps1
 opencode-governance-tools/workflow-continuation.py
+opencode-governance-tools/governance-authority.py
+opencode-governance-tools/governance-memory.py
+opencode-governance-tools/governance-evidence.py
+opencode-governance-tools/governance-simulation.py
+opencode-governance-tools/governance-pre-commit.py
 ```
 
-The 3.4.4 routing manifest records:
+The routing manifest records:
 
 ```text
-governance_version: 3.4.4
-architect_runner_version: 3.4.4
-context_intelligence_version: 3.4.4
-workflow_continuation_version: 3.4.4
+governance_version: 3.6.0
+architect_runner_version: 3.6.0
+context_intelligence_version: 3.6.0
+workflow_continuation_version: 3.6.0
 ```
 
 Before replacing an existing routing installation, the wrapper validates the complete new profile. An invalid profile cannot remove the current manifest, aliases or managed tools. Every existing managed tool is copied into the timestamped installation backup before replacement.
@@ -194,4 +199,4 @@ The routing verifier checks exact managed tool paths, installed files, Architect
 
 `DISCOVERY_BLOCKED_WRONG_WORKSPACE` is a different, correct fail-closed condition: a prompt intended for the Governance repository was executed inside an application repository, or vice versa. Version 3.4.1 does not weaken workspace validation.
 
-Version 3.4.4 installs `workflow-continuation.ps1` and `workflow-continuation.py`; `/ai-workflow` and `/ai-resume` must obtain `TERMINAL_ALLOWED` before reporting completion. `CONTINUE_REQUIRED` preserves the current lifecycle and `INVALID_RUN_STATE` fails closed.
+The installation includes `workflow-continuation.ps1` and `workflow-continuation.py`; `/ai-workflow` and `/ai-resume` must obtain `TERMINAL_ALLOWED` before reporting completion. `CONTINUE_REQUIRED` preserves the current lifecycle and `INVALID_RUN_STATE` fails closed.

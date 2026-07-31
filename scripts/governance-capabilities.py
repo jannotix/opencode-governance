@@ -422,22 +422,35 @@ def verify(config: pathlib.Path, emit: bool = True) -> dict[str, Any]:
 
 
 def uninstall(config: pathlib.Path) -> None:
-    verify(config, emit=False)
+    """Best-effort removal. Does not require a healthy install (broken hashes still uninstall)."""
     resolved = config_paths(config)
+    if not resolved["manifest"].is_file():
+        for path in capability_tools(config):
+            path.unlink(missing_ok=True)
+        print(json.dumps({"status": "GOVERNANCE_CAPABILITIES_REMOVED", "backup_dir": None, "mode": "tools-only"}, sort_keys=True))
+        return
+
     manifest = read_json(resolved["manifest"])
-    section_hashes = dict(manifest["capability_section_hashes"])
-    section_files = {config / pathlib.PurePosixPath(key.rsplit("#", 1)[0]) for key in section_hashes}
+    section_hashes = dict(manifest.get("capability_section_hashes") or {})
+    section_files = {config / pathlib.PurePosixPath(key.rsplit("#", 1)[0]) for key in section_hashes if isinstance(key, str) and "#" in key}
     affected = [*capability_tools(config), *sorted(section_files), resolved["manifest"]]
     backup_dir, existed = backup(config, affected)
     try:
         sections_by_file: dict[pathlib.Path, list[str]] = {}
         for key in section_hashes:
+            if not isinstance(key, str) or "#" not in key:
+                continue
             relative, heading = key.rsplit("#", 1)
-            sections_by_file.setdefault(config / pathlib.PurePosixPath(relative), []).append(heading)
+            path = config / pathlib.PurePosixPath(relative)
+            if path.is_file():
+                sections_by_file.setdefault(path, []).append(heading)
         for path, headings in sections_by_file.items():
             text = path.read_text(encoding="utf-8")
             for heading in headings:
-                text = remove_section(text, heading)
+                try:
+                    text = remove_section(text, heading)
+                except Exception:
+                    continue
             path.write_text(text, encoding="utf-8")
         for path in capability_tools(config):
             path.unlink(missing_ok=True)
@@ -452,7 +465,7 @@ def uninstall(config: pathlib.Path) -> None:
     except BaseException:
         restore(config, backup_dir, affected, existed)
         raise
-    print(json.dumps({"status": "GOVERNANCE_CAPABILITIES_REMOVED", "backup_dir": str(backup_dir)}, sort_keys=True))
+    print(json.dumps({"status": "GOVERNANCE_CAPABILITIES_REMOVED", "backup_dir": str(backup_dir), "mode": "best-effort"}, sort_keys=True))
 
 
 def parser() -> argparse.ArgumentParser:

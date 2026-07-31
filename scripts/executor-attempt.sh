@@ -416,7 +416,10 @@ def promote_attempt(routing):
     git(project, 'apply', '--binary', str(patch_path))
     reverse = git(project, 'apply', '--check', '--reverse', '--binary', str(patch_path), check=False)
     if reverse.returncode:
-        fail('EXECUTOR_FAILOVER_BLOCKED: applied patch verification failed.')
+        undo = git(project, 'apply', '--reverse', '--binary', str(patch_path), check=False)
+        if undo.returncode:
+            fail('EXECUTOR_FAILOVER_BLOCKED: applied patch verification failed and automatic reverse failed; worktree may be dirty.')
+        fail('EXECUTOR_FAILOVER_BLOCKED: applied patch verification failed; promotion reversed.')
 
     worktree = pathlib.Path(data['execution_root'])
     git(project, 'worktree', 'remove', '--force', str(worktree))

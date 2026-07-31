@@ -23,7 +23,7 @@
     "architect": {
       "primary": {
         "model": "provider-a/architect-primary",
-        "variant": null,
+        "variant": "high",
         "variant_policy": "highest_supported",
         "model_family": "architect-family",
         "only_on": []
@@ -31,7 +31,7 @@
       "fallbacks": [
         {
           "model": "provider-b/architect-alternate",
-          "variant": null,
+          "variant": "high",
           "variant_policy": "highest_supported",
           "model_family": "architect-family",
           "priority": 1,
@@ -39,7 +39,7 @@
         },
         {
           "model": "provider-c/architect-secondary-family",
-          "variant": null,
+          "variant": "high",
           "variant_policy": "highest_supported",
           "model_family": "architect-secondary-family",
           "priority": 2,
@@ -53,7 +53,7 @@
     "executor": {
       "primary": {
         "model": "provider-a/executor-primary",
-        "variant": null,
+        "variant": "high",
         "variant_policy": "highest_supported",
         "model_family": "executor-family",
         "only_on": [],
@@ -62,7 +62,7 @@
       "fallbacks": [
         {
           "model": "provider-b/executor-alternate",
-          "variant": null,
+          "variant": "high",
           "variant_policy": "highest_supported",
           "model_family": "executor-family",
           "priority": 1,
@@ -71,7 +71,7 @@
         },
         {
           "model": "provider-c/executor-bounded",
-          "variant": null,
+          "variant": "high",
           "variant_policy": "highest_supported",
           "model_family": "executor-bounded-family",
           "priority": 2,
@@ -83,7 +83,7 @@
         },
         {
           "model": "provider-c/executor-major",
-          "variant": null,
+          "variant": "high",
           "variant_policy": "highest_supported",
           "model_family": "executor-major-family",
           "priority": 3,
@@ -100,7 +100,7 @@
     "reviewer": {
       "primary": {
         "model": "provider-a/implementation-reviewer-primary",
-        "variant": null,
+        "variant": "high",
         "variant_policy": "highest_supported",
         "model_family": "implementation-review-family",
         "only_on": []
@@ -108,7 +108,7 @@
       "fallbacks": [
         {
           "model": "provider-b/implementation-reviewer-alternate",
-          "variant": null,
+          "variant": "high",
           "variant_policy": "highest_supported",
           "model_family": "implementation-review-family",
           "priority": 1,
@@ -116,7 +116,7 @@
         },
         {
           "model": "provider-c/implementation-reviewer-secondary-family",
-          "variant": null,
+          "variant": "high",
           "variant_policy": "highest_supported",
           "model_family": "implementation-review-secondary-family",
           "priority": 2,
@@ -130,7 +130,7 @@
     "reviewer-architecture": {
       "primary": {
         "model": "provider-a/architecture-reviewer-primary",
-        "variant": null,
+        "variant": "high",
         "variant_policy": "highest_supported",
         "model_family": "architecture-review-family",
         "only_on": []
@@ -138,7 +138,7 @@
       "fallbacks": [
         {
           "model": "provider-b/architecture-reviewer-alternate",
-          "variant": null,
+          "variant": "high",
           "variant_policy": "highest_supported",
           "model_family": "architecture-review-family",
           "priority": 1,
@@ -146,7 +146,7 @@
         },
         {
           "model": "provider-c/architecture-reviewer-secondary-family",
-          "variant": null,
+          "variant": "high",
           "variant_policy": "highest_supported",
           "model_family": "architecture-review-secondary-family",
           "priority": 2,
@@ -160,7 +160,7 @@
     "final-reviewer": {
       "primary": {
         "model": "provider-a/final-reviewer-primary",
-        "variant": null,
+        "variant": "high",
         "variant_policy": "highest_supported",
         "model_family": "final-review-family",
         "only_on": []
@@ -168,7 +168,7 @@
       "fallbacks": [
         {
           "model": "provider-b/final-reviewer-alternate",
-          "variant": null,
+          "variant": "high",
           "variant_policy": "highest_supported",
           "model_family": "final-review-alternate-family",
           "priority": 1,
@@ -176,7 +176,7 @@
         },
         {
           "model": "provider-c/final-reviewer-rebalanced",
-          "variant": null,
+          "variant": "high",
           "variant_policy": "highest_supported",
           "model_family": "architecture-review-family",
           "priority": 2,

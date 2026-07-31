@@ -112,9 +112,9 @@ foreach ($Name in $AiEditAgents) {
 
 foreach ($Value in @(
     '.ai/permission-verification.tmp',
-    'C:/Users/User/Desktop/TLR/.ai/permission-verification.tmp',
+    'C:/Users/example/project/.ai/permission-verification.tmp',
     '.ai\permission-verification.tmp',
-    'C:\Users\User\Desktop\TLR\.ai\permission-verification.tmp'
+    'C:\Users\example\project\.ai\permission-verification.tmp'
 )) {
     if ((Resolve-PortableEditDecision $Value) -ne 'allow') {
         throw "Portable .ai rule rejected expected path: $Value"
@@ -122,8 +122,8 @@ foreach ($Value in @(
 }
 foreach ($Value in @(
     'src/app.ts',
-    'C:/Users/User/Desktop/TLR/src/app.ts',
-    'C:\Users\User\Desktop\TLR\src\app.ts',
+    'C:/Users/example/project/src/app.ts',
+    'C:\Users\example\project\src\app.ts',
     '.ai-evil/file',
     'nested/.ai2/file'
 )) {
@@ -227,4 +227,4 @@ $Stripped = [regex]::Replace($Stripped, ',\s*([}\]])', '$1')
 $Object = $Stripped | ConvertFrom-Json
 if ($Object.default_agent -ne 'architect') { throw 'default_agent must be architect' }
 
-Write-Host 'PASS: OpenCode Governance v3.0 rendered contract verified (7 agents, 12 commands, portable .ai permissions).'
+Write-Host 'PASS: OpenCode Governance rendered contract verified (7 agents, 12 commands, portable .ai permissions).'

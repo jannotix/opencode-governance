@@ -99,12 +99,12 @@ def decision(value):
  return result
 positive=[
  '.ai/permission-verification.tmp',
- 'C:/Users/User/Desktop/TLR/.ai/permission-verification.tmp',
+ 'C:/Users/example/project/.ai/permission-verification.tmp',
  r'.ai\permission-verification.tmp',
- r'C:\Users\User\Desktop\TLR\.ai\permission-verification.tmp',
+ r'C:\Users\example\project\.ai\permission-verification.tmp',
 ]
 negative=[
- 'src/app.ts','C:/Users/User/Desktop/TLR/src/app.ts',r'C:\Users\User\Desktop\TLR\src\app.ts',
+ 'src/app.ts','C:/Users/example/project/src/app.ts',r'C:\Users\example\project\src\app.ts',
  '.ai-evil/file','nested/.ai2/file',
 ]
 for value in positive:
@@ -112,4 +112,4 @@ for value in positive:
 for value in negative:
  if decision(value)!='deny': raise SystemExit(f'Portable .ai rule allowed non-governance path: {value}')
 PY
-echo "PASS: OpenCode Governance v3.0 rendered contract verified (7 agents, 12 commands, portable .ai permissions)."
+echo "PASS: OpenCode Governance rendered contract verified (7 agents, 12 commands, portable .ai permissions)."

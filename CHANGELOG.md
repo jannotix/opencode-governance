@@ -2,6 +2,15 @@
 
 All released versions are recorded in this single file. Dates use `YYYY-MM-DD`.
 
+## Unreleased
+
+- Unified workflow-continuation and authority contracts: non-terminal `RUN_STATE.json` requires typed `next_action`.
+- Executor promote reverses the applied patch if reverse-check fails.
+- Capability uninstall is best-effort and no longer requires a healthy install.
+- Portable Unix backup discovery (no GNU `find -printf`); Windows installer resolves `py`/`python3`/`python`.
+- Routing example uses install-valid resolved variants; removed personal path fixtures from verifiers.
+- Removed version-sliced CI workflows, dead scaffolding tests, historical tag force-repair, and marketing density from the README.
+
 ## 3.6.0 - 2026-07-30
 
 - Added immutable `workspace`, `staged`, `commit` and `base-diff` candidate projections and `GOVERNANCE_APPROVAL_RECEIPT_V1`, binding approved requirements, execution packet, evidence, both independent reviews, Final Reviewer adjudication and actual model families to the exact reviewed candidate.

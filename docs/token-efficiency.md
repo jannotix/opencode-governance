@@ -1,6 +1,6 @@
 # Token efficiency and usage telemetry
 
-OpenCode Governance v1.7 adds output-efficiency rules and observational usage telemetry without changing model reasoning, provider routing or the governed lifecycle.
+OpenCode Governance includes output-efficiency rules and observational usage telemetry without changing model reasoning, provider routing or the governed lifecycle.
 
 ## Adaptive output efficiency
 

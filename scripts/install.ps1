@@ -21,20 +21,35 @@ $Capabilities=Join-Path $PSScriptRoot 'governance-capabilities.py'
 $Transaction=Join-Path $PSScriptRoot 'governance-install-transaction.py'
 foreach($Required in @($BaseInstaller,$Capabilities,$Transaction)){if(-not(Test-Path -LiteralPath $Required -PathType Leaf)){throw "Required Governance installer component not found: $Required"}}
 
+function Resolve-GovernancePython {
+    foreach($Candidate in @('py','python3','python')){
+        $Command=Get-Command $Candidate -ErrorAction SilentlyContinue
+        if(-not$Command){continue}
+        if($Candidate-eq'py'){
+            $Probe=& $Command.Source -3 -c 'import sys;print(sys.version_info[0])' 2>$null
+            if($LASTEXITCODE-eq0-and("$Probe".Trim()-eq'3')){return @{Exe=$Command.Source;Prefix=@('-3')}}
+            continue
+        }
+        return @{Exe=$Command.Source;Prefix=@()}
+    }
+    throw 'Python 3 is required for OpenCode Governance installation. Install Python 3 and ensure py, python3, or python is on PATH.'
+}
+
 function Invoke-GovernancePython([string[]]$Arguments,[switch]$CaptureOutput){
-    $Info=[Diagnostics.ProcessStartInfo]::new()
-    $Info.FileName='python'
-    $Info.UseShellExecute=$false
-    $Info.RedirectStandardOutput=$true
-    $Info.RedirectStandardError=$true
-    foreach($Argument in $Arguments){$Info.ArgumentList.Add($Argument)}
-    $Process=[Diagnostics.Process]::Start($Info)
-    $Output=$Process.StandardOutput.ReadToEnd()
-    $Errors=$Process.StandardError.ReadToEnd()
-    $Process.WaitForExit()
-    if($Process.ExitCode-ne0){throw "Governance Python command failed with exit code $($Process.ExitCode): $Errors"}
-    if($CaptureOutput){return $Output}
-    if(-not[string]::IsNullOrWhiteSpace($Output)){Write-Host $Output.TrimEnd()}
+    $Python=Resolve-GovernancePython
+    $All=@($Python.Prefix+$Arguments)
+    $Previous=$ErrorActionPreference
+    $ErrorActionPreference='Continue'
+    try{
+        $Lines=& $Python.Exe @All 2>&1
+        $ExitCode=$LASTEXITCODE
+    }finally{
+        $ErrorActionPreference=$Previous
+    }
+    $Text=($Lines|ForEach-Object{$_.ToString()}) -join [Environment]::NewLine
+    if($ExitCode-ne0){throw "Governance Python command failed with exit code ${ExitCode}: $Text"}
+    if($CaptureOutput){return $Text}
+    if(-not[string]::IsNullOrWhiteSpace($Text)){Write-Host $Text.TrimEnd()}
 }
 
 $SnapshotOutput=Invoke-GovernancePython @($Transaction,'snapshot','--config-dir',$ConfigDir) -CaptureOutput
@@ -47,11 +62,9 @@ try{
     if($RoutingConfigPath){
         Invoke-GovernancePython @($Capabilities,'install','--source-dir',$PSScriptRoot,'--config-dir',$ConfigDir)
         & (Join-Path $PSScriptRoot 'verify-routing.ps1') -ConfigDir $ConfigDir
-        Write-Host 'Installed OpenCode Governance v3.6.0 — Governed Authority, Memory & Evidence.'
-        Write-Host 'Candidate receipts, actionable continuation, focused review lenses, governed memory, exact evidence reuse, staged commit validation and simulation are active.'
+        Write-Host 'Installed OpenCode Governance 3.6.0 with routing and capability tools.'
     }else{
-        Write-Host 'Installed OpenCode Governance v3.6.0 in legacy single-model mode.'
-        Write-Host 'Provider/model routing was not changed. Advanced routed capabilities require a local routing profile.'
+        Write-Host 'Installed OpenCode Governance 3.6.0 in single-model mode (no routing profile).'
     }
     Write-Host "Canonical pre-install backup: $BackupDir"
 }catch{
