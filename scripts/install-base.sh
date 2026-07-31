@@ -221,7 +221,7 @@ Persist `top_level_command`, `current_phase`, `next_required_phase` and `termina
     path.write_text(text[:match.end()]+workflow_entry+text[match.end():],encoding='utf-8')
 PY
   "$SCRIPT_DIR/verify-routing.sh" "$CONFIG_DIR"
-  echo 'Installed OpenCode Governance v3.4.4 base — Deterministic Workflow Continuation (capability tools are installed by the unified install).'
+  echo 'Installed OpenCode Governance base layer (workflow continuation). Capability tools require the unified install with a routing profile.'
   echo 'Routing preflight, complete managed-tool backup and hardened context paths are enabled without changing model selection.'
 fi
 if [[ -n "$JSONC_NORMALIZED" && -f "$JSONC_NORMALIZED" ]]; then

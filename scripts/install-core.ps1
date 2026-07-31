@@ -457,7 +457,7 @@ Write-Utf8NoBom $Target (($Object | ConvertTo-Json -Depth 20) + [Environment]::N
 & (Join-Path $PSScriptRoot 'verify-routing.ps1') -ConfigDir $ConfigDir
 
 $Mode = if ($Routing) { "routing manifest with $($ManagedAliases.Count) hidden routes" } else { 'legacy single-model routing' }
-Write-Host "Installed OpenCode Governance 3.3.0 base: 7 public agents, 12 commands, $Mode. (capability tools are installed by the unified install)"
+Write-Host "Installed OpenCode Governance routing base: 7 public agents, 12 commands, $Mode. Capability tools require the unified install with a routing profile."
 Write-Host 'Executor fallback uses isolated worktrees and never bypasses normal review or commit gates.'
 Write-Host 'No push, merge, deployment or production rollback is automatic. Restart OpenCode before use.'
 Write-Host "Backup: $BackupDir"

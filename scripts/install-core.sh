@@ -350,8 +350,8 @@ PY
 "$SCRIPT_DIR/verify.sh" "$CONFIG_DIR"
 bash "$SCRIPT_DIR/verify-routing.sh" "$CONFIG_DIR"
 if [[ -n "$ROUTING_CONFIG" ]]; then
-  echo "Installed OpenCode Governance 3.3.0 base with provider-agnostic failover routing (capability tools are installed by the unified install)."
+  echo "Installed OpenCode Governance routing base (capability tools require the unified install with a routing profile)."
 else
-  echo "Installed OpenCode Governance 3.3.0 base with legacy single-model routing (capability tools require the unified install)."
+  echo "Installed OpenCode Governance single-model base (capability tools require the unified install with a routing profile)."
 fi
 echo "No push, merge, deployment or production rollback is automatic. Restart OpenCode before use."

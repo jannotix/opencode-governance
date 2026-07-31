@@ -1,6 +1,6 @@
 # Architect Runner Integration
 
-OpenCode Governance installs deterministic Architect runners (`architect-attempt.ps1|.sh`) with transactional failover, PowerShell 7 host checks, content-aware project-state integrity, routing validation and workflow-continuation gates. This document describes the current 3.7.0 surface.
+OpenCode Governance installs deterministic Architect runners (`architect-attempt.ps1|.sh`) with transactional failover, PowerShell 7 host checks, content-aware project-state integrity, routing validation and workflow-continuation gates. This document describes the current 3.7.1 surface.
 
 ## Scope
 
@@ -19,7 +19,7 @@ The runner is not used for `ai-workflow`, `ai-execute`, `ai-review` or `ai-relea
 
 ## Installed tools
 
-With routing and 3.7.0 capabilities enabled, the installation records fourteen managed tools, including:
+With routing and 3.7.1 capabilities enabled, the installation records fourteen managed tools, including:
 
 ```text
 opencode-governance-tools/architect-attempt.ps1
@@ -41,10 +41,10 @@ opencode-governance-tools/governance-pre-commit.py
 The routing manifest records:
 
 ```text
-governance_version: 3.7.0
-architect_runner_version: 3.7.0
-context_intelligence_version: 3.7.0
-workflow_continuation_version: 3.7.0
+governance_version: 3.7.1
+architect_runner_version: 3.7.1
+context_intelligence_version: 3.7.1
+workflow_continuation_version: 3.7.1
 ```
 
 Before replacing an existing routing installation, the wrapper validates the complete new profile. An invalid profile cannot remove the current manifest, aliases or managed tools. Every existing managed tool is copied into the timestamped installation backup before replacement.

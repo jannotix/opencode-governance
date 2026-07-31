@@ -4,6 +4,10 @@ Do not report credentials, tokens, private keys, certificates, passwords or othe
 
 Before opening a security report, remove all sensitive values and replace them with clearly marked redactions.
 
+## Reporting
+
+Prefer [GitHub private vulnerability reporting](https://github.com/jannotix/opencode-governance/security/advisories/new) when available. Otherwise open a minimal public issue with redacted details and a private follow-up channel agreed with the maintainer.
+
 ## Security defaults
 
 Governance defaults require:

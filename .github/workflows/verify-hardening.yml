@@ -1,7 +1,9 @@
 name: Verify repository hardening
 on:
   push:
+    branches: [main]
   pull_request:
+    branches: [main]
 
 concurrency:
   group: verify-hardening-${{ github.ref }}
@@ -32,6 +34,7 @@ jobs:
             tests/test-governance-capabilities.py \
             tests/test-governance-simulation-fixture.py \
             tests/test-governance-simulation-run.py \
+            tests/test-context-intelligence.py \
             scripts/context-intelligence.py \
             scripts/normalize-jsonc.py \
             scripts/workflow-continuation.py \
@@ -53,7 +56,8 @@ jobs:
             scripts/run-governed.sh \
             scripts/executor-attempt.sh \
             tests/test-workflow-continuation.sh \
-            tests/test-executor-transaction.sh
+            tests/test-executor-transaction.sh \
+            tests/test-project-state-integrity.sh
       - name: Run hardening regressions
         run: |
           python3 tests/test-hardening.py
@@ -63,6 +67,8 @@ jobs:
           python3 tests/test-workflow-continuation.py
           bash tests/test-workflow-continuation.sh
           bash tests/test-executor-transaction.sh
+          bash tests/test-project-state-integrity.sh
+          python3 tests/test-context-intelligence.py
           python3 tests/test-command-contracts.py
           python3 tests/test-release-publisher.py
           python3 tests/test-governance-authority-memory.py
@@ -81,11 +87,11 @@ jobs:
         shell: pwsh
         run: |
           $errors=$null
-          foreach($path in @('tests/test-runner-contract.ps1','tests/test-jsonc-preservation.ps1','tests/test-jsonc-readable.ps1','tests/test-workflow-continuation.ps1','scripts/workflow-continuation.ps1','scripts/run-governed.ps1','scripts/executor-attempt.ps1','scripts/install.ps1','scripts/install-base.ps1','scripts/install-core.ps1','scripts/uninstall.ps1','scripts/uninstall-base.ps1','scripts/uninstall-core.ps1','scripts/verify-routing.ps1','scripts/normalize-jsonc.ps1')){
+          foreach($path in @('tests/test-runner-contract.ps1','tests/test-jsonc-preservation.ps1','tests/test-jsonc-readable.ps1','tests/test-workflow-continuation.ps1','tests/test-context-intelligence.ps1','tests/test-project-state-integrity.ps1','scripts/workflow-continuation.ps1','scripts/run-governed.ps1','scripts/executor-attempt.ps1','scripts/install.ps1','scripts/install-base.ps1','scripts/install-core.ps1','scripts/uninstall.ps1','scripts/uninstall-base.ps1','scripts/uninstall-core.ps1','scripts/verify-routing.ps1','scripts/normalize-jsonc.ps1')){
             [Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path),[ref]$null,[ref]$errors)|Out-Null
             if($errors.Count){throw "$path`n$($errors|Out-String)"}
           }
-          python -m py_compile tests/test-governance-authority-memory.py tests/test-governance-pre-commit.py tests/test-governance-capabilities.py tests/test-governance-simulation-fixture.py tests/test-governance-simulation-run.py scripts/governance-authority.py scripts/governance-memory.py scripts/governance-evidence.py scripts/governance-pre-commit.py scripts/governance-simulation.py scripts/governance-capabilities.py scripts/governance-install-transaction.py
+          python -m py_compile tests/test-governance-authority-memory.py tests/test-governance-pre-commit.py tests/test-governance-capabilities.py tests/test-governance-simulation-fixture.py tests/test-governance-simulation-run.py tests/test-context-intelligence.py scripts/governance-authority.py scripts/governance-memory.py scripts/governance-evidence.py scripts/governance-pre-commit.py scripts/governance-simulation.py scripts/governance-capabilities.py scripts/governance-install-transaction.py
       - name: Run Windows hardening regressions
         shell: pwsh
         run: |
@@ -93,6 +99,8 @@ jobs:
           pwsh -NoProfile -File tests/test-jsonc-preservation.ps1
           pwsh -NoProfile -File tests/test-jsonc-readable.ps1
           pwsh -NoProfile -File tests/test-workflow-continuation.ps1
+          pwsh -NoProfile -File tests/test-context-intelligence.ps1
+          pwsh -NoProfile -File tests/test-project-state-integrity.ps1
           python tests/test-command-contracts.py
           python tests/test-release-publisher.py
           python tests/test-governance-authority-memory.py

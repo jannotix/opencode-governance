@@ -35,19 +35,13 @@ EXTERNAL_UNTRUSTED
 
 Skills never outrank canonical requirement provenance.
 
-### `GOVERNANCE_MEMORY.md`
+### Governed engineering memory
 
-Stores only Final Reviewer-approved reusable lessons. Each active entry is scoped, evidence-backed and includes a `stale_when` condition.
+The store of record is local SQLite under the OpenCode config directory (`opencode-governance-memory/memory.db`). Optional project file `.ai/GOVERNANCE_MEMORY.md` is a human-readable projection only.
 
-Statuses:
+Active entries are Final Reviewer-approved, scoped, evidence-backed and include a `stale_when` condition. Statuses include `ACTIVE`, `STALE` and `REVOKED`.
 
-```text
-ACTIVE
-STALE
-REVOKED
-```
-
-Memory is advisory routing evidence, not a waiver or substitute for current primary evidence.
+Memory is advisory routing evidence, never a waiver or substitute for current primary evidence.
 
 ## Task context manifest
 

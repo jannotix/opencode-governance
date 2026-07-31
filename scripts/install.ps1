@@ -62,9 +62,10 @@ try{
     if($RoutingConfigPath){
         Invoke-GovernancePython @($Capabilities,'install','--source-dir',$PSScriptRoot,'--config-dir',$ConfigDir)
         & (Join-Path $PSScriptRoot 'verify-routing.ps1') -ConfigDir $ConfigDir
-        Write-Host 'Installed OpenCode Governance 3.7.0 with routing and capability tools.'
+        Write-Host 'Installed OpenCode Governance 3.7.1 with routing and capability tools.'
     }else{
-        Write-Host 'Installed OpenCode Governance 3.7.0 in single-model mode (no routing profile).'
+        Write-Host 'Installed OpenCode Governance base in single-model mode (no routing profile).'
+        Write-Host 'Authority, memory, evidence, simulation and pre-commit tools require -RoutingConfigPath.'
     }
     Write-Host "Canonical pre-install backup: $BackupDir"
 }catch{

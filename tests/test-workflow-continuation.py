@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import pathlib
 import subprocess
+import sys
 import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -22,7 +23,7 @@ def run_gate(state: dict[str, object], expected_command: str = "ai-workflow") ->
         path = pathlib.Path(directory) / "RUN_STATE.json"
         path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
         result = subprocess.run(
-            ["python3", str(CORE), "--run-state", str(path), "--expected-command", expected_command],
+            [sys.executable, str(CORE), "--run-state", str(path), "--expected-command", expected_command],
             text=True,
             capture_output=True,
         )

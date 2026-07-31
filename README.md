@@ -4,7 +4,7 @@ Provider- and model-agnostic product-lifecycle governance for [OpenCode](https:/
 
 > Community project. Not affiliated with the OpenCode team.
 
-Current release: **3.7.0 — Governed Authority, Memory & Evidence**.
+Current release: **3.7.1 — Governed Authority, Memory & Evidence**.
 
 Installs seven specialized agents, twelve `/ai-*` commands, deterministic tooling and fail-closed contracts so planning, implementation, validation and review stay bound to approved requirements and current repository evidence.
 
@@ -97,9 +97,10 @@ BASELINE_VALIDATED
 → GOVERNED_DOMAIN_RESEARCH → CONSTRUCTIVE_CHALLENGE → PRODUCT_DEFINITION
 → DISCOVERY_DUAL_REVIEW → DISCOVERY_ADJUDICATION → PRODUCT_SCOPE_APPROVAL
 → CONTEXT_ROUTING → DELIVERY_ARCHITECTURE → VERTICAL_MILESTONE_PLANNING
-→ EVIDENCE + OPERATIONAL PLANNING → READY_FOR_EXECUTION
-→ IMPLEMENTATION → DOCUMENTATION_SYNC → EVIDENCE + OPERATIONAL VALIDATION
-→ TASK_DUAL_REVIEW → TASK_FINAL_ADJUDICATION
+→ EVIDENCE_PLANNING → OPERATIONAL_PLANNING → READY_FOR_EXECUTION
+→ PRE_CHANGE_SAFEPOINT_WHEN_REQUIRED → IMPLEMENTING → DOCUMENTATION_SYNC
+→ EVIDENCE_VALIDATION → OPERATIONAL_VALIDATION → TASK_VALIDATED
+→ DUAL_REVIEW → FINAL_ADJUDICATION
 → PRODUCT_COMPLETENESS_RECONCILIATION → RELEASE_READINESS
 → VALIDATED_LEARNING → LOCAL_COMMITTED
 ```
@@ -116,17 +117,19 @@ Small patches may use lighter discovery. They still require requirement provenan
 - Fallbacks restart the full role from the same packet and frozen target.
 - Required unavailable evidence cannot become `PASS`.
 
-## 3.7.0 capabilities
+## Capabilities (routing profile required)
 
-- Immutable candidate projections (`workspace`, `staged`, `commit`, `base-diff`) and content-bound approval receipts
-- Typed actionable continuation on non-terminal `RUN_STATE.json` (`next_action` required)
-- Risk-focused review lenses without weakening reviewer independence
-- Final-Reviewer-governed local engineering memory (advisory)
+With a local routing profile the installer adds:
+
+- Candidate projections (`workspace`, `staged`, `commit`, `base-diff`) and approval receipts (`opencode-governance.approval-receipt/v1`)
+- Typed actionable continuation on non-terminal `RUN_STATE.json`
+- Risk-focused review lenses (both independent reviewers retained)
+- Final-Reviewer-governed local engineering memory (advisory SQLite store)
 - Exact dependency-bound evidence reuse
 - Optional staged pre-commit receipt gate (never auto-installed)
-- Deterministic loopback simulation harness
+- Optional loopback simulation harness (orchestration fixture, not model QA)
 
-Details: [`docs/governance-authority-memory.md`](docs/governance-authority-memory.md).
+Without a routing profile only the base agents and commands install. Details: [`docs/governance-authority-memory.md`](docs/governance-authority-memory.md).
 
 ## Configuration durability (Windows)
 

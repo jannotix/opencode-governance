@@ -77,7 +77,13 @@ cooldowns=load_cooldowns()
 def tree_hash(path):
  if not path.exists():return 'ABSENT'
  rows=[]
- for f in sorted(x for x in path.rglob('*') if x.is_file()):rows.append(f'{f.relative_to(path).as_posix()}\t{hashlib.sha256(f.read_bytes()).hexdigest()}')
+ for f in sorted(path.rglob('*')):
+  if not f.is_symlink() and f.is_file():
+   rows.append(f'{f.relative_to(path).as_posix()}\t{hashlib.sha256(f.read_bytes()).hexdigest()}')
+  elif f.is_symlink():
+   try:target=os.readlink(f)
+   except OSError:target='UNREADABLE'
+   rows.append(f'{f.relative_to(path).as_posix()}\tSYMLINK:{target}')
  return hashlib.sha256('\n'.join(rows).encode()).hexdigest()
 def field(value):return base64.b64encode(str(value).encode('utf-8','surrogateescape')).decode('ascii')
 def hash_file(path):

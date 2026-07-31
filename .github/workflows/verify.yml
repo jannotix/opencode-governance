@@ -1,7 +1,9 @@
 name: Verify governance
 on:
   push:
+    branches: [main]
   pull_request:
+    branches: [main]
 
 concurrency:
   group: verify-governance-${{ github.ref }}

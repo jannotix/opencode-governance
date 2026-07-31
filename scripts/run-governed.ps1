@@ -114,8 +114,17 @@ function Encode-StateField([string]$Value){[Convert]::ToBase64String([Text.Encod
 function Get-FileTreeHash([string]$Path){
   if(-not(Test-Path -LiteralPath $Path)){return 'ABSENT'}
   $rows=@()
-  foreach($file in Get-ChildItem -LiteralPath $Path -File -Recurse|Sort-Object FullName){
-    $relative=[IO.Path]::GetRelativePath($Path,$file.FullName).Replace('\','/');$hash=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant();$rows+="$relative`t$hash"
+  foreach($item in Get-ChildItem -LiteralPath $Path -Force -Recurse|Sort-Object FullName){
+    $relative=[IO.Path]::GetRelativePath($Path,$item.FullName).Replace('\','/')
+    if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){
+      $target=try{$item.Target -join ';'}catch{'UNREADABLE'}
+      $rows+="$relative`tSYMLINK:$target"
+      continue
+    }
+    if(-not $item.PSIsContainer){
+      $hash=(Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+      $rows+="$relative`t$hash"
+    }
   }
   Get-TextHash ($rows-join"`n")
 }

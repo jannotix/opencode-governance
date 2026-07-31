@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install, verify or remove canonical OpenCode Governance 3.6 capabilities."""
+"""Install, verify or remove OpenCode Governance capability tools."""
 from __future__ import annotations
 
 import argparse
@@ -14,7 +14,7 @@ import stat
 import sys
 from typing import Any
 
-VERSION = "3.7.0"
+VERSION = "3.7.1"
 BASE_VERSION = "3.4.4"
 CAPABILITY_TOOL_NAMES = (
     "governance-authority.py",
@@ -219,7 +219,7 @@ GOVERNANCE_AUTHORITY_VERSION: 1
 CANDIDATE_PROJECTIONS: WORKSPACE|STAGED|COMMIT|BASE_DIFF
 AUTHORITY_TOOL: {authority}
 
-Freeze the exact candidate before review. Approval must be represented by `GOVERNANCE_APPROVAL_RECEIPT_V1`, binding candidate identity, approved requirements, execution packet, verification profile, evidence manifest, both independent reviews, Final Reviewer adjudication and actual model families. A receipt validates only against the identical live projection. `APPROVAL_RECEIPT_MISMATCH` invalidates delivery. Never treat a previous receipt as fresh after a dependency changes.
+Freeze the exact candidate before review. Approval must be represented by schema `opencode-governance.approval-receipt/v1` (alias `GOVERNANCE_APPROVAL_RECEIPT_V1`), binding candidate identity, approved requirements, execution packet, verification profile, evidence manifest, both independent reviews, Final Reviewer adjudication and actual model families. A receipt validates only against the identical live projection. `APPROVAL_RECEIPT_MISMATCH` invalidates delivery. Never treat a previous receipt as fresh after a dependency changes.
 """,
         "memory": f"""
 GOVERNED_ENGINEERING_MEMORY_VERSION: 2
@@ -238,7 +238,7 @@ Reuse evidence only when its outcome is `PASS` and every declared dependency has
 GOVERNANCE_SIMULATION_HARNESS_VERSION: 1
 SIMULATION_TOOL: {simulation}
 
-The simulation runner can drive a real OpenCode process against a loopback OpenAI-compatible scripted model while keeping the shipped prompts, Git repository and governance tools real. Scenarios must cover all twelve `/ai-*` contracts and reject automatic push, merge, deployment, publication and production rollback. Simulation proves deterministic orchestration behavior, not live-model quality, and supplements rather than replaces repository-native verification.
+The optional simulation harness can drive a real OpenCode process against a loopback OpenAI-compatible scripted model while keeping shipped prompts, Git state and governance tools real. It is a deterministic orchestration fixture, not live-model quality coverage, and never replaces repository-native verification.
 """,
         "pre_commit": f"""
 PRE_COMMIT_RECEIPT_GATE_VERSION: 1

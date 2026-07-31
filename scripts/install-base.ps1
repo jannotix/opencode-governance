@@ -259,7 +259,7 @@ Persist ``top_level_command``, ``current_phase``, ``next_required_phase`` and ``
         }
 
         & (Join-Path $PSScriptRoot 'verify-routing.ps1') -ConfigDir $ConfigDir
-        Write-Host 'Installed OpenCode Governance v3.4.4 base — Deterministic Workflow Continuation (capability tools are installed by the unified install).'
+        Write-Host 'Installed OpenCode Governance base layer (workflow continuation). Capability tools require the unified install with a routing profile.'
         Write-Host 'Routing preflight, complete managed-tool backup and hardened context paths are enabled without changing model selection.'
     }
 

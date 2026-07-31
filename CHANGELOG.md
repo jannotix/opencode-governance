@@ -1,29 +1,30 @@
 # Changelog
 
-All released versions are recorded in this single file. Dates use `YYYY-MM-DD`.
+Dates use `YYYY-MM-DD`. Older micro-releases are summarized; see git history for full detail.
+
+## 3.7.1 - 2026-07-31
+
+- Aligned authority continuation validation with `WORKFLOW_CONTINUATION_GATE_V1` (phase-aware; forbids `terminal_reason` on non-terminal phases).
+- Documented and accepted receipt schema `opencode-governance.approval-receipt/v1` with historical alias `GOVERNANCE_APPROVAL_RECEIPT_V1`.
+- Honest single-model install messaging: capability tools require a routing profile.
+- Symlink-safe `.ai` snapshot hashing in Architect runners.
+- Re-attached context-intelligence and project-state-integrity regressions to CI; narrowed verify triggers to `main`; set `contents: read` on verify workflows.
+- Lifecycle docs and command templates use one phase vocabulary.
+- Clarified memory store of record (SQLite) vs optional `.ai/GOVERNANCE_MEMORY.md` projection.
 
 ## 3.7.0 - 2026-07-31
 
-- Unified workflow-continuation and authority contracts: non-terminal `RUN_STATE.json` requires typed `next_action`.
+- Non-terminal `RUN_STATE.json` requires typed `next_action`.
 - Executor promote reverses the applied patch if reverse-check fails.
-- Capability uninstall is best-effort and no longer requires a healthy install.
-- Portable Unix backup discovery (no GNU `find -printf`); Windows installer resolves `py`/`python3`/`python`.
-- Routing example uses install-valid resolved variants; removed personal path fixtures from verifiers.
-- Removed version-sliced CI workflows, dead scaffolding tests, historical tag force-repair, and marketing density from the README.
-- Removed two further unused regression tests (`tests/test-powershell-schema-parity.ps1`, `tests/test-routing-schema-parity.py`) that were no longer referenced by any workflow.
-- Added the canonical `[project]` metadata section to `pyproject.toml` (name, version, license, classifiers, `requires-python`) so the project is installable as a metadata-bearing package.
-- Promoted the version to 3.7.0 in the manifest, capability tools, install/uninstall/verify scripts, the routing manifest contract, the workflow file and the documentation.
-- Preserved the seven public agents, twelve public commands, the canonical `opencode-governance-routing.json` manifest, the capability tool set, the workflow continuation gate, the governed engineering memory, the candidate authority contract, the staged pre-commit receipt gate and every external-action boundary.
+- Capability uninstall is best-effort without a healthy install.
+- Portable Unix backup discovery; Windows installer resolves `py` / `python3` / `python`.
+- Consolidated CI to verify + hardening + publish-release; removed version-sliced workflows.
 
 ## 3.6.0 - 2026-07-30
 
-- Added immutable `workspace`, `staged`, `commit` and `base-diff` candidate projections and `GOVERNANCE_APPROVAL_RECEIPT_V1`, binding approved requirements, execution packet, evidence, both independent reviews, Final Reviewer adjudication and actual model families to the exact reviewed candidate.
-- Added typed actionable continuation and risk-derived review lenses while preserving both independent reviewers and Final Reviewer authority.
-- Added Final-Reviewer-governed local engineering memory with progressive disclosure, supersession, review lifecycle and owner-authorized promotion of recurring validated lessons into project policy.
-- Added exact dependency-bound evidence reuse, an explicit staged pre-commit receipt gate with no model call and deterministic loopback OpenCode simulation covering all twelve `/ai-*` commands.
-- Unified the capabilities into the canonical `install.ps1|sh`, `verify-routing.ps1|sh`, `uninstall.ps1|sh` and `opencode-governance-routing.json` lifecycle; removed the separate runtime manifest, v360 wrappers, overlay workflow and duplicate release documents.
-- Added complete pre-install snapshots and byte-for-byte rollback across the entire managed installation, exact hashes for all capability tools and managed prompt sections, and Linux/Windows release-blocking regressions.
-- Preserved providers, models, variants, fallback order, priorities, `only_on`, work classes, hidden aliases, authentication, reviewer independence, seven public agents and all external-action boundaries.
+- Candidate projections (`workspace`, `staged`, `commit`, `base-diff`) and approval receipts (`opencode-governance.approval-receipt/v1`).
+- Governed local engineering memory, evidence reuse, optional pre-commit receipt gate, optional simulation harness.
+- Unified capability install into the canonical install / verify-routing / uninstall lifecycle with pre-install snapshot rollback.
 
 ## 3.4.4 - 2026-07-30
 
@@ -97,7 +98,7 @@ All released versions are recorded in this single file. Dates use `YYYY-MM-DD`.
 - Added the explicit `[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]` child marker and environment marker to prevent recursive runner invocation.
 - Preserved complete `.ai/**` rollback before eligible Architect retries and blocked continuation when source/project documentation changes, restoration fails or the error is ineligible.
 - Added conservative uninstall support that removes only the four manifest-managed Architect/Executor tools and preserves unrelated local tools.
-- Added Windows and Linux regression coverage reproducing the WHMCS failure, verifying same-family fallback, partial-state removal, exact path rendering and local-tool preservation.
+- Added Windows and Linux regression coverage for same-family fallback, partial-state removal, exact path rendering and local-tool preservation.
 - Preserved Local Configuration Durability, Executor isolation, reviewer independence, whitelabel routing and all no-push/no-deploy contracts.
 
 ## 3.3.1 - 2026-07-29

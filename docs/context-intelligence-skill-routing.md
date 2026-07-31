@@ -1,6 +1,6 @@
 # Context Intelligence and Skill Routing
 
-OpenCode Governance provides a deterministic local-first context layer for bounded retrieval, skill capability selection, content-summary reuse and efficiency metrics. Path containment, required-section routing, terminal-state validation and workflow-continuation gates are part of the current 3.7.0 surface.
+OpenCode Governance provides a deterministic local-first context layer for bounded retrieval, skill capability selection, content-summary reuse and efficiency metrics. Path containment, required-section routing, terminal-state validation and workflow-continuation gates are part of the current 3.7.1 surface.
 
 The feature extends existing `.ai/**` authority and evidence contracts. It does not introduce a vector database, network retrieval service, second memory authority or autonomous permission layer.
 
@@ -21,10 +21,10 @@ Windows uses `context-intelligence.ps1` through PowerShell 7. Unix uses `context
 The current routing manifest records:
 
 ```text
-governance_version: 3.7.0
-architect_runner_version: 3.7.0
-context_intelligence_version: 3.7.0
-workflow_continuation_version: 3.7.0
+governance_version: 3.7.1
+architect_runner_version: 3.7.1
+context_intelligence_version: 3.7.1
+workflow_continuation_version: 3.7.1
 ```
 
 ## Task artifacts
@@ -232,20 +232,8 @@ All actions validate project roots, task IDs, exact JSON schemas and path contai
 
 ## Compatibility
 
-Routing verification remains compatible with:
+Current product version is **3.7.1**. Routing verification still accepts older installed manifests through **3.3.0+** (see `verify-routing`).
 
-```text
-3.3.0
-3.3.2
-3.3.3
-3.3.4
-3.4.0
-3.4.1
-3.4.2
-3.4.3
-3.4.4
-```
+Context Intelligence does not select or rebalance models. It only bounds retrieval, skills and cache under the existing routing profile.
 
-A 3.4.4 installation preserves existing providers, models, variants, fallback priorities, `only_on`, hidden aliases and Executor work classes. Context Intelligence adds transport and context-control capabilities only; it does not select or rebalance models.
-
-The installation also includes `workflow-continuation.ps1` and `workflow-continuation.py`; `/ai-workflow` and `/ai-resume` must obtain `TERMINAL_ALLOWED` before reporting completion. `CONTINUE_REQUIRED` preserves the current lifecycle and `INVALID_RUN_STATE` fails closed.
+Installed `workflow-continuation` tools require `TERMINAL_ALLOWED` before `/ai-workflow` or `/ai-resume` report completion. `CONTINUE_REQUIRED` keeps the current lifecycle; `INVALID_RUN_STATE` fails closed.

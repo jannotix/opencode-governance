@@ -1,6 +1,6 @@
 # Governance Authority, Memory and Evidence
 
-OpenCode Governance 3.7.0 includes deterministic candidate authority, content-bound approval receipts, actionable continuation, focused review lenses, governed engineering memory, exact evidence reuse, a staged pre-commit gate and deterministic OpenCode simulation.
+OpenCode Governance 3.7.1 includes deterministic candidate authority, content-bound approval receipts, actionable continuation, focused review lenses, governed engineering memory, exact evidence reuse, a staged pre-commit gate and deterministic OpenCode simulation.
 
 These capabilities are installed and verified through the canonical governance lifecycle. They use the single `opencode-governance-routing.json` manifest; no separate runtime manifest or overlay installer exists.
 
@@ -46,7 +46,7 @@ Projection type is part of candidate identity. Changing projection invalidates p
 
 ## Approval receipts
 
-`GOVERNANCE_APPROVAL_RECEIPT_V1` binds:
+Receipt schema `opencode-governance.approval-receipt/v1` (historical alias `GOVERNANCE_APPROVAL_RECEIPT_V1`) binds:
 
 - candidate identity and projection;
 - approved requirements;
@@ -129,7 +129,9 @@ Lens selection derives from `TASK_RISK_PROFILE` and current primary evidence, no
 
 ## Governed engineering memory
 
-The memory store is local SQLite under the OpenCode configuration directory and is not committed. Its path is recorded in the canonical routing manifest and projected into installed agents.
+The authoritative memory store is local SQLite under the OpenCode configuration directory (`opencode-governance-memory/memory.db`) and is not committed. Its path is recorded in the routing manifest and projected into installed agents.
+
+Project file `.ai/GOVERNANCE_MEMORY.md` (when present) is only an optional human-readable projection of approved lessons. It is advisory presentation, not the store of record. Reviewers must not treat the markdown projection as stronger than the SQLite store or current requirements.
 
 ```text
 CANDIDATE → ACTIVE → SUPERSEDED

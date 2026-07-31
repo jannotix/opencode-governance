@@ -1,4 +1,8 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "architect"
+  // Installer-managed agent models, permissions and routing live in the
+  // OpenCode config directory after install. Prefer a local routing profile
+  // (see examples/routing/continuous-coding.template.json) over hand-editing
+  // generated agent files.
 }
