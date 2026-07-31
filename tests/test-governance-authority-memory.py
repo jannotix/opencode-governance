@@ -2,6 +2,7 @@
 """Cross-platform regressions for governance authority, memory and evidence reuse."""
 from __future__ import annotations
 
+import hashlib
 import json
 import pathlib
 import subprocess
@@ -96,6 +97,105 @@ class AuthorityTests(unittest.TestCase):
         path.write_text(json.dumps(bindings), encoding="utf-8")
         failure = run(AUTHORITY, "receipt", "issue", "--candidate", candidate, "--bindings", path, "--output", self.root / ".ai" / "receipt.json", ok=False)
         self.assertIn("MODEL_INDEPENDENCE_CONFLICT", failure.stdout + failure.stderr)
+
+    def test_receipt_rejects_malformed_family_values_without_traceback(self) -> None:
+        candidate = self.root / ".ai" / "candidate.json"
+        run(AUTHORITY, "candidate", "freeze", "--project-dir", self.root, "--projection", "commit", "--ref", "HEAD", "--output", candidate)
+        bindings = {field: "c" * 64 for field in (
+            "approved_requirements_hash",
+            "execution_packet_hash",
+            "verification_profile_hash",
+            "evidence_manifest_hash",
+            "implementation_review_hash",
+            "architecture_review_hash",
+            "final_adjudication_hash",
+        )}
+        bindings.update(
+            task_id="T-MALFORMED",
+            actual_model_families=[{"family": "invalid"}, "family-b"],
+            reviewer_independence="PASS",
+            final_verdict="PASS",
+        )
+        path = self.root / ".ai" / "malformed-bindings.json"
+        path.write_text(json.dumps(bindings), encoding="utf-8")
+        failure = run(AUTHORITY, "receipt", "issue", "--candidate", candidate, "--bindings", path, "--output", self.root / ".ai" / "receipt.json", ok=False)
+        output = failure.stdout + failure.stderr
+        self.assertIn("MODEL_INDEPENDENCE_CONFLICT", output)
+        self.assertNotIn("Traceback", output)
+
+    def test_candidate_rejects_missing_projection_without_traceback(self) -> None:
+        candidate = self.root / ".ai" / "candidate.json"
+        run(AUTHORITY, "candidate", "freeze", "--project-dir", self.root, "--projection", "commit", "--ref", "HEAD", "--output", candidate)
+        value = json.loads(candidate.read_text())
+        value.pop("projection")
+        identity_payload = {
+            key: item
+            for key, item in value.items()
+            if key not in {"schema", "candidate_identity"}
+        }
+        value["candidate_identity"] = hashlib.sha256(
+            json.dumps(identity_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        ).hexdigest()
+        candidate.write_text(json.dumps(value), encoding="utf-8")
+        bindings = {field: "d" * 64 for field in (
+            "approved_requirements_hash",
+            "execution_packet_hash",
+            "verification_profile_hash",
+            "evidence_manifest_hash",
+            "implementation_review_hash",
+            "architecture_review_hash",
+            "final_adjudication_hash",
+        )}
+        bindings.update(
+            task_id="T-NO-PROJECTION",
+            actual_model_families=["family-a", "family-b"],
+            reviewer_independence="PASS",
+            final_verdict="PASS",
+        )
+        path = self.root / ".ai" / "bindings.json"
+        path.write_text(json.dumps(bindings), encoding="utf-8")
+        failure = run(AUTHORITY, "receipt", "issue", "--candidate", candidate, "--bindings", path, "--output", self.root / ".ai" / "receipt.json", ok=False)
+        output = failure.stdout + failure.stderr
+        self.assertIn("INVALID_CANDIDATE_PROJECTION", output)
+        self.assertNotIn("Traceback", output)
+
+    def test_receipt_validation_rejects_missing_bindings_without_traceback(self) -> None:
+        candidate = self.root / ".ai" / "candidate.json"
+        run(AUTHORITY, "candidate", "freeze", "--project-dir", self.root, "--projection", "commit", "--ref", "HEAD", "--output", candidate)
+        bindings = {field: "e" * 64 for field in (
+            "approved_requirements_hash",
+            "execution_packet_hash",
+            "verification_profile_hash",
+            "evidence_manifest_hash",
+            "implementation_review_hash",
+            "architecture_review_hash",
+            "final_adjudication_hash",
+        )}
+        bindings.update(
+            task_id="T-NO-BINDINGS",
+            actual_model_families=["family-a", "family-b"],
+            reviewer_independence="PASS",
+            final_verdict="PASS",
+        )
+        binding_path = self.root / ".ai" / "bindings.json"
+        binding_path.write_text(json.dumps(bindings), encoding="utf-8")
+        receipt_path = self.root / ".ai" / "receipt.json"
+        run(AUTHORITY, "receipt", "issue", "--candidate", candidate, "--bindings", binding_path, "--output", receipt_path)
+        receipt = json.loads(receipt_path.read_text())
+        receipt.pop("bindings")
+        receipt["receipt_hash"] = hashlib.sha256(
+            json.dumps(
+                {key: item for key, item in receipt.items() if key != "receipt_hash"},
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode("utf-8")
+        ).hexdigest()
+        receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+        failure = run(AUTHORITY, "receipt", "validate", "--receipt", receipt_path, "--project-dir", self.root, "--gate", "pre-commit", ok=False)
+        output = failure.stdout + failure.stderr
+        self.assertIn("INVALID_RECEIPT_BINDINGS", output)
+        self.assertNotIn("Traceback", output)
 
     def test_actionable_continuation_rejects_narrative_retry(self) -> None:
         state = self.root / ".ai" / "RUN_STATE.json"
