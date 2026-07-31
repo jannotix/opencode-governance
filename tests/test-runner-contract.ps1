@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
 $Runner = Join-Path $Root 'scripts/run-governed.ps1'
-$Temp = Join-Path ([IO.Path]::GetTempPath()) ('opencode-v341-runner-' + [guid]::NewGuid().ToString('N'))
+$Temp = Join-Path ([IO.Path]::GetTempPath()) ('opencode-runner-' + [guid]::NewGuid().ToString('N'))
 $Project = Join-Path $Temp 'project'
 $Config = Join-Path $Temp 'config'
 $Routing = Join-Path $Temp 'routing.json'
@@ -45,3 +45,6 @@ finally {
     Remove-Item -LiteralPath $Temp -Recurse -Force -ErrorAction SilentlyContinue
     $global:LASTEXITCODE = 0
 }
+
+pwsh -NoProfile -File (Join-Path $PSScriptRoot 'test-executor-transaction.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'Windows Executor transaction regression failed.' }
