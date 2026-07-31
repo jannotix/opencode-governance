@@ -250,6 +250,15 @@ def freeze_candidate(
 def validate_candidate(candidate: dict[str, Any]) -> None:
     if candidate.get("schema") != CANDIDATE_SCHEMA:
         raise ContractError("INVALID_CANDIDATE_SCHEMA")
+    if candidate.get("projection") not in PROJECTIONS:
+        raise ContractError("INVALID_CANDIDATE_PROJECTION", str(candidate.get("projection")))
+    if not valid_hash(candidate.get("project_identity")):
+        raise ContractError("INVALID_PROJECT_IDENTITY")
+    if not isinstance(candidate.get("entries"), list):
+        raise ContractError("INVALID_CANDIDATE_ENTRIES")
+    identity = candidate.get("candidate_identity")
+    if not valid_hash(identity):
+        raise ContractError("INVALID_CANDIDATE_IDENTITY")
     expected = digest(
         {
             key: value
@@ -257,8 +266,41 @@ def validate_candidate(candidate: dict[str, Any]) -> None:
             if key not in {"schema", "candidate_identity"}
         }
     )
-    if candidate.get("candidate_identity") != expected:
+    if identity != expected:
         raise ContractError("CANDIDATE_INTEGRITY_FAILURE")
+
+
+def normalize_model_families(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        raise ContractError("MODEL_INDEPENDENCE_CONFLICT")
+    normalized: list[str] = []
+    for family in value:
+        if not isinstance(family, str) or not family.strip():
+            raise ContractError("MODEL_INDEPENDENCE_CONFLICT")
+        normalized.append(family.strip())
+    unique = sorted(set(normalized))
+    if len(unique) < 2:
+        raise ContractError("MODEL_INDEPENDENCE_CONFLICT")
+    return unique
+
+
+def validate_receipt_bindings(receipt: dict[str, Any]) -> tuple[dict[str, Any], list[str], str]:
+    bindings = receipt.get("bindings")
+    if not isinstance(bindings, dict):
+        raise ContractError("INVALID_RECEIPT_BINDINGS")
+    for field in HASH_FIELDS:
+        if not valid_hash(bindings.get(field)):
+            raise ContractError("INVALID_HASH", field)
+    families = normalize_model_families(receipt.get("actual_model_families"))
+    if receipt.get("reviewer_independence") != "PASS":
+        raise ContractError("MODEL_INDEPENDENCE_CONFLICT")
+    verdict = receipt.get("final_verdict")
+    if verdict not in APPROVING_VERDICTS:
+        raise ContractError("NON_APPROVING_FINAL_VERDICT", str(verdict))
+    task_id = receipt.get("task_id")
+    if not isinstance(task_id, str) or not task_id.strip():
+        raise ContractError("TASK_ID_REQUIRED")
+    return bindings, families, task_id.strip()
 
 
 def issue_receipt(candidate: dict[str, Any], bindings: dict[str, Any]) -> dict[str, Any]:
@@ -266,13 +308,8 @@ def issue_receipt(candidate: dict[str, Any], bindings: dict[str, Any]) -> dict[s
     for field in HASH_FIELDS:
         if not valid_hash(bindings.get(field)):
             raise ContractError("INVALID_HASH", field)
-    families = bindings.get("actual_model_families")
-    if (
-        not isinstance(families, list)
-        or len(set(families)) < 2
-        or any(not isinstance(family, str) or not family.strip() for family in families)
-        or bindings.get("reviewer_independence") != "PASS"
-    ):
+    families = normalize_model_families(bindings.get("actual_model_families"))
+    if bindings.get("reviewer_independence") != "PASS":
         raise ContractError("MODEL_INDEPENDENCE_CONFLICT")
     if bindings.get("final_verdict") not in APPROVING_VERDICTS:
         raise ContractError("NON_APPROVING_FINAL_VERDICT", str(bindings.get("final_verdict")))
@@ -282,10 +319,10 @@ def issue_receipt(candidate: dict[str, Any], bindings: dict[str, Any]) -> dict[s
     receipt = {
         "schema": RECEIPT_SCHEMA,
         "governance_version": "3.6.0",
-        "task_id": task_id,
+        "task_id": task_id.strip(),
         "candidate": candidate,
         "bindings": {field: bindings[field] for field in HASH_FIELDS},
-        "actual_model_families": sorted(set(families)),
+        "actual_model_families": families,
         "reviewer_independence": "PASS",
         "final_verdict": bindings["final_verdict"],
         "issued_at": datetime.now(timezone.utc).isoformat(),
@@ -304,9 +341,17 @@ def validate_receipt(
         raise ContractError("INVALID_GATE", gate)
     if receipt.get("schema") != RECEIPT_SCHEMA:
         raise ContractError("INVALID_RECEIPT_SCHEMA")
-    expected_hash = digest({key: value for key, value in receipt.items() if key != "receipt_hash"})
-    if receipt.get("receipt_hash") != expected_hash:
+    if receipt.get("governance_version") != "3.6.0":
+        raise ContractError("INVALID_RECEIPT_VERSION", str(receipt.get("governance_version")))
+    receipt_hash = receipt.get("receipt_hash")
+    if not valid_hash(receipt_hash):
         raise ContractError("RECEIPT_INTEGRITY_FAILURE")
+    expected_hash = digest({key: value for key, value in receipt.items() if key != "receipt_hash"})
+    if receipt_hash != expected_hash:
+        raise ContractError("RECEIPT_INTEGRITY_FAILURE")
+    if receipt.get("freshness_dependencies") != ["candidate_identity", *HASH_FIELDS]:
+        raise ContractError("INVALID_RECEIPT_DEPENDENCIES")
+    _, _, task_id = validate_receipt_bindings(receipt)
     candidate = receipt.get("candidate")
     if not isinstance(candidate, dict):
         raise ContractError("INVALID_RECEIPT_CANDIDATE")
@@ -325,9 +370,9 @@ def validate_receipt(
     return {
         "status": "RECEIPT_VALID",
         "gate": gate,
-        "task_id": receipt["task_id"],
+        "task_id": task_id,
         "candidate_identity": current["candidate_identity"],
-        "receipt_hash": receipt["receipt_hash"],
+        "receipt_hash": receipt_hash,
     }
 
 
