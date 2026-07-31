@@ -11,6 +11,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import tempfile
 import time
 
 WORK_CLASSES = ['PATCH','BOUNDED_FEATURE','MAJOR_FEATURE','EXISTING_PRODUCT_EVOLUTION','NEW_PRODUCT','HIGH_RISK_CHANGE']
@@ -219,7 +220,21 @@ def read_attempt(project):
     return data, manifest_path, patch_path
 
 def write_attempt(data, path):
-    path.write_text(json.dumps(data, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f'.{path.name}.',
+        suffix='.tmp',
+        dir=path.parent,
+    )
+    temporary = pathlib.Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, 'w', encoding='utf-8', newline='\n') as handle:
+            handle.write(json.dumps(data, indent=2, sort_keys=True) + '\n')
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 def select_route(routing):
     if not args.work_class:
@@ -421,23 +436,36 @@ def promote_attempt(routing):
             fail('EXECUTOR_FAILOVER_BLOCKED: applied patch verification failed and automatic reverse failed; worktree may be dirty.')
         fail('EXECUTOR_FAILOVER_BLOCKED: applied patch verification failed; promotion reversed.')
 
-    worktree = pathlib.Path(data['execution_root'])
-    git(project, 'worktree', 'remove', '--force', str(worktree))
     data.update({
         'state': 'PROMOTED',
         'promoted_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
         'post_status': status_records(project, True),
     })
-    write_attempt(data, manifest_path)
-    print(json.dumps({
+    try:
+        write_attempt(data, manifest_path)
+    except Exception as exc:
+        undo = git(project, 'apply', '--reverse', '--binary', str(patch_path), check=False)
+        if undo.returncode:
+            fail('EXECUTOR_FAILOVER_BLOCKED: promotion state persistence failed and automatic reverse failed; worktree may be dirty.')
+        fail(f'EXECUTOR_FAILOVER_BLOCKED: promotion state persistence failed; promotion reversed: {exc}')
+
+    worktree = pathlib.Path(data['execution_root'])
+    cleanup = git(project, 'worktree', 'remove', '--force', str(worktree), check=False)
+    output = {
         'state': 'PROMOTED',
         'changed_paths': data['changed_paths'],
         'patch_sha256': data['patch_sha256'],
-    }, separators=(',', ':')))
+        'cleanup_status': 'COMPLETE' if cleanup.returncode == 0 else 'WARNING',
+    }
+    if cleanup.returncode:
+        output['cleanup_detail'] = cleanup.stderr.strip() or 'Executor worktree cleanup failed; remove it manually.'
+    print(json.dumps(output, separators=(',', ':')))
 
 def discard_attempt(routing):
     project = require_project()
     data, manifest_path, patch_path = read_attempt(project)
+    if data.get('state') not in {'PREPARED', 'FINALIZED'}:
+        fail(f"Executor attempt in state {data.get('state')} cannot be discarded.")
     worktree = pathlib.Path(data['execution_root'])
     if worktree.exists():
         git(project, 'worktree', 'remove', '--force', str(worktree))
