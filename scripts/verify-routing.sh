@@ -11,7 +11,7 @@ version="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1],encoding
 case "$version" in 3.3.2|3.3.3|3.3.4|3.4.0|3.4.1|3.4.2|3.4.3|3.4.4|3.6.0|3.7.0);;*) echo "Unsupported routing manifest governance_version: $version" >&2; exit 1;; esac
 
 python3 - "$CONFIG_DIR" "$SCRIPT_DIR/verify-routing-core.sh" "$SCRIPT_DIR/governance-capabilities.py" "$version" <<'PY'
-import json,pathlib,shutil,subprocess,sys,tempfile
+import json,os,pathlib,shutil,subprocess,sys,tempfile
 root=pathlib.Path(sys.argv[1]);core=pathlib.Path(sys.argv[2]);capabilities=pathlib.Path(sys.argv[3]);version=sys.argv[4]
 data=json.loads((root/'opencode-governance-routing.json').read_text(encoding='utf-8-sig'));tools=root/'opencode-governance-tools'
 base=[tools/name for name in ['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh']];expected=list(base)
@@ -93,7 +93,8 @@ with tempfile.TemporaryDirectory(prefix='opencode-routing-compat-') as directory
     for field in ['candidate_authority_version','governed_memory_version','evidence_reuse_version','simulation_harness_version','pre_commit_receipt_gate_version','actionable_continuation_version','capability_tool_hashes','capability_section_hashes','memory_store','capabilities_installed_at']: normalized.pop(field,None)
     normalized['managed_tools']=[str(temp/'opencode-governance-tools'/name) for name in ['executor-attempt.ps1','executor-attempt.sh']]
     (temp/'opencode-governance-routing.json').write_text(json.dumps(normalized,indent=2)+'\n',encoding='utf-8')
-    result=subprocess.run([str(core),str(temp)])
+    bash_executable=os.environ.get('BASH') or os.environ.get('SHELL') or '/bin/bash'
+    result=subprocess.run([bash_executable,str(core),str(temp)])
     if result.returncode: raise SystemExit(f'Core compatibility verification failed with exit code {result.returncode}.')
 print(f"PASS: OpenCode Governance v{version} routing verified ({len(data.get('managed_aliases',[]))} hidden routes; {len(expected)} managed tools verified).")
 PY
