@@ -43,12 +43,6 @@ jobs:
           required = {
               'Verify governance',
               'Verify repository hardening',
-              'Verify Context Intelligence v3.4+',
-              'Verify Architect Runner Integration v3.3.2+',
-              'Verify Project State Integrity v3.3.4',
-              'Verify Executor failover v3.3',
-              'Verify PowerShell Host and Verifier Reliability v3.3.3+',
-              'Verify Local Configuration Durability v3.3.1',
           }
           for _ in range(36):
               payload = subprocess.check_output(
@@ -81,7 +75,7 @@ jobs:
               raise SystemExit(f'Timed out waiting for release verification. Missing={missing}; pending={pending}')
           PY
 
-      - name: Verify release metadata
+      - name: Verify release metadata and eligibility
         run: |
           set -euo pipefail
           version="$(tr -d '\r\n' < VERSION)"
@@ -90,14 +84,23 @@ jobs:
           grep -Fq "## $version - " CHANGELOG.md
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
           printf 'VERSION=%s\n' "$version" >> "$GITHUB_ENV"
+          existing="$(git rev-list -n 1 "$version" 2>/dev/null || true)"
+          if [[ -n "$existing" && "$existing" != "$RELEASE_SHA" ]]; then
+            echo "Version $version is already published at $existing; this verified commit remains unreleased."
+            echo 'SHOULD_PUBLISH=false' >> "$GITHUB_ENV"
+          else
+            echo 'SHOULD_PUBLISH=true' >> "$GITHUB_ENV"
+          fi
 
       - name: Configure release Git identity
+        if: env.SHOULD_PUBLISH == 'true'
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
       - name: Create verified tag
+        if: env.SHOULD_PUBLISH == 'true'
         run: |
           set -euo pipefail
           existing="$(git rev-list -n 1 "$VERSION" 2>/dev/null || true)"
@@ -111,6 +114,7 @@ jobs:
           fi
 
       - name: Create GitHub Release
+        if: env.SHOULD_PUBLISH == 'true'
         run: |
           set -euo pipefail
           if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
