@@ -3,6 +3,13 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: verify-hardening-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
 jobs:
   linux-hardening:
     runs-on: ubuntu-latest

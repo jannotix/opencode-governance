@@ -9,13 +9,13 @@ on:
     branches:
       - main
 
+concurrency:
+  group: publish-governance-release-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
 permissions:
   actions: read
   contents: write
-
-concurrency:
-  group: publish-governance-release
-  cancel-in-progress: false
 
 jobs:
   publish:
