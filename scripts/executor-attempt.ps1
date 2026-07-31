@@ -31,8 +31,17 @@ if (-not $RoutingConfigPath) {
 }
 
 function Write-Json([object]$Value, [string]$Path) {
+    $Directory = Split-Path -Parent $Path
+    if ([string]::IsNullOrWhiteSpace($Directory)) { $Directory = '.' }
+    New-Item -ItemType Directory -Force -Path $Directory | Out-Null
     $Text = ($Value | ConvertTo-Json -Depth 30) + [Environment]::NewLine
-    [System.IO.File]::WriteAllText($Path, $Text, (New-Object System.Text.UTF8Encoding($false)))
+    $Temporary = Join-Path $Directory ('.' + [System.IO.Path]::GetFileName($Path) + '.' + [Guid]::NewGuid().ToString('N') + '.tmp')
+    try {
+        [System.IO.File]::WriteAllText($Temporary, $Text, (New-Object System.Text.UTF8Encoding($false)))
+        [System.IO.File]::Move($Temporary, $Path, $true)
+    } finally {
+        if (Test-Path $Temporary -PathType Leaf) { Remove-Item $Temporary -Force }
+    }
 }
 
 function Get-Sha256Bytes([byte[]]$Bytes) {
@@ -464,23 +473,44 @@ function Promote-Attempt([object]$Routing) {
         throw 'EXECUTOR_FAILOVER_BLOCKED: applied patch verification failed; promotion reversed.'
     }
 
-    Invoke-Git $Project @('worktree','remove','--force',[string]$Data.execution_root) | Out-Null
     $Data.state = 'PROMOTED'
     $Data | Add-Member NoteProperty promoted_at ([DateTime]::UtcNow.ToString('o')) -Force
     $Data | Add-Member NoteProperty post_status @(Get-GitStatusEntries $Project $true) -Force
-    Write-Json $Data $Attempt.paths.manifest
+    try {
+        Write-Json $Data $Attempt.paths.manifest
+    } catch {
+        $PersistenceError = $_.Exception.Message
+        $Undo = Invoke-Git $Project @('apply','--reverse','--binary',$Attempt.paths.patch) -AllowFailure
+        if ($Undo.ExitCode -ne 0) {
+            throw 'EXECUTOR_FAILOVER_BLOCKED: promotion state persistence failed and automatic reverse failed; worktree may be dirty.'
+        }
+        throw "EXECUTOR_FAILOVER_BLOCKED: promotion state persistence failed; promotion reversed: $PersistenceError"
+    }
 
-    [pscustomobject]@{
+    $Cleanup = Invoke-Git $Project @('worktree','remove','--force',[string]$Data.execution_root) -AllowFailure
+    $Result = [ordered]@{
         state = 'PROMOTED'
         changed_paths = $Data.changed_paths
         patch_sha256 = $Data.patch_sha256
-    } | ConvertTo-Json -Compress
+        cleanup_status = if ($Cleanup.ExitCode -eq 0) { 'COMPLETE' } else { 'WARNING' }
+    }
+    if ($Cleanup.ExitCode -ne 0) {
+        $Result.cleanup_detail = if ([string]::IsNullOrWhiteSpace($Cleanup.Text)) {
+            'Executor worktree cleanup failed; remove it manually.'
+        } else {
+            $Cleanup.Text.Trim()
+        }
+    }
+    [pscustomobject]$Result | ConvertTo-Json -Compress
 }
 
 function Discard-Attempt([object]$Routing) {
     $Project = Get-Project
     $Attempt = Read-Attempt $Project
     $Data = $Attempt.data
+    if ($Data.state -notin @('PREPARED','FINALIZED')) {
+        throw "Executor attempt in state $($Data.state) cannot be discarded."
+    }
     if (Test-Path ([string]$Data.execution_root)) {
         Invoke-Git $Project @('worktree','remove','--force',[string]$Data.execution_root) | Out-Null
     }
