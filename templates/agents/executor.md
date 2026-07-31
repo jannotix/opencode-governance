@@ -4,7 +4,10 @@ mode: subagent
 model: __EXECUTOR_MODEL__
 __EXECUTOR_VARIANT_LINE__
 permission:
-  edit: allow
+  edit:
+    "*": allow
+    ".ai/**": deny
+    ".git/**": deny
   task: deny
   external_directory: deny
   skill:
@@ -19,7 +22,7 @@ permission:
     "rg *": allow
     "git add*": ask
     "git commit*": ask
-    "git push*": ask
+    "git push*": deny
     "git reset --hard*": deny
     "git clean*": deny
     "rm -rf *": deny

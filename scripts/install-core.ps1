@@ -255,6 +255,25 @@ $PortableAiEditBlock = @'
     '*\.ai': allow
     '*\.ai\*': allow
 '@
+$LegacyExecutorEditPattern = '(?m)^  edit:\r?\n    "\*": allow\r?\n    "\.ai/\*\*": deny\r?\n    "\.git/\*\*": deny\r?\n'
+$PortableExecutorEditBlock = @'
+  edit:
+    "*": allow
+    ".ai": deny
+    ".ai/*": deny
+    "*/.ai": deny
+    "*/.ai/*": deny
+    '.ai\*': deny
+    '*\.ai': deny
+    '*\.ai\*': deny
+    ".git": deny
+    ".git/*": deny
+    "*/.git": deny
+    "*/.git/*": deny
+    '.git\*': deny
+    '*\.git': deny
+    '*\.git\*': deny
+'@
 
 function Add-RouteMetadata(
     [string]$Text,
@@ -310,7 +329,10 @@ function Render-Agent(
     $Text = $Text.Replace($ModelToken, $Model)
     $VariantLine = if ([string]::IsNullOrWhiteSpace($Variant)) { '' } else { "variant: $Variant" }
     $Text = $Text.Replace($VariantToken, $VariantLine)
-    if ($Template -ne 'executor') {
+    if ($Template -eq 'executor') {
+        if ($Text -notmatch $LegacyExecutorEditPattern) { throw "Cannot render portable Executor edit denies for $Source." }
+        $Text = [regex]::Replace($Text, $LegacyExecutorEditPattern, ($PortableExecutorEditBlock.TrimEnd() + "`n"))
+    } else {
         if ($Text -notmatch $LegacyAiEditPattern) { throw "Cannot render portable .ai permissions for $Source." }
         $Text = [regex]::Replace($Text, $LegacyAiEditPattern, ($PortableAiEditBlock.TrimEnd() + "`n"))
     }
@@ -417,6 +439,8 @@ $($PolicyLines -join "`n")
 
     $Manifest = [ordered]@{
         schema_version = '1.0'
+        # Intermediate core stamp; install-base promotes to 3.4.4 after attaching
+        # context/workflow tools, then capabilities promote to the product version.
         governance_version = '3.3.0'
         architect_runner_version = '3.3.0'
         context_intelligence_version = '3.3.0'

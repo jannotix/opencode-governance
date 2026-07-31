@@ -66,7 +66,8 @@ Implementation/documentation writes are always delegated to Executor.
 
 Executor is the single application/project-documentation writer.
 
-- application source and approved project-documentation writes: allowed;
+- application source and approved project-documentation writes: allowed (`edit: *` allow);
+- project-local `.ai/**` and `.git/**`: denied at the permission layer (portable path forms after install);
 - subagent delegation: denied;
 - `external_directory`: denied;
 - skills: ask/authorize only when selected by governed routing;
@@ -75,11 +76,11 @@ Executor is the single application/project-documentation writer.
 - required high-risk mutations require `PRE_CHANGE_SAFEPOINT` before mutation;
 - destructive shell/Git operations: denied;
 - local add/commit: confirmation-gated;
-- push: confirmation-gated and allowed only after explicit authorization for that push.
+- push: denied (owner must push outside Executor or use an explicitly authorized non-Executor path).
 
 Evidence requirements never expand Executor permissions. `SAFE_EXPERIMENTATION` must use an already permitted isolation mechanism or return `UNAVAILABLE`/`BLOCKED`.
 
-Executor never writes `.ai/GOVERNANCE_MEMORY.md`.
+Executor never writes `.ai/**` governance state; Architect persists accepted evidence after promotion.
 
 ## Independent reviewers
 

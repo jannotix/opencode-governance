@@ -197,6 +197,50 @@ class AuthorityTests(unittest.TestCase):
         self.assertIn("INVALID_RECEIPT_BINDINGS", output)
         self.assertNotIn("Traceback", output)
 
+    def test_content_bound_receipt_hashes_real_artifacts(self) -> None:
+        for relative in (
+            ".ai/APPROVED_REQUIREMENTS.md",
+            ".ai/EXECUTION_PACKET.md",
+            ".ai/VERIFICATION_PROFILE.md",
+            ".ai/EVIDENCE_MANIFEST.md",
+            ".ai/REVIEW_IMPLEMENTATION.md",
+            ".ai/REVIEW_ARCHITECTURE.md",
+            ".ai/FINAL_ADJUDICATION.md",
+        ):
+            path = self.root.joinpath(*relative.split("/"))
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"content-for-{relative}\n", encoding="utf-8")
+            self.assertTrue(path.is_file(), relative)
+        candidate = self.root / ".ai" / "candidate.json"
+        run(AUTHORITY, "candidate", "freeze", "--project-dir", self.root, "--projection", "workspace", "--output", candidate)
+        bindings = {
+            "task_id": "T-BOUND",
+            "actual_model_families": ["family-a", "family-b"],
+            "reviewer_independence": "PASS",
+            "final_verdict": "PASS",
+        }
+        binding_path = self.root / ".ai" / "bindings.json"
+        binding_path.write_text(json.dumps(bindings), encoding="utf-8")
+        receipt = self.root / ".ai" / "receipt.json"
+        issued = run(
+            AUTHORITY,
+            "receipt",
+            "issue",
+            "--candidate",
+            candidate,
+            "--bindings",
+            binding_path,
+            "--project-dir",
+            self.root,
+            "--output",
+            receipt,
+        )
+        self.assertIn("content-bound", issued.stdout)
+        self.assertIn("RECEIPT_VALID", run(AUTHORITY, "receipt", "validate", "--receipt", receipt, "--project-dir", self.root, "--gate", "pre-commit").stdout)
+        (self.root / ".ai" / "FINAL_ADJUDICATION.md").write_text("tampered\n", encoding="utf-8")
+        failure = run(AUTHORITY, "receipt", "validate", "--receipt", receipt, "--project-dir", self.root, "--gate", "pre-commit", ok=False)
+        self.assertIn("RECEIPT_ARTIFACT_MISMATCH", failure.stdout + failure.stderr)
+
     def test_actionable_continuation_rejects_narrative_retry(self) -> None:
         state = self.root / ".ai" / "RUN_STATE.json"
         state.write_text(json.dumps({

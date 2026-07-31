@@ -2,6 +2,12 @@
 
 Dates use `YYYY-MM-DD`. Older micro-releases are summarized; see git history for full detail.
 
+## Unreleased
+
+- Executor permission surface denies `.ai/**` and `.git/**` (portable path forms after install) and denies `git push`.
+- Approval receipts support content-bound issue/validate via `--project-dir` (hashes real artifact files; `RECEIPT_ARTIFACT_MISMATCH` on drift).
+- Install remains a staged pipeline (`core 3.3.0 → base 3.4.4 → capabilities product version`) because intermediate `verify-routing` contracts require matching tool sets at each layer.
+
 ## 3.7.1 - 2026-07-31
 
 - Aligned authority continuation validation with `WORKFLOW_CONTINUATION_GATE_V1` (phase-aware; forbids `terminal_reason` on non-terminal phases).
