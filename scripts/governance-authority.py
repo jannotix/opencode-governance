@@ -84,6 +84,16 @@ HASH_FIELDS = (
     "architecture_review_hash",
     "final_adjudication_hash",
 )
+# Map receipt hash field -> default relative artifact path under the project root.
+DEFAULT_ARTIFACT_PATHS = {
+    "approved_requirements_hash": ".ai/APPROVED_REQUIREMENTS.md",
+    "execution_packet_hash": ".ai/EXECUTION_PACKET.md",
+    "verification_profile_hash": ".ai/VERIFICATION_PROFILE.md",
+    "evidence_manifest_hash": ".ai/EVIDENCE_MANIFEST.md",
+    "implementation_review_hash": ".ai/REVIEW_IMPLEMENTATION.md",
+    "architecture_review_hash": ".ai/REVIEW_ARCHITECTURE.md",
+    "final_adjudication_hash": ".ai/FINAL_ADJUDICATION.md",
+}
 KNOWN_COMMANDS = {
     "/ai-init",
     "/ai-audit",
@@ -138,6 +148,90 @@ def digest(value: Any) -> str:
 
 def valid_hash(value: Any) -> bool:
     return isinstance(value, str) and len(value) == 64 and all(char in "0123456789abcdef" for char in value)
+
+
+def file_digest(path: pathlib.Path) -> str:
+    digest_value = hashlib.sha256()
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(1024 * 1024)
+            if not chunk:
+                break
+            digest_value.update(chunk)
+    return digest_value.hexdigest()
+
+
+def contained_path(root: pathlib.Path, relative: str) -> pathlib.Path:
+    if not isinstance(relative, str) or not relative.strip():
+        raise ContractError("ARTIFACT_PATH_REQUIRED", relative if isinstance(relative, str) else "")
+    normalized = relative.replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    if normalized.startswith("/") or normalized.startswith("../") or normalized == "..":
+        raise ContractError("ARTIFACT_PATH_ESCAPE", relative)
+    parts = pathlib.PurePosixPath(normalized).parts
+    if not parts or any(part in {"", ".", ".."} for part in parts):
+        raise ContractError("ARTIFACT_PATH_ESCAPE", relative)
+    root_resolved = root.resolve()
+    current = root_resolved
+    for part in parts:
+        current = current / part
+        if current.exists() and current.is_symlink():
+            raise ContractError("ARTIFACT_PATH_SYMLINK", relative)
+    if not current.is_file():
+        raise ContractError("ARTIFACT_PATH_MISSING", relative)
+    resolved = current.resolve()
+    try:
+        resolved.relative_to(root_resolved)
+    except ValueError as exc:
+        raise ContractError("ARTIFACT_PATH_ESCAPE", relative) from exc
+    return resolved
+
+
+def resolve_artifact_paths(bindings: dict[str, Any]) -> dict[str, str]:
+    raw = bindings.get("artifact_paths")
+    if raw is None:
+        return dict(DEFAULT_ARTIFACT_PATHS)
+    if not isinstance(raw, dict):
+        raise ContractError("INVALID_ARTIFACT_PATHS")
+    resolved: dict[str, str] = {}
+    for field in HASH_FIELDS:
+        value = raw.get(field, DEFAULT_ARTIFACT_PATHS[field])
+        if not isinstance(value, str) or not value.strip():
+            raise ContractError("ARTIFACT_PATH_REQUIRED", field)
+        cleaned = value.replace("\\", "/")
+        while cleaned.startswith("./"):
+            cleaned = cleaned[2:]
+        resolved[field] = cleaned
+    return resolved
+
+
+def bind_artifact_hashes(
+    root: pathlib.Path,
+    bindings: dict[str, Any],
+    *,
+    require_files: bool,
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Return (hash_bindings, artifact_paths). When require_files, hashes are taken from disk."""
+    paths = resolve_artifact_paths(bindings)
+    if not require_files:
+        hashes: dict[str, str] = {}
+        for field in HASH_FIELDS:
+            value = bindings.get(field)
+            if not valid_hash(value):
+                raise ContractError("INVALID_HASH", field)
+            hashes[field] = value
+        return hashes, paths
+
+    hashes = {}
+    for field, relative in paths.items():
+        path = contained_path(root, relative)
+        content_hash = file_digest(path)
+        provided = bindings.get(field)
+        if provided is not None and valid_hash(provided) and provided != content_hash:
+            raise ContractError("BINDING_HASH_MISMATCH", field)
+        hashes[field] = content_hash
+    return hashes, paths
 
 
 def read_object(path: pathlib.Path) -> dict[str, Any]:
@@ -362,11 +456,18 @@ def validate_receipt_bindings(receipt: dict[str, Any]) -> tuple[dict[str, Any], 
     return bindings, families, task_id.strip()
 
 
-def issue_receipt(candidate: dict[str, Any], bindings: dict[str, Any]) -> dict[str, Any]:
+def issue_receipt(
+    candidate: dict[str, Any],
+    bindings: dict[str, Any],
+    project: pathlib.Path | None = None,
+) -> dict[str, Any]:
     validate_candidate(candidate)
-    for field in HASH_FIELDS:
-        if not valid_hash(bindings.get(field)):
-            raise ContractError("INVALID_HASH", field)
+    require_files = project is not None
+    hash_bindings, artifact_paths = bind_artifact_hashes(
+        project or pathlib.Path("."),
+        bindings,
+        require_files=require_files,
+    )
     families = normalize_model_families(bindings.get("actual_model_families"))
     if bindings.get("reviewer_independence") != "PASS":
         raise ContractError("MODEL_INDEPENDENCE_CONFLICT")
@@ -380,12 +481,14 @@ def issue_receipt(candidate: dict[str, Any], bindings: dict[str, Any]) -> dict[s
         "governance_version": "3.7.1",
         "task_id": task_id.strip(),
         "candidate": candidate,
-        "bindings": {field: bindings[field] for field in HASH_FIELDS},
+        "bindings": hash_bindings,
+        "artifact_paths": artifact_paths,
+        "binding_mode": "content-bound" if require_files else "opaque",
         "actual_model_families": families,
         "reviewer_independence": "PASS",
         "final_verdict": bindings["final_verdict"],
         "issued_at": datetime.now(timezone.utc).isoformat(),
-        "freshness_dependencies": ["candidate_identity", *HASH_FIELDS],
+        "freshness_dependencies": ["candidate_identity", *HASH_FIELDS, "artifact_paths"],
     }
     receipt["receipt_hash"] = digest(receipt)
     return receipt
@@ -408,7 +511,9 @@ def validate_receipt(
     expected_hash = digest({key: value for key, value in receipt.items() if key != "receipt_hash"})
     if receipt_hash != expected_hash:
         raise ContractError("RECEIPT_INTEGRITY_FAILURE")
-    if receipt.get("freshness_dependencies") != ["candidate_identity", *HASH_FIELDS]:
+    expected_deps = ["candidate_identity", *HASH_FIELDS, "artifact_paths"]
+    legacy_deps = ["candidate_identity", *HASH_FIELDS]
+    if receipt.get("freshness_dependencies") not in (expected_deps, legacy_deps):
         raise ContractError("INVALID_RECEIPT_DEPENDENCIES")
     _, _, task_id = validate_receipt_bindings(receipt)
     candidate = receipt.get("candidate")
@@ -426,12 +531,25 @@ def validate_receipt(
             "APPROVAL_RECEIPT_MISMATCH",
             f"approved={candidate['candidate_identity']} current={current['candidate_identity']}",
         )
+    binding_mode = receipt.get("binding_mode", "opaque")
+    if binding_mode == "content-bound":
+        paths = receipt.get("artifact_paths")
+        if not isinstance(paths, dict):
+            raise ContractError("ARTIFACT_PATHS_REQUIRED")
+        for field in HASH_FIELDS:
+            relative = paths.get(field)
+            if not isinstance(relative, str):
+                raise ContractError("ARTIFACT_PATH_REQUIRED", field)
+            path = contained_path(root, relative)
+            if file_digest(path) != receipt["bindings"][field]:
+                raise ContractError("RECEIPT_ARTIFACT_MISMATCH", field)
     return {
         "status": "RECEIPT_VALID",
         "gate": gate,
         "task_id": task_id,
         "candidate_identity": current["candidate_identity"],
         "receipt_hash": receipt_hash,
+        "binding_mode": binding_mode if binding_mode in {"content-bound", "opaque"} else "opaque",
     }
 
 
@@ -560,6 +678,10 @@ def parser() -> argparse.ArgumentParser:
     issue.add_argument("--candidate", required=True)
     issue.add_argument("--bindings", required=True)
     issue.add_argument("--output", required=True)
+    issue.add_argument(
+        "--project-dir",
+        help="When set, binding hashes are computed from artifact files under the project (content-bound).",
+    )
     validate = receipt_actions.add_parser("validate")
     validate.add_argument("--receipt", required=True)
     validate.add_argument("--project-dir", required=True)
@@ -594,12 +716,18 @@ def main() -> None:
                 "projection": candidate["projection"],
             }
         elif args.group == "receipt" and args.action == "issue":
+            project = project_root(args.project_dir) if getattr(args, "project_dir", None) else None
             receipt = issue_receipt(
                 read_object(pathlib.Path(args.candidate)),
                 read_object(pathlib.Path(args.bindings)),
+                project,
             )
             write_object(pathlib.Path(args.output), receipt)
-            output = {"status": "RECEIPT_ISSUED", "receipt_hash": receipt["receipt_hash"]}
+            output = {
+                "status": "RECEIPT_ISSUED",
+                "receipt_hash": receipt["receipt_hash"],
+                "binding_mode": receipt.get("binding_mode", "opaque"),
+            }
         elif args.group == "receipt":
             output = validate_receipt(
                 project_root(args.project_dir),

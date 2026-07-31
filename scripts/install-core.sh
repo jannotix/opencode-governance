@@ -224,6 +224,26 @@ portable_edit = '''  edit:
     '*\\.ai': allow
     '*\\.ai\\*': allow
 '''
+legacy_executor_edit = re.compile(
+    r'(?m)^  edit:\r?\n    "\*": allow\r?\n    "\.ai/\*\*": deny\r?\n    "\.git/\*\*": deny\r?\n'
+)
+portable_executor_edit = '''  edit:
+    "*": allow
+    ".ai": deny
+    ".ai/*": deny
+    "*/.ai": deny
+    "*/.ai/*": deny
+    '.ai\\*': deny
+    '*\\.ai': deny
+    '*\\.ai\\*': deny
+    ".git": deny
+    ".git/*": deny
+    "*/.git": deny
+    "*/.git/*": deny
+    '.git\\*': deny
+    '*\\.git': deny
+    '*\\.git\\*': deny
+'''
 
 def metadata(text, role, name, candidate, priority, hidden):
     if hidden:
@@ -238,7 +258,11 @@ def metadata(text, role, name, candidate, priority, hidden):
 def render(template, name, model_token, model, variant_token, variant, role, candidate=None, priority=0, hidden=False):
     source = root / 'templates' / 'agents' / f'{template}.md'
     text = source.read_text(encoding='utf-8').replace(model_token, model).replace(variant_token, f'variant: {variant}' if variant else '')
-    if template != 'executor':
+    if template == 'executor':
+        text, count = legacy_executor_edit.subn(portable_executor_edit, text)
+        if count != 1:
+            raise SystemExit(f'Cannot render portable Executor edit denies for {source}.')
+    else:
         text, count = legacy_edit.subn(portable_edit, text)
         if count != 1:
             raise SystemExit(f'Cannot render portable .ai permissions for {source}.')
@@ -311,10 +335,10 @@ if routing:
         json.dumps(
             {
                 'schema_version': '1.0',
-                'governance_version': '3.3.0',
-                'architect_runner_version': '3.3.0',
-                'context_intelligence_version': '3.3.0',
-                'workflow_continuation_version': '3.3.0',
+                'governance_version': '3.4.4',
+                'architect_runner_version': '3.4.4',
+                'context_intelligence_version': '3.4.4',
+                'workflow_continuation_version': '3.4.4',
                 'settings': routing['settings'],
                 'roles': routing['roles'],
                 'managed_aliases': managed_aliases,

@@ -60,6 +60,8 @@ Receipt schema `opencode-governance.approval-receipt/v1` (historical alias `GOVE
 
 Post-apply, pre-commit, pre-push, pre-PR and release gates rederive the selected live candidate. A mismatch returns `APPROVAL_RECEIPT_MISMATCH`. Gates never silently renew approval or spend another review budget.
 
+Issue receipts with `--project-dir` so binding hashes are computed from artifact files (`binding_mode: content-bound`). Validation re-hashes those paths and fails with `RECEIPT_ARTIFACT_MISMATCH` on drift. Opaque hex-only bindings remain accepted only without `--project-dir` (local fixture/test mode).
+
 ## Staged pre-commit receipt gate
 
 Governance installs the gate tool but never modifies project Git hooks automatically. Installation and arming are explicit project-scoped actions.
