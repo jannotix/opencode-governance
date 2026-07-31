@@ -6,7 +6,7 @@ Dates use `YYYY-MM-DD`. Older micro-releases are summarized; see git history for
 
 - Executor permission surface denies `.ai/**` and `.git/**` (portable path forms after install) and denies `git push`.
 - Approval receipts support content-bound issue/validate via `--project-dir` (hashes real artifact files; `RECEIPT_ARTIFACT_MISMATCH` on drift).
-- Install core stamps the base layer at `3.4.4` directly (removed intermediate `3.3.0` product stamp on the live install path).
+- Install remains a staged pipeline (`core 3.3.0 → base 3.4.4 → capabilities product version`) because intermediate `verify-routing` contracts require matching tool sets at each layer.
 
 ## 3.7.1 - 2026-07-31
 

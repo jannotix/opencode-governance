@@ -439,10 +439,12 @@ $($PolicyLines -join "`n")
 
     $Manifest = [ordered]@{
         schema_version = '1.0'
-        governance_version = '3.4.4'
-        architect_runner_version = '3.4.4'
-        context_intelligence_version = '3.4.4'
-        workflow_continuation_version = '3.4.4'
+        # Intermediate core stamp; install-base promotes to 3.4.4 after attaching
+        # context/workflow tools, then capabilities promote to the product version.
+        governance_version = '3.3.0'
+        architect_runner_version = '3.3.0'
+        context_intelligence_version = '3.3.0'
+        workflow_continuation_version = '3.3.0'
         settings = $Routing.settings
         roles = $Routing.roles
         managed_aliases = $ManagedAliases
