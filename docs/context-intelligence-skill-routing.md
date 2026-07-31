@@ -1,6 +1,6 @@
 # Context Intelligence and Skill Routing
 
-OpenCode Governance provides a deterministic local-first context layer for bounded retrieval, skill capability selection, content-summary reuse and efficiency metrics. Path containment, required-section routing, terminal-state validation and workflow-continuation gates are part of the current 3.6.0 surface.
+OpenCode Governance provides a deterministic local-first context layer for bounded retrieval, skill capability selection, content-summary reuse and efficiency metrics. Path containment, required-section routing, terminal-state validation and workflow-continuation gates are part of the current 3.7.0 surface.
 
 The feature extends existing `.ai/**` authority and evidence contracts. It does not introduce a vector database, network retrieval service, second memory authority or autonomous permission layer.
 
@@ -21,10 +21,10 @@ Windows uses `context-intelligence.ps1` through PowerShell 7. Unix uses `context
 The current routing manifest records:
 
 ```text
-governance_version: 3.6.0
-architect_runner_version: 3.6.0
-context_intelligence_version: 3.6.0
-workflow_continuation_version: 3.6.0
+governance_version: 3.7.0
+architect_runner_version: 3.7.0
+context_intelligence_version: 3.7.0
+workflow_continuation_version: 3.7.0
 ```
 
 ## Task artifacts

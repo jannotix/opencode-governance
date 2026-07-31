@@ -4,7 +4,7 @@ Provider- and model-agnostic product-lifecycle governance for [OpenCode](https:/
 
 > Community project. Not affiliated with the OpenCode team.
 
-**Current release: 3.6.0**
+**Current release: 3.7.0**
 
 Installs seven specialized agents, twelve `/ai-*` commands, deterministic tooling and fail-closed contracts so planning, implementation, validation and review stay bound to approved requirements and current repository evidence.
 
@@ -116,7 +116,7 @@ Small patches may use lighter discovery. They still require requirement provenan
 - Fallbacks restart the full role from the same packet and frozen target.
 - Required unavailable evidence cannot become `PASS`.
 
-## 3.6.0 capabilities
+## 3.7.0 capabilities
 
 - Immutable candidate projections (`workspace`, `staged`, `commit`, `base-diff`) and content-bound approval receipts
 - Typed actionable continuation on non-terminal `RUN_STATE.json` (`next_action` required)

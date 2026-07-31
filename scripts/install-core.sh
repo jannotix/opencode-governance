@@ -311,7 +311,7 @@ if routing:
         json.dumps(
             {
                 'schema_version': '1.0',
-                'governance_version': '3.3.0',
+                'governance_version': '3.7.0',
                 'settings': routing['settings'],
                 'roles': routing['roles'],
                 'managed_aliases': managed_aliases,
@@ -347,8 +347,8 @@ PY
 "$SCRIPT_DIR/verify.sh" "$CONFIG_DIR"
 bash "$SCRIPT_DIR/verify-routing.sh" "$CONFIG_DIR"
 if [[ -n "$ROUTING_CONFIG" ]]; then
-  echo "Installed OpenCode Governance v3.3.0 with provider-agnostic failover routing."
+  echo "Installed OpenCode Governance v3.7.0 with provider-agnostic failover routing."
 else
-  echo "Installed OpenCode Governance v3.3.0 with legacy single-model routing."
+  echo "Installed OpenCode Governance v3.7.0 with legacy single-model routing."
 fi
 echo "No push, merge, deployment or production rollback is automatic. Restart OpenCode before use."

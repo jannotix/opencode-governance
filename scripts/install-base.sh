@@ -122,7 +122,7 @@ import json,pathlib,re,sys
 root=pathlib.Path(sys.argv[1]);tools=root/'opencode-governance-tools';manifest_path=root/'opencode-governance-routing.json'
 data=json.loads(manifest_path.read_text(encoding='utf-8-sig'))
 if data.get('schema_version')!='1.0': raise SystemExit('Routing manifest schema_version must be 1.0.')
-data['governance_version']='3.4.4';data['architect_runner_version']='3.4.4';data['context_intelligence_version']='3.4.4';data['workflow_continuation_version']='3.4.4'
+data['governance_version']='3.7.0';data['architect_runner_version']='3.7.0';data['context_intelligence_version']='3.7.0';data['workflow_continuation_version']='3.7.0'
 data['managed_tools']=[str(tools/name) for name in ['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','workflow-continuation.ps1','workflow-continuation.py']]
 manifest_path.write_text(json.dumps(data,indent=2)+'\n',encoding='utf-8')
 marker='[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]';ps_runner=str(tools/'architect-attempt.ps1');sh_runner=str(tools/'architect-attempt.sh');ps_context=str(tools/'context-intelligence.ps1');sh_context=str(tools/'context-intelligence.sh');py_context=str(tools/'context-intelligence.py');workflow_ps=str(tools/'workflow-continuation.ps1');workflow_py=str(tools/'workflow-continuation.py')
@@ -221,7 +221,7 @@ Persist `top_level_command`, `current_phase`, `next_required_phase` and `termina
     path.write_text(text[:match.end()]+workflow_entry+text[match.end():],encoding='utf-8')
 PY
   "$SCRIPT_DIR/verify-routing.sh" "$CONFIG_DIR"
-  echo 'Installed OpenCode Governance v3.4.4 — Deterministic Workflow Continuation.'
+  echo 'Installed OpenCode Governance v3.7.0 — Deterministic Workflow Continuation.'
   echo 'Routing preflight, complete managed-tool backup and hardened context paths are enabled without changing model selection.'
 fi
 if [[ -n "$JSONC_NORMALIZED" && -f "$JSONC_NORMALIZED" ]]; then

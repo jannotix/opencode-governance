@@ -36,7 +36,7 @@ jobs:
             scripts/governance-capabilities.py \
             scripts/governance-install-transaction.py
           bash -n scripts/install.sh scripts/install-base.sh scripts/install-core.sh scripts/uninstall.sh scripts/uninstall-base.sh scripts/uninstall-core.sh scripts/verify-routing.sh scripts/run-governed.sh tests/test-workflow-continuation.sh
-      - name: Run hardening and 3.6.0 regressions
+      - name: Run hardening and 3.7.0 regressions
         run: |
           python3 tests/test-hardening.py
           python3 tests/test-unified-release.py
@@ -67,7 +67,7 @@ jobs:
             if($errors.Count){throw "$path`n$($errors|Out-String)"}
           }
           python -m py_compile tests/test-governance-authority-memory.py tests/test-governance-pre-commit.py tests/test-governance-capabilities.py tests/test-governance-simulation-fixture.py tests/test-governance-simulation-run.py scripts/governance-authority.py scripts/governance-memory.py scripts/governance-evidence.py scripts/governance-pre-commit.py scripts/governance-simulation.py scripts/governance-capabilities.py scripts/governance-install-transaction.py
-      - name: Run Windows hardening and 3.6.0 regressions
+      - name: Run Windows hardening and 3.7.0 regressions
         shell: pwsh
         run: |
           pwsh -NoProfile -File tests/test-runner-contract.ps1

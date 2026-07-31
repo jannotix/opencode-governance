@@ -417,7 +417,7 @@ $($PolicyLines -join "`n")
 
     $Manifest = [ordered]@{
         schema_version = '1.0'
-        governance_version = '3.3.0'
+        governance_version = '3.7.0'
         settings = $Routing.settings
         roles = $Routing.roles
         managed_aliases = $ManagedAliases
@@ -454,7 +454,7 @@ Write-Utf8NoBom $Target (($Object | ConvertTo-Json -Depth 20) + [Environment]::N
 & (Join-Path $PSScriptRoot 'verify-routing.ps1') -ConfigDir $ConfigDir
 
 $Mode = if ($Routing) { "routing manifest with $($ManagedAliases.Count) hidden routes" } else { 'legacy single-model routing' }
-Write-Host "Installed OpenCode Governance v3.3.0: 7 public agents, 12 commands, $Mode."
+Write-Host "Installed OpenCode Governance v3.7.0: 7 public agents, 12 commands, $Mode."
 Write-Host 'Executor fallback uses isolated worktrees and never bypasses normal review or commit gates.'
 Write-Host 'No push, merge, deployment or production rollback is automatic. Restart OpenCode before use.'
 Write-Host "Backup: $BackupDir"

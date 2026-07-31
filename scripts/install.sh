@@ -41,10 +41,10 @@ bash "$BASE_INSTALLER" "$@"
 if [[ -n "$ROUTING_CONFIG" ]]; then
   python3 "$CAPABILITIES" install --source-dir "$SCRIPT_DIR" --config-dir "$CONFIG_DIR"
   "$SCRIPT_DIR/verify-routing.sh" "$CONFIG_DIR"
-  echo 'Installed OpenCode Governance v3.6.0 — Governed Authority, Memory & Evidence.'
+  echo 'Installed OpenCode Governance v3.7.0 — Governed Authority, Memory & Evidence.'
   echo 'Candidate receipts, actionable continuation, focused review lenses, governed memory, exact evidence reuse, staged commit validation and simulation are active.'
 else
-  echo 'Installed OpenCode Governance v3.6.0 in legacy single-model mode.'
+  echo 'Installed OpenCode Governance v3.7.0 in legacy single-model mode.'
   echo 'Provider/model routing was not changed. Advanced routed capabilities require a local routing profile.'
 fi
 

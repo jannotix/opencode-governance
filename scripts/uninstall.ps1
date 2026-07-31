@@ -9,7 +9,7 @@ if(-not(Test-Path -LiteralPath $BaseUninstaller -PathType Leaf)){throw "Internal
 
 if(Test-Path -LiteralPath $ManifestPath -PathType Leaf){
     try{$Manifest=Get-Content -LiteralPath $ManifestPath -Raw|ConvertFrom-Json}catch{throw 'Routing manifest is invalid; refusing to remove unknown managed files.'}
-    if([string]$Manifest.governance_version-eq'3.6.0'){
+    if([string]$Manifest.governance_version-eq'3.7.0'){
         if(-not(Test-Path -LiteralPath $Capabilities -PathType Leaf)){throw "Capability uninstaller not found: $Capabilities"}
         $Process=Start-Process -FilePath 'python' -ArgumentList @($Capabilities,'uninstall','--config-dir',$ConfigDir) -NoNewWindow -Wait -PassThru
         if($Process.ExitCode-ne0){throw "Governance capability removal failed with exit code $($Process.ExitCode)."}
@@ -17,6 +17,6 @@ if(Test-Path -LiteralPath $ManifestPath -PathType Leaf){
 }
 
 & $BaseUninstaller -ConfigDir $ConfigDir
-Write-Host 'Removed OpenCode Governance 3.6.0 canonical agents, commands, managed routes and managed tools.'
+Write-Host 'Removed OpenCode Governance 3.7.0 canonical agents, commands, managed routes and managed tools.'
 Write-Host 'Provider authentication, project .ai state, project documentation, backups, governed memory and unrelated local files were preserved.'
 Write-Host 'Any explicitly installed project pre-commit receipt gate must be removed from that project before deleting its referenced tool path.'

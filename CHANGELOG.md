@@ -2,7 +2,7 @@
 
 All released versions are recorded in this single file. Dates use `YYYY-MM-DD`.
 
-## Unreleased
+## 3.7.0 - 2026-07-31
 
 - Unified workflow-continuation and authority contracts: non-terminal `RUN_STATE.json` requires typed `next_action`.
 - Executor promote reverses the applied patch if reverse-check fails.
@@ -10,6 +10,10 @@ All released versions are recorded in this single file. Dates use `YYYY-MM-DD`.
 - Portable Unix backup discovery (no GNU `find -printf`); Windows installer resolves `py`/`python3`/`python`.
 - Routing example uses install-valid resolved variants; removed personal path fixtures from verifiers.
 - Removed version-sliced CI workflows, dead scaffolding tests, historical tag force-repair, and marketing density from the README.
+- Removed two further unused regression tests (`tests/test-powershell-schema-parity.ps1`, `tests/test-routing-schema-parity.py`) that were no longer referenced by any workflow.
+- Added the canonical `[project]` metadata section to `pyproject.toml` (name, version, license, classifiers, `requires-python`) so the project is installable as a metadata-bearing package.
+- Promoted the version to 3.7.0 in the manifest, capability tools, install/uninstall/verify scripts, the routing manifest contract, the workflow file and the documentation.
+- Preserved the seven public agents, twelve public commands, the canonical `opencode-governance-routing.json` manifest, the capability tool set, the workflow continuation gate, the governed engineering memory, the candidate authority contract, the staged pre-commit receipt gate and every external-action boundary.
 
 ## 3.6.0 - 2026-07-30
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unified 3.6.0 backup and routing-preservation hardening regressions."""
+"""Unified 3.7.0 backup and routing-preservation hardening regressions."""
 from __future__ import annotations
 
 import json
@@ -33,7 +33,7 @@ def main() -> None:
         invoke(INSTALL, "--config-dir", config, "--routing-config", VALID_PROFILE)
         manifest_path = config / "opencode-governance-routing.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
-        assert manifest["governance_version"] == "3.6.0"
+        assert manifest["governance_version"] == "3.7.0"
         assert len(manifest["managed_tools"]) == 14
         assert not (config / "opencode-governance-runtime.json").exists()
         before_settings = manifest["settings"]
@@ -50,7 +50,7 @@ def main() -> None:
         after = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
         assert after["settings"] == before_settings
         assert after["roles"] == before_roles
-    print("PASS: unified 3.6.0 backup and routing preservation")
+    print("PASS: unified 3.7.0 backup and routing preservation")
 
 
 if __name__ == "__main__":

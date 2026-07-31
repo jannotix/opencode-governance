@@ -318,7 +318,7 @@ def issue_receipt(candidate: dict[str, Any], bindings: dict[str, Any]) -> dict[s
         raise ContractError("TASK_ID_REQUIRED")
     receipt = {
         "schema": RECEIPT_SCHEMA,
-        "governance_version": "3.6.0",
+        "governance_version": "3.7.0",
         "task_id": task_id.strip(),
         "candidate": candidate,
         "bindings": {field: bindings[field] for field in HASH_FIELDS},
@@ -341,7 +341,7 @@ def validate_receipt(
         raise ContractError("INVALID_GATE", gate)
     if receipt.get("schema") != RECEIPT_SCHEMA:
         raise ContractError("INVALID_RECEIPT_SCHEMA")
-    if receipt.get("governance_version") != "3.6.0":
+    if receipt.get("governance_version") != "3.7.0":
         raise ContractError("INVALID_RECEIPT_VERSION", str(receipt.get("governance_version")))
     receipt_hash = receipt.get("receipt_hash")
     if not valid_hash(receipt_hash):

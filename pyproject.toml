@@ -1,2 +1,26 @@
+[project]
+name = "opencode-governance"
+version = "3.7.0"
+description = "Provider- and model-agnostic product-lifecycle governance for OpenCode projects."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+keywords = ["opencode", "governance", "ai-coding", "engineering-workflow"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+python_files = ["test_*.py", "test-*.py"]
+addopts = "-ra -q"
