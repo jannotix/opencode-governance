@@ -23,7 +23,7 @@ function Test-RoutingProfile([string]$Path){
     if([string]$Profile.schema_version-ne'1.0'){throw 'Routing schema_version must be 1.0.'}
     if($null-eq$Profile.settings-or$null-eq$Profile.roles){throw 'Routing profile must contain settings and roles objects.'}
     $RoleNames=@('architect','executor','reviewer','reviewer-architecture','final-reviewer')
-    $Failures=@('PROVIDER_UNAVAILABLE','RATE_LIMIT','PLAN_QUOTA_EXHAUSTED','MODEL_RETIRED','MODEL_TEMPORARILY_UNAVAILABLE','BOUNDED_TIMEOUT')
+    $Failures=@('PROVIDER_UNAVAILABLE','RATE_LIMIT','PLAN_QUOTA_EXHAUSTED','MODEL_RETIRED','MODEL_TEMPORARILY_UNAVAILABLE','BOUNDED_TIMEOUT','TOOL_EXECUTION_ABORTED')
     $OnlyOnAllowed=$Failures+@('MODEL_UNAVAILABLE_ON_ALL_CONFIGURED_PROVIDERS')
     $WorkClasses=@('PATCH','BOUNDED_FEATURE','MAJOR_FEATURE','EXISTING_PRODUCT_EVOLUTION','NEW_PRODUCT','HIGH_RISK_CHANGE')
 
@@ -147,7 +147,7 @@ try{
 
 ## ARCHITECT_RUNNER_INTEGRATION
 
-Architect pre-execution commands ``ai-init|ai-audit|ai-discover|ai-plan`` require the installed transactional runner.
+Architect pre-execution commands ``ai-init|ai-audit|ai-discover|ai-plan|ai-resume`` (pre-side-effect resume only) require the installed transactional runner.
 
 WINDOWS_ARCHITECT_RUNNER: $ArchitectRunnerPs
 WINDOWS_ARCHITECT_HOST: pwsh -NoProfile -File
@@ -187,17 +187,29 @@ Governance state paths may not traverse symbolic links or reparse points. The ex
             [IO.File]::WriteAllText($AgentPath,$Text,(New-Object Text.UTF8Encoding($false)))
         }
 
-        foreach($Command in @('ai-init','ai-audit','ai-discover','ai-plan')){
+        foreach($Command in @('ai-init','ai-audit','ai-discover','ai-plan','ai-resume')){
             $CommandPath=Join-Path $ConfigDir "commands/$Command.md"
             $Text=Get-Content -LiteralPath $CommandPath -Raw
             $Text=[regex]::Replace($Text,'(?s)\r?\n## ARCHITECT_RUNNER_ENTRY_GATE\r?\n.*?(?=\r?\n## |\z)','')
-            $Gate=@"
+            $Text=[regex]::Replace($Text,'(?s)\r?\n## RESUME_MODE_V1\r?\n.*?(?=\r?\n## |\z)','')
+            $ResumeModeGate=if($Command-eq'ai-resume'){@"
 
+## RESUME_MODE_V1
+
+Classify resume from authoritative ``RUN_STATE.json`` before any ``.ai/**`` write:
+
+- ``PRE_SIDE_EFFECT``: phases at or before ``READY_FOR_EXECUTION`` / ``PRE_CHANGE_SAFEPOINT_WHEN_REQUIRED`` (no implementation side effects). Require the transactional Architect runner and never leave partial ``.ai/**`` writes without rollback.
+- ``POST_SIDE_EFFECT``: ``IMPLEMENTING`` or later. Do **not** use the transactional runner. Continue non-transactionally from persisted evidence; never automatic ``.ai/**`` rollback of an implementation-era governance tree.
+
+If phase fields cannot be proven, stop with ``RESUME_PHASE_UNKNOWN`` rather than guessing.
+"@}else{''}
+            $Gate=@"
+$ResumeModeGate
 ## ARCHITECT_RUNNER_ENTRY_GATE
 
-Before any ``.ai/**`` write, require the exact invocation marker ``$Marker`` in the command arguments.
+Before any ``.ai/**`` write$(if($Command-eq'ai-resume'){' in ``PRE_SIDE_EFFECT`` mode'}else{''}), require the exact invocation marker ``$Marker`` in the command arguments.
 
-When the marker is absent, stop immediately with:
+When the marker is absent$(if($Command-eq'ai-resume'){' for a pre-side-effect resume'}else{''}), stop immediately with:
 
 ``````text
 ARCHITECT_RUNNER_REQUIRED
@@ -210,7 +222,7 @@ WINDOWS_COMMAND: pwsh -NoProfile -File "$ArchitectRunnerPs" -ProjectDir "<CURREN
 UNIX_COMMAND: "$ArchitectRunnerSh" --project-dir "<CURRENT_PROJECT_ROOT>" --command $Command --arguments "<ORIGINAL_ARGUMENTS>"
 ``````
 
-The external runner supports Git and non-Git project directories. It fingerprints all source and project-documentation content outside root ``.ai/**`` before and after each attempt and returns ``PROJECT_STATE_CHANGED`` on any delta.
+The external runner supports Git and non-Git project directories. It fingerprints all source and project-documentation content outside root ``.ai/**`` before and after each attempt and returns ``PROJECT_STATE_CHANGED`` on any delta. Failed attempts restore ``.ai/**`` byte-for-byte, classify ``TOOL_EXECUTION_ABORTED`` when tools/process abort mid-run, and recover orphan Architect transactions from durable snapshots under the OpenCode config directory.
 
 Do not create, edit or delete ``.ai/**``. Do not invoke the runner from inside this OpenCode process. Return the complete ``WINDOWS_COMMAND`` and ``UNIX_COMMAND`` values with the actual current project root and original arguments substituted so the owner can copy and execute them. Do not invent another runner path.
 

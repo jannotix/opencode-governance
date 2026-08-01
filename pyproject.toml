@@ -1,6 +1,6 @@
 [project]
 name = "opencode-governance"
-version = "3.7.1"
+version = "3.7.2"
 description = "Provider- and model-agnostic product-lifecycle governance for OpenCode projects."
 readme = "README.md"
 requires-python = ">=3.9"

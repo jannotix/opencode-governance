@@ -16,6 +16,17 @@ Read:
 
 Reconstruct `WORK_CLASS`, `DISCOVERY_DEPTH`, `DISCOVERY_STATUS`, `PRODUCT_SCOPE_STATUS`, `PRODUCT_BLUEPRINT_VERSION`, `MATERIAL_UNKNOWN_COUNT`, approval and milestone state. Invalidate only evidence dependent on changed product/source/contract/dependency/environment/tool/recovery inputs. Preserve `GOVERNANCE_RESULT`, `ENVIRONMENT_FINGERPRINT`, `STALE`, `GOVERNANCE_MEMORY`, `DEPENDENCY_ADMISSION_GATE`, `PRE_CHANGE_SAFEPOINT`, `MEMORY_DECISION`, `OPERATIONAL_ASSURANCE`.
 
+## RESUME_MODE_V1
+
+Before any `.ai/**` write, classify resume mode from authoritative `RUN_STATE.json` (`current_phase`, `next_required_phase`, and when needed `state` / `last_safe_transition`):
+
+- `PRE_SIDE_EFFECT` — at or before `READY_FOR_EXECUTION` / `PRE_CHANGE_SAFEPOINT_WHEN_REQUIRED`. Must run through the transactional Architect runner (`ARCHITECT_RUNNER_ENTRY_GATE`). Partial governance writes are never authoritative; failed exits restore `.ai/**`.
+- `POST_SIDE_EFFECT` — `IMPLEMENTING` or later (implementation/review/release boundary already crossed). Do **not** invoke the transactional runner and do **not** roll back the whole `.ai/**` tree automatically. Reconcile evidence, invalidate only dependent artifacts, and continue the original `top_level_command`.
+
+Unknown or unprovable phase → `RESUME_PHASE_UNKNOWN` / `HUMAN_INPUT_REQUIRED`. Never guess.
+
+Orphan Architect transactions (`ARCHITECT_TRANSACTION_V1` under the OpenCode config directory) are recovered only for pre-side-effect resumes when project content fingerprint still matches the frozen transaction.
+
 ## Resume integrity contract
 
 Verify current Git target and every evidence dependency before selecting the next phase. Do not recreate historical safepoints, approvals, failure reproduction, reviewer independence or validation evidence after the fact. If a review target changed, discard affected review results and create a fresh cycle. If steering changed requirements or product scope, return to discovery/planning before execution.
@@ -37,3 +48,5 @@ Run the continuation helper only after this migration is complete. Migration cha
 Resume preserves the original `top_level_command` recorded in `RUN_STATE.json`; an interrupted `/ai-workflow` remains `top_level_command: ai-workflow`. Require `current_phase`, `next_required_phase` and `terminal_reason` and never replace the original authority with `ai-resume`.
 
 Before emitting a final response, execute the installed `workflow-continuation.py` with `--expected-command ai-resume`. Decision `CONTINUE_REQUIRED` resumes the original workflow at `next_required_phase` from authoritative persisted evidence. `TERMINAL_ALLOWED` is valid only for `LOCAL_COMMITTED` or an explicit blocker with a non-empty `terminal_reason`. `INVALID_RUN_STATE` blocks completion. Do not restart from zero, create a second task, or ask the owner to invoke an internal phase command when continuation is safe.
+
+`NO_AUTOMATIC_EXTERNAL_ACTION` applies on resume: never push, merge, deploy, publish, production rollback or widen permissions merely to recover progress.

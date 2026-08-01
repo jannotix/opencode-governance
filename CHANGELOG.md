@@ -8,6 +8,15 @@ Dates use `YYYY-MM-DD`. Older micro-releases are summarized; see git history for
 - Approval receipts support content-bound issue/validate via `--project-dir` (hashes real artifact files; `RECEIPT_ARTIFACT_MISMATCH` on drift).
 - Install remains a staged pipeline (`core 3.3.0 → base 3.4.4 → capabilities product version`) because intermediate `verify-routing` contracts require matching tool sets at each layer.
 
+## 3.7.2 - 2026-08-01
+
+- Reliability patch: transactional `/ai-resume` for pre-side-effect phases (`ai-resume` accepted by Architect runners with `RESUME_MODE_V1`).
+- `ARCHITECT_RUNNER_ENTRY_GATE` extended to `/ai-resume` (pre-side-effect only); post-`IMPLEMENTING` resume refused with `RESUME_POST_SIDE_EFFECT` (no automatic full `.ai/**` rollback).
+- Durable Architect transaction journals (`ARCHITECT_TRANSACTION_V1`) under the OpenCode config directory with orphan recovery (`ARCHITECT_ORPHAN_RECOVERED` / `ARCHITECT_ORPHAN_RECOVERY_BLOCKED`).
+- Explicit `TOOL_EXECUTION_ABORTED` failure class; optional inclusion in `settings.eligible_failures`; `.ai/**` restored on non-successful exits when project fingerprint is unchanged.
+- Windows and Unix incident regressions for abort-during-resume, post-side-effect refusal and orphan recovery.
+- Preserved candidate identity, approval receipts, typed continuation and evidence binding from 3.7.1.
+
 ## 3.7.1 - 2026-07-31
 
 - Aligned authority continuation validation with `WORKFLOW_CONTINUATION_GATE_V1` (phase-aware; forbids `terminal_reason` on non-terminal phases).

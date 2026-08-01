@@ -5,7 +5,7 @@ python3 - "$@" <<'PY'
 import argparse,base64,hashlib,json,os,pathlib,re,shutil,stat,subprocess,sys,tempfile,time
 p=argparse.ArgumentParser()
 p.add_argument('--project-dir',required=True)
-p.add_argument('--command',required=True,choices=['ai-init','ai-audit','ai-discover','ai-plan'])
+p.add_argument('--command',required=True,choices=['ai-init','ai-audit','ai-discover','ai-plan','ai-resume'])
 p.add_argument('--arguments',default='')
 p.add_argument('--routing-config')
 p.add_argument('--config-dir')
@@ -27,7 +27,14 @@ except Exception:raise SystemExit('Routing profile is invalid JSON.')
 if routing.get('schema_version')!='1.0':raise SystemExit('Routing schema_version must be 1.0.')
 settings=routing.get('settings');roles=routing.get('roles')
 if not isinstance(settings,dict) or not isinstance(roles,dict):raise SystemExit('Routing profile is missing settings or roles.')
-allowed_failures={'PROVIDER_UNAVAILABLE','RATE_LIMIT','PLAN_QUOTA_EXHAUSTED','MODEL_RETIRED','MODEL_TEMPORARILY_UNAVAILABLE','BOUNDED_TIMEOUT'}
+allowed_failures={'PROVIDER_UNAVAILABLE','RATE_LIMIT','PLAN_QUOTA_EXHAUSTED','MODEL_RETIRED','MODEL_TEMPORARILY_UNAVAILABLE','BOUNDED_TIMEOUT','TOOL_EXECUTION_ABORTED'}
+post_side_effect_phases={
+ 'IMPLEMENTING','IMPLEMENTATION','DOCUMENTATION_SYNC','EVIDENCE_VALIDATION','OPERATIONAL_VALIDATION',
+ 'EVIDENCE_AND_OPERATIONAL_VALIDATION','TASK_VALIDATED','DUAL_REVIEW','DUAL_REVIEW_COMPLETE','TASK_DUAL_REVIEW',
+ 'FINAL_ADJUDICATION','FINAL_ADJUDICATION_PASS','TASK_FINAL_ADJUDICATION','PASS','IMPLEMENTATION_DEFECT','PLAN_DEFECT',
+ 'PRODUCT_COMPLETENESS_RECONCILIATION','PRODUCT_COMPLETE','PRODUCT_DEFECT','PRODUCT_INCOMPLETE','MILESTONE_VALIDATED',
+ 'RELEASE_READINESS','RELEASE_READY','READY_FOR_PRODUCTION','NOT_READY_FOR_PRODUCTION','VALIDATED_LEARNING','LOCAL_COMMITTED'
+}
 allowed_only_on=allowed_failures|{'MODEL_UNAVAILABLE_ON_ALL_CONFIGURED_PROVIDERS'}
 enabled=settings.get('enabled_roles');eligible=settings.get('eligible_failures')
 if not isinstance(enabled,list) or any(not isinstance(value,str) or not value.strip() for value in enabled):raise SystemExit('settings.enabled_roles must be an array of non-empty strings.')
@@ -139,12 +146,67 @@ def restore_ai(ai,backup,existed,expected):
  if existed:shutil.copytree(backup,ai)
  actual=tree_hash(ai)
  if actual!=expected:raise RuntimeError(f'ARCHITECT_FAILOVER_BLOCKED: .ai restore hash mismatch ({actual} != {expected}). HUMAN_RECOVERY_REQUIRED')
-def classify(text,timed_out):
+def project_tx_dir(cfg,proj):
+ key=hashlib.sha256(str(proj).lower().encode()).hexdigest()
+ return cfg/'opencode-governance-architect-tx'/key
+def pid_alive(pid):
+ if not pid or int(pid)<=0:return False
+ try:os.kill(int(pid),0);return True
+ except OSError:return False
+def resume_mode(root):
+ candidates=[]
+ tasks=root/'.ai'/'tasks'
+ if tasks.is_dir():
+  for task in tasks.iterdir():
+   rs=task/'RUN_STATE.json'
+   if rs.is_file():candidates.append(rs)
+ root_state=root/'.ai'/'RUN_STATE.json'
+ if root_state.is_file():candidates.append(root_state)
+ if not candidates:return 'PRE_SIDE_EFFECT'
+ latest=max(candidates,key=lambda p:p.stat().st_mtime)
+ try:state=json.loads(latest.read_text(encoding='utf-8-sig'))
+ except Exception:raise RuntimeError(f'RESUME_PHASE_UNKNOWN: invalid RUN_STATE.json at {latest}. HUMAN_RECOVERY_REQUIRED')
+ # next_required_phase alone is not a side-effect signal: READY_FOR_EXECUTION -> IMPLEMENTING is still PRE.
+ phases=[]
+ for field in ('current_phase','state','last_safe_transition'):
+  value=state.get(field)
+  if isinstance(value,str) and value.strip():phases.append(value.strip())
+ if not phases:
+  nxt=state.get('next_required_phase')
+  if not (isinstance(nxt,str) and nxt.strip()):raise RuntimeError(f'RESUME_PHASE_UNKNOWN: RUN_STATE.json missing phase fields at {latest}. HUMAN_RECOVERY_REQUIRED')
+  return 'PRE_SIDE_EFFECT'
+ if any(phase in post_side_effect_phases for phase in phases):return 'POST_SIDE_EFFECT'
+ return 'PRE_SIDE_EFFECT'
+def recover_orphan(tx,ai):
+ meta_path=tx/'meta.json'
+ if not meta_path.is_file():return
+ try:meta=json.loads(meta_path.read_text(encoding='utf-8-sig'))
+ except Exception:raise RuntimeError(f'ARCHITECT_ORPHAN_RECOVERY_BLOCKED: corrupt transaction meta at {meta_path}. HUMAN_RECOVERY_REQUIRED')
+ if pid_alive(meta.get('pid')):raise RuntimeError(f"ARCHITECT_TRANSACTION_ACTIVE: pid {meta.get('pid')} still holds the Architect transaction. HUMAN_RECOVERY_REQUIRED")
+ frozen_project=meta.get('project_state_fingerprint');frozen_ai=meta.get('ai_hash');existed=bool(meta.get('ai_existed'))
+ if not frozen_project or not frozen_ai:raise RuntimeError('ARCHITECT_ORPHAN_RECOVERY_BLOCKED: incomplete transaction meta. HUMAN_RECOVERY_REQUIRED')
+ if project_state_fingerprint()!=frozen_project:raise RuntimeError('ARCHITECT_ORPHAN_RECOVERY_BLOCKED: PROJECT_STATE_CHANGED since orphaned transaction. HUMAN_RECOVERY_REQUIRED')
+ backup=tx/'ai-snapshot'
+ if existed and not backup.is_dir():raise RuntimeError('ARCHITECT_ORPHAN_RECOVERY_BLOCKED: missing durable .ai snapshot. HUMAN_RECOVERY_REQUIRED')
+ restore_ai(ai,backup,existed,frozen_ai);shutil.rmtree(tx)
+ print('ARCHITECT_ORPHAN_RECOVERED: restored .ai/** from durable Architect transaction snapshot',file=sys.stderr)
+def open_tx(tx,ai,command,ai_hash,existed,project_state):
+ if tx.exists():shutil.rmtree(tx)
+ tx.mkdir(parents=True)
+ backup=tx/'ai-snapshot'
+ if existed:shutil.copytree(ai,backup)
+ meta={'schema':'ARCHITECT_TRANSACTION_V1','command':command,'project_dir':str(project),'pid':os.getpid(),'started_at_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'ai_existed':existed,'ai_hash':ai_hash,'project_state_fingerprint':project_state}
+ (tx/'meta.json').write_text(json.dumps(meta,separators=(',',':')),encoding='utf-8')
+ return backup
+def close_tx(tx):
+ if tx.exists():shutil.rmtree(tx)
+def classify(text,timed_out,exit_code=1):
  if timed_out:return 'BOUNDED_TIMEOUT'
  t=text.lower()
- tests=[('AUTHENTICATION_FAILED',r'authentication failed|unauthorized|invalid api key|token expired|provider auth'),('MODEL_RETIRED',r'retired|deprecated|no longer available'),('INVALID_MODEL_CONFIGURATION',r'model not found|configured model.*not valid|providermodelnotfound|invalid model'),('CONTEXT_OVERFLOW',r'context.*(too long|overflow|length)|maximum context'),('TOOL_PERMISSION_DENIED',r'permission denied|tool permission|deniederror'),('SAFETY_REFUSAL',r'safety refusal|content policy|refused for safety'),('MALFORMED_REQUEST',r'malformed request|invalid request body|bad request'),('PLAN_QUOTA_EXHAUSTED',r'quota.*(exhausted|exceeded)|credits.*(exhausted|insufficient)|plan limit'),('RATE_LIMIT',r'rate.?limit|http\s*429|concurrency limit'),('MODEL_TEMPORARILY_UNAVAILABLE',r'temporarily unavailable|model overloaded|try again later'),('PROVIDER_UNAVAILABLE',r'connection refused|unable to connect|network error|http\s*5\d\d|service unavailable|gateway timeout')]
+ tests=[('TOOL_EXECUTION_ABORTED',r'tool[_\s-]?execution[_\s-]?aborted|execution aborted|tool call aborted|tool aborted|process (was )?killed|terminated by signal|exit abort'),('AUTHENTICATION_FAILED',r'authentication failed|unauthorized|invalid api key|token expired|provider auth'),('MODEL_RETIRED',r'retired|deprecated|no longer available'),('INVALID_MODEL_CONFIGURATION',r'model not found|configured model.*not valid|providermodelnotfound|invalid model'),('CONTEXT_OVERFLOW',r'context.*(too long|overflow|length)|maximum context'),('TOOL_PERMISSION_DENIED',r'permission denied|tool permission|deniederror'),('SAFETY_REFUSAL',r'safety refusal|content policy|refused for safety'),('MALFORMED_REQUEST',r'malformed request|invalid request body|bad request'),('PLAN_QUOTA_EXHAUSTED',r'quota.*(exhausted|exceeded)|credits.*(exhausted|insufficient)|plan limit'),('RATE_LIMIT',r'rate.?limit|http\s*429|concurrency limit'),('MODEL_TEMPORARILY_UNAVAILABLE',r'temporarily unavailable|model overloaded|try again later'),('PROVIDER_UNAVAILABLE',r'connection refused|unable to connect|network error|http\s*5\d\d|service unavailable|gateway timeout')]
  for name,pattern in tests:
   if re.search(pattern,t):return name
+ if exit_code is not None and (exit_code<0 or exit_code>=128):return 'TOOL_EXECUTION_ABORTED'
  return 'UNCLASSIFIED_FAILURE'
 def allowed(route,failure,failed_family,attempted):
  if route['route'] in attempted:return False
@@ -156,10 +218,15 @@ def allowed(route,failure,failed_family,attempted):
   if not('MODEL_UNAVAILABLE_ON_ALL_CONFIGURED_PROVIDERS' in scope and not same_left):return False
  if failure=='MODEL_RETIRED' and route['candidate']['model_family']==failed_family:return False
  return True
-ai=project/'.ai';tmp=pathlib.Path(tempfile.mkdtemp(prefix='opencode-governance-'));backup=tmp/'ai-snapshot';logs=tmp/'logs';logs.mkdir()
-existed=ai.exists()
-if existed:shutil.copytree(ai,backup)
-ai_hash=tree_hash(ai);project_state=project_state_fingerprint();attempted=set();failure=None;failed_family=None;attempt=0
+ai=project/'.ai';tx=project_tx_dir(config,project);recover_orphan(tx,ai)
+if a.command=='ai-resume':
+ mode=resume_mode(project);print(f'ARCHITECT_RESUME_MODE {mode}',flush=True)
+ if mode=='POST_SIDE_EFFECT':
+  raise SystemExit('RESUME_POST_SIDE_EFFECT: transactional Architect runner refuses /ai-resume after implementation side-effect boundary. Continue non-transactionally from authoritative evidence without automatic .ai/** rollback. HUMAN_RECOVERY_REQUIRED')
+tmp=pathlib.Path(tempfile.mkdtemp(prefix='opencode-governance-'));logs=tmp/'logs';logs.mkdir()
+existed=ai.exists();ai_hash=tree_hash(ai);project_state=project_state_fingerprint()
+backup=open_tx(tx,ai,a.command,ai_hash,existed,project_state)
+attempted=set();failure=None;failed_family=None;attempt=0
 try:
  while True:
   candidates=[r for r in routes if allowed(r,failure or 'PROVIDER_UNAVAILABLE',failed_family or '',attempted)]
@@ -181,15 +248,19 @@ try:
   if project_state_fingerprint()!=project_state:raise RuntimeError('ARCHITECT_FAILOVER_BLOCKED: PROJECT_STATE_CHANGED: source or project-documentation content changed during a pre-execution command. HUMAN_RECOVERY_REQUIRED')
   if r.returncode==0 and not timed:
    cooldowns.pop(c['model'],None);save_cooldowns(cooldowns);print(f"ARCHITECT_FAILOVER_COMPLETE route={route['route']} attempts={attempt} ai_tree={tree_hash(ai)}")
+   close_tx(tx)
    if not a.keep_attempt_logs:shutil.rmtree(tmp)
    raise SystemExit(0)
-  failure=classify((r.stdout or '')+'\n'+(r.stderr or ''),timed);failed_family=c['model_family'];print(f"Architect route failed: {failure} ({route['route']})",file=sys.stderr)
+  failure=classify((r.stdout or '')+'\n'+(r.stderr or ''),timed,getattr(r,'returncode',1));failed_family=c['model_family'];print(f"Architect route failed: {failure} ({route['route']})",file=sys.stderr)
   if failure not in eligible:raise RuntimeError(f'ARCHITECT_FAILOVER_BLOCKED: ineligible failure {failure}. Logs: {logs}')
   cooldowns[c['model']]=int(time.time())+cooldown;save_cooldowns(cooldowns);restore_ai(ai,backup,existed,ai_hash)
 except SystemExit:raise
 except Exception as e:
+ restored=False
  try:
-  if project_state_fingerprint()==project_state:restore_ai(ai,backup,existed,ai_hash)
+  if project_state_fingerprint()==project_state:restore_ai(ai,backup,existed,ai_hash);restored=True
  except Exception:pass
+ if restored:close_tx(tx)
+ else:print(f'ARCHITECT_TRANSACTION_ORPHANED: durable snapshot retained at {tx}',file=sys.stderr)
  print(str(e),file=sys.stderr);print(f'ATTEMPT_LOGS {logs}');raise SystemExit(1)
 PY

@@ -21,7 +21,7 @@ if ([string]$Manifest.governance_version -ne '3.3.0') { throw 'Routing manifest 
 
 $EnabledRoles = @('architect','executor','reviewer','reviewer-architecture','final-reviewer')
 $AliasRoles = @('executor','reviewer','reviewer-architecture','final-reviewer')
-$AllowedFailures = @('PROVIDER_UNAVAILABLE','RATE_LIMIT','PLAN_QUOTA_EXHAUSTED','MODEL_RETIRED','MODEL_TEMPORARILY_UNAVAILABLE','BOUNDED_TIMEOUT')
+$AllowedFailures = @('PROVIDER_UNAVAILABLE','RATE_LIMIT','PLAN_QUOTA_EXHAUSTED','MODEL_RETIRED','MODEL_TEMPORARILY_UNAVAILABLE','BOUNDED_TIMEOUT','TOOL_EXECUTION_ABORTED')
 $WorkClasses = @('PATCH','BOUNDED_FEATURE','MAJOR_FEATURE','EXISTING_PRODUCT_EVOLUTION','NEW_PRODUCT','HIGH_RISK_CHANGE')
 $ExpectedAliases = @{}
 

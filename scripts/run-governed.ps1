@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory=$true)][string]$ProjectDir,
-    [Parameter(Mandatory=$true)][ValidateSet('ai-init','ai-audit','ai-discover','ai-plan')][string]$Command,
+    [Parameter(Mandatory=$true)][ValidateSet('ai-init','ai-audit','ai-discover','ai-plan','ai-resume')][string]$Command,
     [string]$Arguments = '',
     [string]$RoutingConfigPath,
     [string]$ConfigDir,
@@ -25,8 +25,15 @@ if($TimeoutSeconds -lt 30){throw 'TimeoutSeconds must be at least 30.'}
 try{$Routing=Get-Content -LiteralPath $RoutingConfigPath -Raw|ConvertFrom-Json}catch{throw 'Routing profile is invalid JSON.'}
 if([string]$Routing.schema_version -ne '1.0'){throw 'Routing schema_version must be 1.0.'}
 if($null-eq$Routing.settings-or$null-eq$Routing.roles){throw 'Routing profile is missing settings or roles.'}
-$AllowedFailures=@('PROVIDER_UNAVAILABLE','RATE_LIMIT','PLAN_QUOTA_EXHAUSTED','MODEL_RETIRED','MODEL_TEMPORARILY_UNAVAILABLE','BOUNDED_TIMEOUT')
+$AllowedFailures=@('PROVIDER_UNAVAILABLE','RATE_LIMIT','PLAN_QUOTA_EXHAUSTED','MODEL_RETIRED','MODEL_TEMPORARILY_UNAVAILABLE','BOUNDED_TIMEOUT','TOOL_EXECUTION_ABORTED')
 $AllowedOnlyOn=$AllowedFailures+@('MODEL_UNAVAILABLE_ON_ALL_CONFIGURED_PROVIDERS')
+$PostSideEffectPhases=@(
+  'IMPLEMENTING','IMPLEMENTATION','DOCUMENTATION_SYNC','EVIDENCE_VALIDATION','OPERATIONAL_VALIDATION',
+  'EVIDENCE_AND_OPERATIONAL_VALIDATION','TASK_VALIDATED','DUAL_REVIEW','DUAL_REVIEW_COMPLETE','TASK_DUAL_REVIEW',
+  'FINAL_ADJUDICATION','FINAL_ADJUDICATION_PASS','TASK_FINAL_ADJUDICATION','PASS','IMPLEMENTATION_DEFECT','PLAN_DEFECT',
+  'PRODUCT_COMPLETENESS_RECONCILIATION','PRODUCT_COMPLETE','PRODUCT_DEFECT','PRODUCT_INCOMPLETE','MILESTONE_VALIDATED',
+  'RELEASE_READINESS','RELEASE_READY','READY_FOR_PRODUCTION','NOT_READY_FOR_PRODUCTION','VALIDATED_LEARNING','LOCAL_COMMITTED'
+)
 function Get-JsonArray([object]$Owner,[string]$Name,[string]$Context,[bool]$Required=$true){
   $Property=$Owner.PSObject.Properties[$Name]
   if($null-eq$Property){if($Required){throw "$Context must be an array."};return}
@@ -173,9 +180,84 @@ function Restore-Ai([string]$AiPath,[string]$Backup,[bool]$Existed,[string]$Expe
   if($Existed){Copy-Item -LiteralPath $Backup -Destination $AiPath -Recurse -Force}
   $actual=Get-FileTreeHash $AiPath;if($actual-ne$ExpectedHash){throw "ARCHITECT_FAILOVER_BLOCKED: .ai restore hash mismatch ($actual != $ExpectedHash). HUMAN_RECOVERY_REQUIRED"}
 }
-function Classify-Failure([string]$Text,[bool]$TimedOut){
+function Get-ProjectTransactionKey([string]$Path){Get-TextHash ([string]$Path.ToLowerInvariant())}
+function Get-ProjectTransactionDir([string]$RootConfig,[string]$Path){Join-Path $RootConfig ("opencode-governance-architect-tx/"+ (Get-ProjectTransactionKey $Path))}
+function Test-PidAlive([int]$ProcessId){
+  if($ProcessId -le 0){return $false}
+  try{$null=Get-Process -Id $ProcessId -ErrorAction Stop;return $true}catch{return $false}
+}
+function Get-ResumeMode([string]$Root){
+  $candidates=@()
+  $tasks=Join-Path $Root '.ai/tasks'
+  if(Test-Path -LiteralPath $tasks -PathType Container){
+    foreach($task in Get-ChildItem -LiteralPath $tasks -Directory -ErrorAction SilentlyContinue){
+      $runState=Join-Path $task.FullName 'RUN_STATE.json'
+      if(Test-Path -LiteralPath $runState -PathType Leaf){$candidates+=$runState}
+    }
+  }
+  $rootState=Join-Path $Root '.ai/RUN_STATE.json'
+  if(Test-Path -LiteralPath $rootState -PathType Leaf){$candidates+=$rootState}
+  if($candidates.Count-eq0){return 'PRE_SIDE_EFFECT'}
+  $latest=$candidates|Sort-Object { (Get-Item -LiteralPath $_).LastWriteTimeUtc } -Descending | Select-Object -First 1
+  try{$state=Get-Content -LiteralPath $latest -Raw|ConvertFrom-Json}catch{throw "RESUME_PHASE_UNKNOWN: invalid RUN_STATE.json at $latest. HUMAN_RECOVERY_REQUIRED"}
+  # next_required_phase alone is not a side-effect signal: READY_FOR_EXECUTION -> IMPLEMENTING is still PRE.
+  $progressFields=@('current_phase','state','last_safe_transition')
+  $phases=@()
+  foreach($field in $progressFields){
+    $value=[string]$state.$field
+    if(-not[string]::IsNullOrWhiteSpace($value)){$phases+=$value.Trim()}
+  }
+  if($phases.Count-eq0){
+    $next=[string]$state.next_required_phase
+    if([string]::IsNullOrWhiteSpace($next)){throw "RESUME_PHASE_UNKNOWN: RUN_STATE.json missing phase fields at $latest. HUMAN_RECOVERY_REQUIRED"}
+    return 'PRE_SIDE_EFFECT'
+  }
+  foreach($phase in $phases){if($phase -in $PostSideEffectPhases){return 'POST_SIDE_EFFECT'}}
+  'PRE_SIDE_EFFECT'
+}
+function Recover-OrphanArchitectTransaction([string]$TxDir,[string]$AiPath){
+  $metaPath=Join-Path $TxDir 'meta.json'
+  if(-not(Test-Path -LiteralPath $metaPath -PathType Leaf)){return}
+  try{$meta=Get-Content -LiteralPath $metaPath -Raw|ConvertFrom-Json}catch{throw "ARCHITECT_ORPHAN_RECOVERY_BLOCKED: corrupt transaction meta at $metaPath. HUMAN_RECOVERY_REQUIRED"}
+  $ownerPid=0;if($null-ne$meta.pid){[void][int]::TryParse([string]$meta.pid,[ref]$ownerPid)}
+  if(Test-PidAlive $ownerPid){throw "ARCHITECT_TRANSACTION_ACTIVE: pid $ownerPid still holds the Architect transaction. HUMAN_RECOVERY_REQUIRED"}
+  $frozenProject=[string]$meta.project_state_fingerprint
+  $frozenAi=[string]$meta.ai_hash
+  $existed=[bool]$meta.ai_existed
+  if([string]::IsNullOrWhiteSpace($frozenProject)-or[string]::IsNullOrWhiteSpace($frozenAi)){throw 'ARCHITECT_ORPHAN_RECOVERY_BLOCKED: incomplete transaction meta. HUMAN_RECOVERY_REQUIRED'}
+  if((Get-ProjectStateFingerprint)-ne$frozenProject){throw 'ARCHITECT_ORPHAN_RECOVERY_BLOCKED: PROJECT_STATE_CHANGED since orphaned transaction. HUMAN_RECOVERY_REQUIRED'}
+  $backup=Join-Path $TxDir 'ai-snapshot'
+  if($existed-and-not(Test-Path -LiteralPath $backup -PathType Container)){throw 'ARCHITECT_ORPHAN_RECOVERY_BLOCKED: missing durable .ai snapshot. HUMAN_RECOVERY_REQUIRED'}
+  Restore-Ai $AiPath $backup $existed $frozenAi
+  Remove-Item -LiteralPath $TxDir -Recurse -Force
+  Write-Warning 'ARCHITECT_ORPHAN_RECOVERED: restored .ai/** from durable Architect transaction snapshot'
+}
+function Open-ArchitectTransaction([string]$TxDir,[string]$AiPath,[string]$CommandName,[string]$AiHash,[bool]$AiExisted,[string]$ProjectState){
+  if(Test-Path -LiteralPath $TxDir){Remove-Item -LiteralPath $TxDir -Recurse -Force}
+  New-Item -ItemType Directory -Force -Path $TxDir|Out-Null
+  $backup=Join-Path $TxDir 'ai-snapshot'
+  if($AiExisted){Copy-Item -LiteralPath $AiPath -Destination $backup -Recurse -Force}
+  $meta=[ordered]@{
+    schema='ARCHITECT_TRANSACTION_V1'
+    command=$CommandName
+    project_dir=$ProjectDir
+    pid=$PID
+    started_at_utc=[DateTime]::UtcNow.ToString('o')
+    ai_existed=$AiExisted
+    ai_hash=$AiHash
+    project_state_fingerprint=$ProjectState
+  }
+  $metaPath=Join-Path $TxDir 'meta.json'
+  ($meta|ConvertTo-Json -Depth 5)|Set-Content -LiteralPath $metaPath -Encoding utf8
+  $backup
+}
+function Close-ArchitectTransaction([string]$TxDir){
+  if(Test-Path -LiteralPath $TxDir){Remove-Item -LiteralPath $TxDir -Recurse -Force}
+}
+function Classify-Failure([string]$Text,[bool]$TimedOut,[int]$ExitCode=1){
   if($TimedOut){return 'BOUNDED_TIMEOUT'}
   $value=$Text.ToLowerInvariant()
+  if($value-match'tool[_\s-]?execution[_\s-]?aborted|execution aborted|tool call aborted|tool aborted|process (was )?killed|terminated by signal|exit abort'){return 'TOOL_EXECUTION_ABORTED'}
   if($value-match'authentication failed|unauthorized|invalid api key|token expired|provider auth'){return 'AUTHENTICATION_FAILED'}
   if($value-match'retired|deprecated|no longer available'){return 'MODEL_RETIRED'}
   if($value-match'model not found|configured model.*not valid|providermodelnotfound|invalid model'){return 'INVALID_MODEL_CONFIGURATION'}
@@ -187,6 +269,7 @@ function Classify-Failure([string]$Text,[bool]$TimedOut){
   if($value-match'rate.?limit|http\s*429|concurrency limit'){return 'RATE_LIMIT'}
   if($value-match'temporarily unavailable|model overloaded|try again later'){return 'MODEL_TEMPORARILY_UNAVAILABLE'}
   if($value-match'connection refused|unable to connect|network error|http\s*5\d\d|service unavailable|gateway timeout'){return 'PROVIDER_UNAVAILABLE'}
+  if($ExitCode -lt 0 -or $ExitCode -ge 128){return 'TOOL_EXECUTION_ABORTED'}
   'UNCLASSIFIED_FAILURE'
 }
 function Invoke-Route([object]$Route,[int]$Attempt,[string]$LogDir){
@@ -200,7 +283,7 @@ function Invoke-Route([object]$Route,[int]$Attempt,[string]$LogDir){
   $outTask=$process.StandardOutput.ReadToEndAsync();$errTask=$process.StandardError.ReadToEndAsync();$timedOut=-not$process.WaitForExit($TimeoutSeconds*1000)
   if($timedOut){try{$process.Kill($true)}catch{};$process.WaitForExit()}
   $out=$outTask.GetAwaiter().GetResult();$err=$errTask.GetAwaiter().GetResult();[IO.File]::WriteAllText($stdout,$out);[IO.File]::WriteAllText($stderr,$err)
-  [pscustomobject]@{exit=$process.ExitCode;timed_out=$timedOut;text=($out+"`n"+$err)}
+  [pscustomobject]@{exit=$process.ExitCode;timed_out=$timedOut;text=($out+"`n"+$err);killed=$timedOut}
 }
 function Candidate-Allowed([object]$Route,[string]$Failure,[string]$FailedFamily,[hashtable]$Attempted){
   if($Attempted.ContainsKey($Route.route)){return $false}
@@ -213,12 +296,24 @@ function Candidate-Allowed([object]$Route,[string]$Failure,[string]$FailedFamily
   if($Failure-eq'MODEL_RETIRED'-and[string]$Route.candidate.model_family-eq$FailedFamily){return $false}
   $true
 }
-function Preserve-LogsOnly([string]$Temp,[string]$Backup){
-  if($KeepAttemptLogs){if(Test-Path -LiteralPath $Backup){Remove-Item -LiteralPath $Backup -Recurse -Force}}elseif(Test-Path -LiteralPath $Temp){Remove-Item -LiteralPath $Temp -Recurse -Force}
+function Preserve-LogsOnly([string]$Temp){
+  # Durable transaction snapshots live under ConfigDir and are never deleted here.
+  if(-not$KeepAttemptLogs-and(Test-Path -LiteralPath $Temp)){Remove-Item -LiteralPath $Temp -Recurse -Force}
 }
 
-$AiPath=Join-Path $ProjectDir '.ai';$Temp=Join-Path ([IO.Path]::GetTempPath()) ("opencode-governance-"+[guid]::NewGuid().ToString('N'));$Backup=Join-Path $Temp 'ai-snapshot';$Logs=Join-Path $Temp 'logs';New-Item -ItemType Directory -Force -Path $Logs|Out-Null
-$AiExisted=Test-Path -LiteralPath $AiPath;if($AiExisted){Copy-Item -LiteralPath $AiPath -Destination $Backup -Recurse -Force};$AiHash=Get-FileTreeHash $AiPath;$ProjectState=Get-ProjectStateFingerprint
+$AiPath=Join-Path $ProjectDir '.ai'
+$TxDir=Get-ProjectTransactionDir $ConfigDir $ProjectDir
+Recover-OrphanArchitectTransaction $TxDir $AiPath
+if($Command-eq'ai-resume'){
+  $resumeMode=Get-ResumeMode $ProjectDir
+  Write-Host "ARCHITECT_RESUME_MODE $resumeMode"
+  if($resumeMode-eq'POST_SIDE_EFFECT'){
+    throw 'RESUME_POST_SIDE_EFFECT: transactional Architect runner refuses /ai-resume after implementation side-effect boundary. Continue non-transactionally from authoritative evidence without automatic .ai/** rollback. HUMAN_RECOVERY_REQUIRED'
+  }
+}
+$Temp=Join-Path ([IO.Path]::GetTempPath()) ("opencode-governance-"+[guid]::NewGuid().ToString('N'));$Logs=Join-Path $Temp 'logs';New-Item -ItemType Directory -Force -Path $Logs|Out-Null
+$AiExisted=Test-Path -LiteralPath $AiPath;$AiHash=Get-FileTreeHash $AiPath;$ProjectState=Get-ProjectStateFingerprint
+$Backup=Open-ArchitectTransaction $TxDir $AiPath $Command $AiHash $AiExisted $ProjectState
 $Attempted=@{};$Failure=$null;$FailedFamily=$null;$attempt=0
 try{
   while($true){
@@ -229,13 +324,15 @@ try{
     $result=Invoke-Route $route $attempt $Logs
     if((Get-ProjectStateFingerprint)-ne$ProjectState){throw 'ARCHITECT_FAILOVER_BLOCKED: PROJECT_STATE_CHANGED: source or project-documentation content changed during a pre-execution command. HUMAN_RECOVERY_REQUIRED'}
     if($result.exit-eq0-and-not$result.timed_out){
-      $Cooldowns.Remove([string]$route.candidate.model);Save-Cooldowns $Cooldowns;Write-Host "ARCHITECT_FAILOVER_COMPLETE route=$($route.route) attempts=$attempt ai_tree=$(Get-FileTreeHash $AiPath)";Preserve-LogsOnly $Temp $Backup;exit 0
+      $Cooldowns.Remove([string]$route.candidate.model);Save-Cooldowns $Cooldowns;Write-Host "ARCHITECT_FAILOVER_COMPLETE route=$($route.route) attempts=$attempt ai_tree=$(Get-FileTreeHash $AiPath)";Close-ArchitectTransaction $TxDir;Preserve-LogsOnly $Temp;exit 0
     }
-    $Failure=Classify-Failure $result.text $result.timed_out;$FailedFamily=[string]$route.candidate.model_family;Write-Warning "Architect route failed: $Failure ($($route.route))"
+    $Failure=Classify-Failure $result.text $result.timed_out ([int]$result.exit);$FailedFamily=[string]$route.candidate.model_family;Write-Warning "Architect route failed: $Failure ($($route.route))"
     if($Failure-notin$Eligible){throw "ARCHITECT_FAILOVER_BLOCKED: ineligible failure $Failure. Logs: $Logs"}
     $Cooldowns[[string]$route.candidate.model]=(Get-Epoch)+$DefaultCooldown;Save-Cooldowns $Cooldowns;Restore-Ai $AiPath $Backup $AiExisted $AiHash
   }
 }catch{
-  try{if((Get-ProjectStateFingerprint)-eq$ProjectState){Restore-Ai $AiPath $Backup $AiExisted $AiHash}}catch{}
-  Preserve-LogsOnly $Temp $Backup;Write-Error $_;if($KeepAttemptLogs){Write-Host "ATTEMPT_LOGS $Logs"};exit 1
+  $restored=$false
+  try{if((Get-ProjectStateFingerprint)-eq$ProjectState){Restore-Ai $AiPath $Backup $AiExisted $AiHash;$restored=$true}}catch{}
+  if($restored){Close-ArchitectTransaction $TxDir}else{Write-Warning "ARCHITECT_TRANSACTION_ORPHANED: durable snapshot retained at $TxDir"}
+  Preserve-LogsOnly $Temp;Write-Error $_;if($KeepAttemptLogs){Write-Host "ATTEMPT_LOGS $Logs"};exit 1
 }

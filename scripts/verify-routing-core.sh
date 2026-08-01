@@ -30,7 +30,7 @@ settings = manifest.get('settings') or {}
 roles = manifest.get('roles') or {}
 enabled_roles = ['architect', 'executor', 'reviewer', 'reviewer-architecture', 'final-reviewer']
 alias_roles = ['executor', 'reviewer', 'reviewer-architecture', 'final-reviewer']
-failures = ['PROVIDER_UNAVAILABLE', 'RATE_LIMIT', 'PLAN_QUOTA_EXHAUSTED', 'MODEL_RETIRED', 'MODEL_TEMPORARILY_UNAVAILABLE', 'BOUNDED_TIMEOUT']
+failures = ['PROVIDER_UNAVAILABLE', 'RATE_LIMIT', 'PLAN_QUOTA_EXHAUSTED', 'MODEL_RETIRED', 'MODEL_TEMPORARILY_UNAVAILABLE', 'BOUNDED_TIMEOUT', 'TOOL_EXECUTION_ABORTED']
 work_classes = ['PATCH', 'BOUNDED_FEATURE', 'MAJOR_FEATURE', 'EXISTING_PRODUCT_EVOLUTION', 'NEW_PRODUCT', 'HIGH_RISK_CHANGE']
 
 if any(value not in enabled_roles for value in settings.get('enabled_roles', [])):
