@@ -15,15 +15,15 @@ jobs:
         with:
           ref: fix/ci-fail-closed-resume-validation
           fetch-depth: 0
-      - name: Patch capability paths and Windows CI
+      - name: Apply deterministic fixes
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
 
-          capabilities = Path('scripts/governance-capabilities.py')
-          text = capabilities.read_text(encoding='utf-8')
+          path = Path('scripts/governance-capabilities.py')
+          text = path.read_text(encoding='utf-8')
           old = '''    expected = base_tools(config) if version == BASE_VERSION else expected_tools(config)
     if manifest.get("managed_tools") != [str(path) for path in expected]:
         fail("UNSAFE_MANAGED_TOOL_SET", str(version))
@@ -34,42 +34,22 @@ jobs:
         fail("UNSAFE_MANAGED_TOOL_SET", str(version))
 
     def normalized_tool_path(value: str | pathlib.Path) -> str:
-        resolved_path = pathlib.Path(value).resolve(strict=False)
-        normalized = str(resolved_path)
+        normalized = str(pathlib.Path(value).resolve(strict=False))
         return os.path.normcase(normalized) if os.name == "nt" else normalized
 
     if [normalized_tool_path(value) for value in managed] != [
-        normalized_tool_path(path) for path in expected
+        normalized_tool_path(value) for value in expected
     ]:
         fail("UNSAFE_MANAGED_TOOL_SET", str(version))
 '''
-          if text.count(old) != 1:
-              raise SystemExit('governance-capabilities managed-tool block mismatch')
-          capabilities.write_text(text.replace(old, new), encoding='utf-8')
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif 'def normalized_tool_path' not in text:
+              raise SystemExit('managed-tool comparison block not found')
+          path.write_text(text, encoding='utf-8')
 
-          tests = Path('tests/test-governance-capabilities.py')
-          text = tests.read_text(encoding='utf-8')
-          anchor = '''    def test_verify_rejects_managed_section_drift(self) -> None:
-'''
-          method = '''    def test_install_accepts_equivalent_managed_tool_paths(self) -> None:
-        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
-        manifest["managed_tools"] = [
-            str(pathlib.Path(value).parent / ".." / "opencode-governance-tools" / pathlib.Path(value).name)
-            for value in manifest["managed_tools"]
-        ]
-        self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
-        installed = self.install()
-        self.assertEqual("3.7.2", installed["governance_version"])
-
-'''
-          if method not in text:
-              if text.count(anchor) != 1:
-                  raise SystemExit('capability test insertion anchor mismatch')
-              text = text.replace(anchor, method + anchor, 1)
-          tests.write_text(text, encoding='utf-8')
-
-          hardening = Path('.github/workflows/verify-hardening.yml')
-          text = hardening.read_text(encoding='utf-8')
+          path = Path('.github/workflows/verify-hardening.yml')
+          text = path.read_text(encoding='utf-8')
           text = text.replace(
               '''        run: |
           $errors=$null
@@ -92,19 +72,24 @@ jobs:
 ''',
               1,
           )
-          hardening.write_text(text, encoding='utf-8')
+          text = text.replace(
+              '          python tests/test-governance-capabilities.py\n',
+              '          python tests/test-governance-capabilities.py\n          python tests/test-capability-path-normalization.py\n',
+          )
+          path.write_text(text, encoding='utf-8')
 
-          verify = Path('.github/workflows/verify.yml')
-          text = verify.read_text(encoding='utf-8')
+          path = Path('.github/workflows/verify.yml')
+          text = path.read_text(encoding='utf-8')
           text = text.replace(
               "$ErrorActionPreference='Stop'",
               "$ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$true",
           )
-          verify.write_text(text, encoding='utf-8')
+          path.write_text(text, encoding='utf-8')
           PY
-          python3 -m py_compile scripts/governance-capabilities.py tests/test-governance-capabilities.py
+          python3 -m py_compile scripts/governance-capabilities.py tests/test-capability-path-normalization.py
           grep -q 'PSNativeCommandUseErrorActionPreference' .github/workflows/verify-hardening.yml
           grep -q 'PSNativeCommandUseErrorActionPreference' .github/workflows/verify.yml
+          grep -q 'normalized_tool_path' scripts/governance-capabilities.py
           rm .github/workflows/apply-ci-failclosed-fix.yml
       - name: Commit fixes
         shell: bash
