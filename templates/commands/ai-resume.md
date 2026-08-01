@@ -6,6 +6,16 @@ subtask: false
 
 Resume `$ARGUMENTS` from Git, `RUN_STATE.json`, `STEERING.md`, canonical task/product artifacts and evidence, never conversation history.
 
+Read:
+- `.ai/product/PRODUCT_VISION.md`
+- `.ai/product/USER_AND_ROLE_MODEL.md`
+- `.ai/product/DOMAIN_AND_PROCESS_MODEL.md`
+- `.ai/product/PRODUCT_COMPLETENESS_MATRIX.md`
+- `.ai/product/PRODUCT_BLUEPRINT.md`
+- `.ai/product/PRODUCT_DECISIONS.md`
+
+Reconstruct `WORK_CLASS`, `DISCOVERY_DEPTH`, `DISCOVERY_STATUS`, `PRODUCT_SCOPE_STATUS`, `PRODUCT_BLUEPRINT_VERSION`, `MATERIAL_UNKNOWN_COUNT`, approval and milestone state. Invalidate only evidence dependent on changed product/source/contract/dependency/environment/tool/recovery inputs. Preserve `GOVERNANCE_RESULT`, `ENVIRONMENT_FINGERPRINT`, `STALE`, `GOVERNANCE_MEMORY`, `DEPENDENCY_ADMISSION_GATE`, `PRE_CHANGE_SAFEPOINT`, `MEMORY_DECISION`, `OPERATIONAL_ASSURANCE`.
+
 ## RESUME_MODE_V1
 
 Before any `.ai/**` write, classify resume mode from authoritative `RUN_STATE.json` (`current_phase`, `next_required_phase`, and when needed `state` / `last_safe_transition`):
@@ -16,16 +26,6 @@ Before any `.ai/**` write, classify resume mode from authoritative `RUN_STATE.js
 Unknown or unprovable phase → `RESUME_PHASE_UNKNOWN` / `HUMAN_INPUT_REQUIRED`. Never guess.
 
 Orphan Architect transactions (`ARCHITECT_TRANSACTION_V1` under the OpenCode config directory) are recovered only for pre-side-effect resumes when project content fingerprint still matches the frozen transaction.
-
-Read:
-- `.ai/product/PRODUCT_VISION.md`
-- `.ai/product/USER_AND_ROLE_MODEL.md`
-- `.ai/product/DOMAIN_AND_PROCESS_MODEL.md`
-- `.ai/product/PRODUCT_COMPLETENESS_MATRIX.md`
-- `.ai/product/PRODUCT_BLUEPRINT.md`
-- `.ai/product/PRODUCT_DECISIONS.md`
-
-Reconstruct `WORK_CLASS`, `DISCOVERY_DEPTH`, `DISCOVERY_STATUS`, `PRODUCT_SCOPE_STATUS`, `PRODUCT_BLUEPRINT_VERSION`, `MATERIAL_UNKNOWN_COUNT`, approval and milestone state. Invalidate only evidence dependent on changed product/source/contract/dependency/environment/tool/recovery inputs. Preserve `GOVERNANCE_RESULT`, `ENVIRONMENT_FINGERPRINT`, `STALE`, `GOVERNANCE_MEMORY`, `DEPENDENCY_ADMISSION_GATE`, `PRE_CHANGE_SAFEPOINT`, `MEMORY_DECISION`, `OPERATIONAL_ASSURANCE`.
 
 ## Resume integrity contract
 
