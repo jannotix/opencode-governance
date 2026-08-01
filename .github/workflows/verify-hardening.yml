@@ -90,6 +90,8 @@ jobs:
       - name: Parse PowerShell and compile Python
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           $errors=$null
           foreach($path in @('tests/test-runner-contract.ps1','tests/test-jsonc-preservation.ps1','tests/test-jsonc-readable.ps1','tests/test-workflow-continuation.ps1','tests/test-context-intelligence.ps1','tests/test-project-state-integrity.ps1','tests/test-ai-resume-transaction.ps1','tests/test-ai-resume-postcondition.ps1','scripts/workflow-continuation.ps1','scripts/run-governed.ps1','scripts/executor-attempt.ps1','scripts/install.ps1','scripts/install-base.ps1','scripts/install-core.ps1','scripts/uninstall.ps1','scripts/uninstall-base.ps1','scripts/uninstall-core.ps1','scripts/verify-routing.ps1','scripts/normalize-jsonc.ps1')){
             [Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path),[ref]$null,[ref]$errors)|Out-Null
@@ -99,6 +101,8 @@ jobs:
       - name: Run Windows hardening regressions
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           pwsh -NoProfile -File tests/test-runner-contract.ps1
           pwsh -NoProfile -File tests/test-jsonc-preservation.ps1
           pwsh -NoProfile -File tests/test-jsonc-readable.ps1
