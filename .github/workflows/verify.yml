@@ -114,7 +114,9 @@ jobs:
       - name: Verify transactional Architect failover
         shell: pwsh
         run: |
-          $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$true;$project=Join-Path $env:RUNNER_TEMP 'runner-project';$config=Join-Path $env:RUNNER_TEMP 'runner-config';$mock=Join-Path $env:RUNNER_TEMP 'mock-opencode.ps1';$state=Join-Path $env:RUNNER_TEMP 'mock-count'
+          # The runner intentionally probes native Git commands that may return non-zero.
+          # Keep native auto-throw disabled only in this self-test; the runner validates every exit itself.
+          $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$false;$project=Join-Path $env:RUNNER_TEMP 'runner-project';$config=Join-Path $env:RUNNER_TEMP 'runner-config';$mock=Join-Path $env:RUNNER_TEMP 'mock-opencode.ps1';$state=Join-Path $env:RUNNER_TEMP 'mock-count'
           New-Item -ItemType Directory -Force -Path (Join-Path $project '.ai'),$config|Out-Null;git -C $project init -q;'original'|Set-Content (Join-Path $project '.ai/STATUS.md')
           @'
           param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
