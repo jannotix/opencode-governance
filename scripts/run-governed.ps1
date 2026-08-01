@@ -49,13 +49,28 @@ $Marker='[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]'
 $env:OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE='1'
 $RoutedArguments=if($Arguments -like "*$Marker*"){$Arguments}elseif([string]::IsNullOrWhiteSpace($Arguments)){$Marker}else{"$Arguments`n`n$Marker"}
 
-if($Command-eq'ai-resume'){
-  if([string]::IsNullOrWhiteSpace($TaskId)){
-    $match=[regex]::Match($Arguments,'(?m)^\s*([A-Za-z0-9][A-Za-z0-9._-]{2,})\b')
-    if($match.Success){$TaskId=$match.Groups[1].Value}
+if($Command -eq 'ai-resume') {
+  if([string]::IsNullOrWhiteSpace($TaskId)) {
+    $match = [regex]::Match($Arguments, '(?m)^\s*([A-Za-z0-9][A-Za-z0-9._-]{2,})\b')
+    if($match.Success) {
+      $candidate = $match.Groups[1].Value
+      $candidateState = Join-Path $ProjectDir ".ai/tasks/$candidate/RUN_STATE.json"
+      if(Test-Path -LiteralPath $candidateState -PathType Leaf) { $TaskId = $candidate }
+    }
   }
-  if([string]::IsNullOrWhiteSpace($TaskId)){throw 'RESUME_TASK_ID_REQUIRED: ai-resume requires -TaskId or a task ID as the first argument token.'}
-  if($TaskId -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]+$'){throw 'RESUME_TASK_ID_INVALID'}
+  if([string]::IsNullOrWhiteSpace($TaskId)) {
+    $taskRoot = Join-Path $ProjectDir '.ai/tasks'
+    $states = @()
+    if(Test-Path -LiteralPath $taskRoot -PathType Container) {
+      $states = @(Get-ChildItem -LiteralPath $taskRoot -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+        $statePath = Join-Path $_.FullName 'RUN_STATE.json'
+        if(Test-Path -LiteralPath $statePath -PathType Leaf) { $statePath }
+      })
+    }
+    if($states.Count -eq 1) { $TaskId = Split-Path -Leaf (Split-Path -Parent $states[0]) }
+  }
+  if([string]::IsNullOrWhiteSpace($TaskId)) { throw 'RESUME_TASK_ID_REQUIRED: ai-resume requires -TaskId when more than one task checkpoint exists.' }
+  if($TaskId -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]+$') { throw 'RESUME_TASK_ID_INVALID' }
 }
 
 try{$Routing=Get-Content -LiteralPath $RoutingConfigPath -Raw|ConvertFrom-Json}catch{throw 'Routing profile is invalid JSON.'}
@@ -141,7 +156,7 @@ function Get-Epoch(){[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()}
 function Load-Cooldowns(){
   $map=@{};if(Test-Path -LiteralPath $StatePath -PathType Leaf){foreach($line in Get-Content -LiteralPath $StatePath){if([string]::IsNullOrWhiteSpace($line)){continue};$parts=$line-split"`t",2;$until=0L;if($parts.Count-eq2-and[long]::TryParse($parts[1],[ref]$until)-and$until-gt(Get-Epoch)){$map[$parts[0]]=$until}}};$map
 }
-function Save-Cooldowns([hashtable]$Map){$lines=@();foreach($key in($Map.Keys|Sort-Object)){$lines+="$key`t$($Map[$key])"};$tmp="$StatePath.tmp.$PID";[IO.File]::WriteAllLines($tmp,$lines,(New-Object Text.UTF8Encoding($false)));Move-Item -LiteralPath $tmp -Destination $StatePath -Force}
+function Save-Cooldowns([hashtable]$Map){$lines=@();foreach($key in ($Map.Keys | Sort-Object)){$lines+="$key`t$($Map[$key])"};$tmp="$StatePath.tmp.$PID";[IO.File]::WriteAllLines($tmp,$lines,(New-Object Text.UTF8Encoding($false)));Move-Item -LiteralPath $tmp -Destination $StatePath -Force}
 $Cooldowns=Load-Cooldowns
 
 function Get-FileTreeHash([string]$Path){
@@ -175,7 +190,7 @@ function Get-TaskSnapshot(){
 }
 function Get-ResumeMode(){
   $snap=Get-TaskSnapshot;$state=Get-Content -LiteralPath $snap.path -Raw|ConvertFrom-Json;$phases=@();foreach($field in @('current_phase','state','last_safe_transition')){$v=[string]$state.$field;if(-not[string]::IsNullOrWhiteSpace($v)){$phases+=$v.Trim()}}
-  if(-not$phases){return 'PRE_SIDE_EFFECT'};foreach($phase in$phases){if($phase-in$PostSideEffectPhases){return 'POST_SIDE_EFFECT'}};'PRE_SIDE_EFFECT'
+  if(-not$phases){return 'PRE_SIDE_EFFECT'};foreach($phase in $phases){if($phase-in$PostSideEffectPhases){return 'POST_SIDE_EFFECT'}};'PRE_SIDE_EFFECT'
 }
 function Recover-Orphan([string]$Tx,[string]$Ai){
   $metaPath = Join-Path $Tx 'meta.json'
@@ -196,6 +211,7 @@ function Open-Transaction([string]$Tx,[string]$Ai,[string]$AiHash,[bool]$Existed
   $checkpointHash = if($Task){[string]$Task.hash}else{$null}
   $meta=[ordered]@{
     schema='ARCHITECT_TRANSACTION_V2'
+    compatibility='ARCHITECT_TRANSACTION_V1'
     command=$Command
     task_id=$TaskId
     arguments_sha256=$ArgumentsHash

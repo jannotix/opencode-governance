@@ -36,7 +36,12 @@ if marker not in a.arguments: a.arguments=(a.arguments+'\n\n'+marker).strip()
 if a.command=='ai-resume':
     if not a.task_id:
         match=re.match(r'\s*([A-Za-z0-9][A-Za-z0-9._-]{2,})\b',a.arguments)
-        if match: a.task_id=match.group(1)
+        if match and (project/'.ai'/'tasks'/match.group(1)/'RUN_STATE.json').is_file():
+            a.task_id=match.group(1)
+    if not a.task_id:
+        task_root=project/'.ai'/'tasks'
+        states=[p for p in task_root.glob('*/RUN_STATE.json')] if task_root.is_dir() else []
+        if len(states)==1: a.task_id=states[0].parent.name
     if not a.task_id: raise SystemExit('RESUME_TASK_ID_REQUIRED')
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]+',a.task_id): raise SystemExit('RESUME_TASK_ID_INVALID')
 
@@ -89,6 +94,7 @@ for c in fallbacks:
     priorities.add(c['priority'])
 routes=[{'candidate':architect['primary'],'priority':0,'route':'architect-primary'}]+[{'candidate':c,'priority':c['priority'],'route':f"architect-fallback-{c['priority']}"} for c in sorted(fallbacks,key=lambda x:x['priority'])]
 
+# Deterministic CLI resolution.
 def resolve_opencode():
     explicit=a.opencode_command
     prefix=list(a.opencode_prefix_argument)
@@ -194,7 +200,7 @@ def open_tx(tx,ai,ai_hash,existed,project_state,before):
     if tx.exists(): shutil.rmtree(tx)
     tx.mkdir(parents=True); backup=tx/'ai-snapshot'
     if existed: shutil.copytree(ai,backup)
-    meta={'schema':'ARCHITECT_TRANSACTION_V2','command':a.command,'task_id':a.task_id,'arguments_sha256':arguments_hash,'checkpoint_sha256':before['hash'] if before else None,'project_dir':str(project),'pid':os.getpid(),'started_at_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'ai_existed':existed,'ai_hash':ai_hash,'project_state_fingerprint':project_state}
+    meta={'schema':'ARCHITECT_TRANSACTION_V2','compatibility':'ARCHITECT_TRANSACTION_V1','command':a.command,'task_id':a.task_id,'arguments_sha256':arguments_hash,'checkpoint_sha256':before['hash'] if before else None,'project_dir':str(project),'pid':os.getpid(),'started_at_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'ai_existed':existed,'ai_hash':ai_hash,'project_state_fingerprint':project_state}
     (tx/'meta.json').write_text(json.dumps(meta,separators=(',',':')),encoding='utf-8'); return backup
 def close_tx(tx):
     if tx.exists(): shutil.rmtree(tx)
