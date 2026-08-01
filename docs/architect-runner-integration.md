@@ -1,25 +1,34 @@
 # Architect Runner Integration
 
-OpenCode Governance installs deterministic Architect runners (`architect-attempt.ps1|.sh`) with transactional failover, PowerShell 7 host checks, content-aware project-state integrity, routing validation and workflow-continuation gates. This document describes the current 3.7.1 surface.
+OpenCode Governance installs deterministic Architect runners (`architect-attempt.ps1|.sh`) with transactional failover, PowerShell 7 host checks, content-aware project-state integrity, routing validation, durable transaction journals and workflow-continuation gates. This document describes the current **3.7.2** surface.
 
 ## Scope
 
-The transactional Architect runner applies only to:
+The transactional Architect runner applies to:
 
 ```text
 ai-init
 ai-audit
 ai-discover
 ai-plan
+ai-resume   # PRE_SIDE_EFFECT only
 ```
 
 These commands may safely retry because they are restricted to `.ai/**` governance state and must not modify application source or approved project documentation.
+
+`/ai-resume` is accepted only when authoritative `RUN_STATE.json` classifies the resume as `PRE_SIDE_EFFECT` (phases at or before `READY_FOR_EXECUTION` / `PRE_CHANGE_SAFEPOINT_WHEN_REQUIRED`). After the implementation side-effect boundary (`IMPLEMENTING` or later) the runner refuses with:
+
+```text
+RESUME_POST_SIDE_EFFECT
+```
+
+Post-side-effect resume continues non-transactionally from persisted evidence and never rolls back the whole `.ai/**` tree automatically.
 
 The runner is not used for `ai-workflow`, `ai-execute`, `ai-review` or `ai-release` after implementation or review side-effect boundaries.
 
 ## Installed tools
 
-With routing and 3.7.1 capabilities enabled, the installation records fourteen managed tools, including:
+With routing and 3.7.2 capabilities enabled, the installation records fourteen managed tools, including:
 
 ```text
 opencode-governance-tools/architect-attempt.ps1
@@ -41,10 +50,10 @@ opencode-governance-tools/governance-pre-commit.py
 The routing manifest records:
 
 ```text
-governance_version: 3.7.1
-architect_runner_version: 3.7.1
-context_intelligence_version: 3.7.1
-workflow_continuation_version: 3.7.1
+governance_version: 3.7.2
+architect_runner_version: 3.7.2
+context_intelligence_version: 3.7.2
+workflow_continuation_version: 3.7.2
 ```
 
 Before replacing an existing routing installation, the wrapper validates the complete new profile. An invalid profile cannot remove the current manifest, aliases or managed tools. Every existing managed tool is copied into the timestamped installation backup before replacement.
@@ -67,7 +76,7 @@ The Windows and Unix runners validate the same routing properties before the fir
 
 - schema, settings and Architect role presence;
 - fail-closed independence policy;
-- supported eligible failures;
+- supported eligible failures (including optional `TOOL_EXECUTION_ABORTED`);
 - concrete model, family and variant policy;
 - explicit `only_on` arrays;
 - positive, unique fallback priorities;
@@ -77,13 +86,13 @@ JSON arrays and integers are type-checked consistently across PowerShell and Uni
 
 ## Direct command gate
 
-A direct `/ai-init`, `/ai-audit`, `/ai-discover` or `/ai-plan` invocation inside an already running OpenCode process must stop before `.ai/**` writes when the runner marker is absent.
+A direct `/ai-init`, `/ai-audit`, `/ai-discover`, `/ai-plan` or pre-side-effect `/ai-resume` invocation inside an already running OpenCode process must stop before `.ai/**` writes when the runner marker is absent.
 
 The deterministic stop result is:
 
 ```text
 ARCHITECT_RUNNER_REQUIRED
-COMMAND: <ai-init|ai-audit|ai-discover|ai-plan>
+COMMAND: <ai-init|ai-audit|ai-discover|ai-plan|ai-resume>
 WINDOWS_HOST: pwsh -NoProfile -File
 WINDOWS_RUNNER: <exact-installed-path>
 UNIX_RUNNER: <exact-installed-path>
@@ -130,7 +139,7 @@ For Git workspaces the fingerprint also binds:
 
 This detects content changes even when a file was already dirty, staged or untracked and the textual Git status classification remains unchanged.
 
-Non-Git project directories are supported through the same full-tree fingerprint. Git is not required merely to run `/ai-init`, `/ai-audit`, `/ai-discover` or `/ai-plan`. When Git metadata exists but the Git executable is unavailable, the runner fails closed because repository state cannot be verified safely.
+Non-Git project directories are supported through the same full-tree fingerprint. Git is not required merely to run the supported pre-execution commands. When Git metadata exists but the Git executable is unavailable, the runner fails closed because repository state cannot be verified safely.
 
 Any source or project-documentation delta, including a mutation during a nominally successful child attempt, stops with:
 
@@ -141,18 +150,36 @@ HUMAN_RECOVERY_REQUIRED
 
 The runner does not restore or overwrite changed source content. It restores `.ai/**` only when the non-governance project fingerprint still matches the frozen state.
 
-Full content hashing intentionally adds pre/post attempt work, especially on large repositories. This cost is required to provide an immutability guarantee that status classification alone cannot provide.
+## Durable Architect transactions and orphan recovery
+
+Before the first route attempt the runner opens a durable transaction journal under the OpenCode configuration directory:
+
+```text
+<OPENCODE_CONFIG_DIR>/opencode-governance-architect-tx/<project-key>/
+  meta.json                 # ARCHITECT_TRANSACTION_V1
+  ai-snapshot/              # byte-identical .ai/** freeze
+```
+
+`meta.json` binds command, project path, owner PID, `ai_hash` and `project_state_fingerprint`.
+
+On the next runner invocation for the same project:
+
+1. if the owner PID is still alive → `ARCHITECT_TRANSACTION_ACTIVE`;
+2. if the PID is dead and the project fingerprint still matches → restore `.ai/**` from the durable snapshot (`ARCHITECT_ORPHAN_RECOVERED`) and clear the journal;
+3. if the project fingerprint drifted → `ARCHITECT_ORPHAN_RECOVERY_BLOCKED` / `HUMAN_RECOVERY_REQUIRED`.
+
+Successful completion closes the transaction. Non-successful exits restore `.ai/**` when the project fingerprint is unchanged, then close the journal. When restore is impossible the journal is retained as an orphan for the next invocation.
 
 ## Transactional retry
 
 Before the first route attempt, the runner freezes:
 
-- the complete `.ai/**` tree and its hash;
+- the complete `.ai/**` tree and its hash (durable snapshot);
 - the complete non-`.ai/**` project content fingerprint;
 - Git HEAD, index and recursive submodule state when applicable;
 - the routing manifest and route order.
 
-After an eligible provider, quota, rate-limit, retirement, temporary-availability or bounded-timeout failure, it:
+After an eligible provider, quota, rate-limit, retirement, temporary-availability, bounded-timeout or tool-execution-abort failure, it:
 
 1. rejects the partial command result;
 2. verifies that the project fingerprint is unchanged;
@@ -163,7 +190,15 @@ After an eligible provider, quota, rate-limit, retirement, temporary-availabilit
 
 Any source/project-documentation change, restoration mismatch, ineligible failure or exhausted route set stops with human recovery required.
 
-When `KeepAttemptLogs` is enabled, the runner preserves only stdout/stderr logs. The private `.ai/**` snapshot is removed before the retained log directory is reported.
+## Failure classification
+
+`Classify-Failure` / `classify` maps child output to deterministic classes. New in 3.7.2:
+
+```text
+TOOL_EXECUTION_ABORTED
+```
+
+Matched from phrases such as `tool execution aborted`, `tool call aborted`, `process killed`, `terminated by signal`, or abnormal exit codes (`< 0` or `>= 128`). Profiles may list `TOOL_EXECUTION_ABORTED` under `settings.eligible_failures` to allow bounded failover after an abort; otherwise the failure is ineligible but `.ai/**` is still restored when the project fingerprint is unchanged.
 
 ## Windows example
 
@@ -171,8 +206,8 @@ When `KeepAttemptLogs` is enabled, the runner preserves only stdout/stderr logs.
 pwsh -NoProfile -File `
   "$env:OPENCODE_CONFIG_DIR\opencode-governance-tools\architect-attempt.ps1" `
   -ProjectDir "C:\path\to\project" `
-  -Command ai-init `
-  -Arguments "Initialize and validate the project baseline." `
+  -Command ai-resume `
+  -Arguments "Resume TASK-001 from READY_FOR_EXECUTION." `
   -RoutingConfigPath "$env:OPENCODE_CONFIG_DIR\opencode-governance-routing.json" `
   -ConfigDir "$env:OPENCODE_CONFIG_DIR"
 ```
@@ -189,7 +224,7 @@ pwsh -NoProfile -File `
 bash ./scripts/verify-routing.sh <config-dir>
 ```
 
-The routing verifier checks exact managed tool paths, installed files, Architect/Build/Plan policy markers, command entry gates, project-state fingerprint markers, cooldown validation, Context Intelligence hardening, workflow-continuation helpers, hidden-route consistency and the preserved Executor routing contract. PowerShell wrappers rely on terminating errors from PowerShell child scripts and never infer their outcome from a pre-existing native `$LASTEXITCODE` value.
+The routing verifier checks exact managed tool paths, installed files, Architect/Build/Plan policy markers, command entry gates (including pre-side-effect `/ai-resume` on 3.7.2), project-state fingerprint markers, cooldown validation, Context Intelligence hardening, workflow-continuation helpers, hidden-route consistency and the preserved Executor routing contract. PowerShell wrappers rely on terminating errors from PowerShell child scripts and never infer their outcome from a pre-existing native `$LASTEXITCODE` value.
 
 ## Distinguishing workspace errors
 
@@ -197,6 +232,10 @@ The routing verifier checks exact managed tool paths, installed files, Architect
 
 `PROJECT_STATE_CHANGED` means a child attempt changed source or project documentation outside root `.ai/**`; this is a hard integrity block, not an eligible provider/model fallback condition.
 
-`DISCOVERY_BLOCKED_WRONG_WORKSPACE` is a different, correct fail-closed condition: a prompt intended for the Governance repository was executed inside an application repository, or vice versa. Version 3.4.1 does not weaken workspace validation.
+`RESUME_POST_SIDE_EFFECT` means `/ai-resume` was routed transactionally after implementation began; use non-transactional evidence reconciliation instead.
+
+`ARCHITECT_ORPHAN_RECOVERED` / `ARCHITECT_ORPHAN_RECOVERY_BLOCKED` concern durable transaction journals left by a previous incomplete run.
+
+`DISCOVERY_BLOCKED_WRONG_WORKSPACE` is a different, correct fail-closed condition: a prompt intended for the Governance repository was executed inside an application repository, or vice versa.
 
 The installation includes `workflow-continuation.ps1` and `workflow-continuation.py`; `/ai-workflow` and `/ai-resume` must obtain `TERMINAL_ALLOWED` before reporting completion. `CONTINUE_REQUIRED` preserves the current lifecycle and `INVALID_RUN_STATE` fails closed.

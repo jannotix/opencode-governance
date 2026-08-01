@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "settings": {
     "enabled_roles": ["architect", "reviewer", "reviewer-architecture", "final-reviewer"],
-    "eligible_failures": ["PROVIDER_UNAVAILABLE", "RATE_LIMIT", "PLAN_QUOTA_EXHAUSTED", "MODEL_RETIRED", "MODEL_TEMPORARILY_UNAVAILABLE", "BOUNDED_TIMEOUT"],
+    "eligible_failures": ["PROVIDER_UNAVAILABLE", "RATE_LIMIT", "PLAN_QUOTA_EXHAUSTED", "MODEL_RETIRED", "MODEL_TEMPORARILY_UNAVAILABLE", "BOUNDED_TIMEOUT", "TOOL_EXECUTION_ABORTED"],
     "default_cooldown_seconds": 300,
     "allow_degraded_independence": false
   },

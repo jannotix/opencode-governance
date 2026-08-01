@@ -28,7 +28,7 @@ $PublicAgents = @('architect','build','plan','executor','reviewer','reviewer-arc
 $Commands = @('ai-init','ai-audit','ai-docs','ai-discover','ai-plan','ai-execute','ai-review','ai-workflow','ai-status','ai-resume','ai-metrics','ai-release')
 $SupportedFailoverRoles = @('architect','executor','reviewer','reviewer-architecture','final-reviewer')
 $AliasRoles = @('executor','reviewer','reviewer-architecture','final-reviewer')
-$EligibleFailures = @('PROVIDER_UNAVAILABLE','RATE_LIMIT','PLAN_QUOTA_EXHAUSTED','MODEL_RETIRED','MODEL_TEMPORARILY_UNAVAILABLE','BOUNDED_TIMEOUT')
+$EligibleFailures = @('PROVIDER_UNAVAILABLE','RATE_LIMIT','PLAN_QUOTA_EXHAUSTED','MODEL_RETIRED','MODEL_TEMPORARILY_UNAVAILABLE','BOUNDED_TIMEOUT','TOOL_EXECUTION_ABORTED')
 $OnlyOnFailures = $EligibleFailures + @('MODEL_UNAVAILABLE_ON_ALL_CONFIGURED_PROVIDERS')
 $WorkClasses = @('PATCH','BOUNDED_FEATURE','MAJOR_FEATURE','EXISTING_PRODUCT_EVOLUTION','NEW_PRODUCT','HIGH_RISK_CHANGE')
 
@@ -397,7 +397,7 @@ if ($Routing) {
     $ArchitectEnabled = 'architect' -in @($Routing.settings.enabled_roles)
     $ExecutorEnabled = 'executor' -in @($Routing.settings.enabled_roles)
     $ArchitectPolicy = if ($ArchitectEnabled) {
-        'Architect top-level failover uses the external transactional runner only for ai-init|ai-audit|ai-discover|ai-plan.'
+        'Architect top-level failover uses the external transactional runner for ai-init|ai-audit|ai-discover|ai-plan|ai-resume (pre-side-effect only).'
     } else {
         'Architect top-level failover is disabled.'
     }

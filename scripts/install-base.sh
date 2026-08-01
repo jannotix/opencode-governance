@@ -29,7 +29,7 @@ if data.get('schema_version')!='1.0': raise SystemExit('Routing schema_version m
 settings=data.get('settings');roles=data.get('roles')
 if not isinstance(settings,dict) or not isinstance(roles,dict): raise SystemExit('Routing profile must contain settings and roles objects.')
 role_names=['architect','executor','reviewer','reviewer-architecture','final-reviewer']
-failures={'PROVIDER_UNAVAILABLE','RATE_LIMIT','PLAN_QUOTA_EXHAUSTED','MODEL_RETIRED','MODEL_TEMPORARILY_UNAVAILABLE','BOUNDED_TIMEOUT'}
+failures={'PROVIDER_UNAVAILABLE','RATE_LIMIT','PLAN_QUOTA_EXHAUSTED','MODEL_RETIRED','MODEL_TEMPORARILY_UNAVAILABLE','BOUNDED_TIMEOUT','TOOL_EXECUTION_ABORTED'}
 only_on_allowed=failures|{'MODEL_UNAVAILABLE_ON_ALL_CONFIGURED_PROVIDERS'}
 work_classes={'PATCH','BOUNDED_FEATURE','MAJOR_FEATURE','EXISTING_PRODUCT_EVOLUTION','NEW_PRODUCT','HIGH_RISK_CHANGE'}
 enabled=settings.get('enabled_roles');eligible=settings.get('eligible_failures')
@@ -130,7 +130,7 @@ architect_policy=f'''
 
 ## ARCHITECT_RUNNER_INTEGRATION
 
-Architect pre-execution commands `ai-init|ai-audit|ai-discover|ai-plan` require the installed transactional runner.
+Architect pre-execution commands `ai-init|ai-audit|ai-discover|ai-plan|ai-resume` (pre-side-effect resume only) require the installed transactional runner.
 
 WINDOWS_ARCHITECT_RUNNER: {ps_runner}
 WINDOWS_ARCHITECT_HOST: pwsh -NoProfile -File
@@ -164,15 +164,27 @@ for name in ['architect','build','plan']:
     path=root/'agents'/f'{name}.md';text=path.read_text(encoding='utf-8')
     text=re.sub(r'\n## ARCHITECT_RUNNER_INTEGRATION\n.*?(?=\n## Core invariants|\Z)','',text,flags=re.S);text=re.sub(r'\n## CONTEXT_INTELLIGENCE_V1\n.*?(?=\n## Core invariants|\Z)','',text,flags=re.S)
     insertion=architect_policy.rstrip()+'\n'+context_policy.rstrip();text=text.replace('\n## Core invariants',insertion+'\n\n## Core invariants',1) if '\n## Core invariants' in text else text+'\n'+insertion;path.write_text(text,encoding='utf-8')
-for command in ['ai-init','ai-audit','ai-discover','ai-plan']:
-    path=root/'commands'/f'{command}.md';text=path.read_text(encoding='utf-8');text=re.sub(r'\n## ARCHITECT_RUNNER_ENTRY_GATE\n.*?(?=\n## |\Z)','',text,count=1,flags=re.S)
-    gate=f'''
+for command in ['ai-init','ai-audit','ai-discover','ai-plan','ai-resume']:
+    path=root/'commands'/f'{command}.md';text=path.read_text(encoding='utf-8');text=re.sub(r'\n## ARCHITECT_RUNNER_ENTRY_GATE\n.*?(?=\n## |\Z)','',text,count=1,flags=re.S);text=re.sub(r'\n## RESUME_MODE_V1\n.*?(?=\n## |\Z)','',text,count=1,flags=re.S)
+    resume_mode='''
 
+## RESUME_MODE_V1
+
+Classify resume from authoritative `RUN_STATE.json` before any `.ai/**` write:
+
+- `PRE_SIDE_EFFECT`: phases at or before `READY_FOR_EXECUTION` / `PRE_CHANGE_SAFEPOINT_WHEN_REQUIRED` (no implementation side effects). Require the transactional Architect runner and never leave partial `.ai/**` writes without rollback.
+- `POST_SIDE_EFFECT`: `IMPLEMENTING` or later. Do **not** use the transactional runner. Continue non-transactionally from persisted evidence; never automatic `.ai/**` rollback of an implementation-era governance tree.
+
+If phase fields cannot be proven, stop with `RESUME_PHASE_UNKNOWN` rather than guessing.
+''' if command=='ai-resume' else ''
+    pre_only=' in `PRE_SIDE_EFFECT` mode' if command=='ai-resume' else ''
+    absent_note=' for a pre-side-effect resume' if command=='ai-resume' else ''
+    gate=f'''{resume_mode}
 ## ARCHITECT_RUNNER_ENTRY_GATE
 
-Before any `.ai/**` write, require the exact invocation marker `{marker}` in the command arguments.
+Before any `.ai/**` write{pre_only}, require the exact invocation marker `{marker}` in the command arguments.
 
-When the marker is absent, stop immediately with:
+When the marker is absent{absent_note}, stop immediately with:
 
 ```text
 ARCHITECT_RUNNER_REQUIRED
@@ -185,7 +197,7 @@ WINDOWS_COMMAND: pwsh -NoProfile -File "{ps_runner}" -ProjectDir "<CURRENT_PROJE
 UNIX_COMMAND: "{sh_runner}" --project-dir "<CURRENT_PROJECT_ROOT>" --command {command} --arguments "<ORIGINAL_ARGUMENTS>"
 ```
 
-The external runner supports Git and non-Git project directories. It fingerprints all source and project-documentation content outside root `.ai/**` before and after each attempt and returns `PROJECT_STATE_CHANGED` on any delta.
+The external runner supports Git and non-Git project directories. It fingerprints all source and project-documentation content outside root `.ai/**` before and after each attempt and returns `PROJECT_STATE_CHANGED` on any delta. Failed attempts restore `.ai/**` byte-for-byte, classify `TOOL_EXECUTION_ABORTED` when tools/process abort mid-run, and recover orphan Architect transactions from durable snapshots under the OpenCode config directory.
 
 Do not create, edit or delete `.ai/**`. Do not invoke the runner from inside this OpenCode process. Return the complete `WINDOWS_COMMAND` and `UNIX_COMMAND` values with the actual current project root and original arguments substituted so the owner can copy and execute them. Do not invent another runner path.
 

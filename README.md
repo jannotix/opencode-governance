@@ -4,7 +4,7 @@ Provider- and model-agnostic product-lifecycle governance for [OpenCode](https:/
 
 > Community project. Not affiliated with the OpenCode team.
 
-Current release: **3.7.1 — Governed Authority, Memory & Evidence**.
+Current release: **3.7.2 — Governed Authority, Memory & Evidence**.
 
 Installs seven specialized agents, twelve `/ai-*` commands, deterministic tooling and fail-closed contracts so planning, implementation, validation and review stay bound to approved requirements and current repository evidence.
 

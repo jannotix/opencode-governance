@@ -39,13 +39,16 @@ ai-init
 ai-audit
 ai-discover
 ai-plan
+ai-resume   # PRE_SIDE_EFFECT only (3.7.2+)
 ```
 
-The runner starts a fresh `opencode run` process for each route, snapshots the complete `.ai/**` tree outside the project and restores it byte-for-byte before an eligible fallback. Version 3.3.4 uses `PROJECT_STATE_FINGERPRINT_V1` before and after every attempt to verify the complete project tree outside root `.ai/**`, including paths, entry types, mode/attributes, lengths, SHA-256 digests and symlink targets. Git workspaces additionally bind HEAD, the index and recursive submodule state; non-Git directories use the same full-tree integrity check without requiring repository initialization.
+The runner starts a fresh `opencode run` process for each route, freezes the complete `.ai/**` tree in a durable Architect transaction journal under the OpenCode config directory and restores it byte-for-byte before an eligible fallback or after any non-successful exit when project content is unchanged. Version 3.3.4+ uses `PROJECT_STATE_FINGERPRINT_V1` before and after every attempt to verify the complete project tree outside root `.ai/**`, including paths, entry types, mode/attributes, lengths, SHA-256 digests and symlink targets. Git workspaces additionally bind HEAD, the index and recursive submodule state; non-Git directories use the same full-tree integrity check without requiring repository initialization.
 
 Any source or governed project-documentation mutation returns `PROJECT_STATE_CHANGED` and blocks fallback, even when the changed file was already dirty, staged or untracked and `git status` would remain textually identical. The same block applies when a nominally successful child attempt changes protected project content.
 
-`ai-workflow`, `ai-execute`, `ai-review` and `ai-release` are intentionally excluded from top-level automatic restart because an interrupted workflow may already have crossed an implementation or review side-effect boundary.
+`/ai-resume` after `IMPLEMENTING` (or later) is refused by the transactional runner (`RESUME_POST_SIDE_EFFECT`) so implementation-era governance state is never wiped by automatic `.ai/**` rollback. `ai-workflow`, `ai-execute`, `ai-review` and `ai-release` remain intentionally excluded from top-level automatic restart because an interrupted workflow may already have crossed an implementation or review side-effect boundary.
+
+Failure classification includes `TOOL_EXECUTION_ABORTED` (3.7.2+) for mid-run tool/process aborts. Profiles may list it under `eligible_failures` to allow bounded failover.
 
 ### Executor
 

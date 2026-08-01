@@ -71,7 +71,7 @@ public = ['architect', 'build', 'plan', 'executor', 'reviewer', 'reviewer-archit
 command_names = ['ai-init', 'ai-audit', 'ai-docs', 'ai-discover', 'ai-plan', 'ai-execute', 'ai-review', 'ai-workflow', 'ai-status', 'ai-resume', 'ai-metrics', 'ai-release']
 supported_roles = ['architect', 'executor', 'reviewer', 'reviewer-architecture', 'final-reviewer']
 alias_roles = ['executor', 'reviewer', 'reviewer-architecture', 'final-reviewer']
-eligible_failures = ['PROVIDER_UNAVAILABLE', 'RATE_LIMIT', 'PLAN_QUOTA_EXHAUSTED', 'MODEL_RETIRED', 'MODEL_TEMPORARILY_UNAVAILABLE', 'BOUNDED_TIMEOUT']
+eligible_failures = ['PROVIDER_UNAVAILABLE', 'RATE_LIMIT', 'PLAN_QUOTA_EXHAUSTED', 'MODEL_RETIRED', 'MODEL_TEMPORARILY_UNAVAILABLE', 'BOUNDED_TIMEOUT', 'TOOL_EXECUTION_ABORTED']
 only_on_allowed = set(eligible_failures + ['MODEL_UNAVAILABLE_ON_ALL_CONFIGURED_PROVIDERS'])
 work_classes = ['PATCH', 'BOUNDED_FEATURE', 'MAJOR_FEATURE', 'EXISTING_PRODUCT_EVOLUTION', 'NEW_PRODUCT', 'HIGH_RISK_CHANGE']
 
@@ -315,7 +315,7 @@ if routing:
 
     architect_enabled = 'architect' in routing['settings']['enabled_roles']
     executor_enabled = 'executor' in routing['settings']['enabled_roles']
-    architect_policy = 'Architect top-level failover uses the external transactional runner only for ai-init|ai-audit|ai-discover|ai-plan.' if architect_enabled else 'Architect top-level failover is disabled.'
+    architect_policy = 'Architect top-level failover uses the external transactional runner for ai-init|ai-audit|ai-discover|ai-plan|ai-resume (pre-side-effect only).' if architect_enabled else 'Architect top-level failover is disabled.'
     executor_policy = f'''Executor failover is enabled. Use `{tools / 'executor-attempt.ps1'}` on Windows or `{tools / 'executor-attempt.sh'}` on macOS/Linux. Execute `select -> prepare -> delegate selected route -> finalize -> promote`. On an eligible route failure execute `discard`, then restart the complete Executor from the same canonical packet and frozen target. Never delegate a routed Executor against the real project root. Promotion failure, packet/report mismatch, changed real state, overlap, or an ineligible error stops with human recovery; it never selects another model.''' if executor_enabled else 'Executor failover is disabled.'
     policy_block = f'''\n\n## ROLE_FAILOVER_POLICY\n\nEligible failures: {'|'.join(routing['settings']['eligible_failures'])}. Ineligible or unclassified failures stop. Every fallback restarts the complete role or command; active fallback attempts are sticky; primary returns only on a later invocation after cooldown. Provider, rate-limit, and quota failures prefer the same model family. Retired or globally unavailable families are skipped. Never retry the same route.\n\n{architect_policy}\n\n{executor_policy}\n\nReviewer and Final Reviewer routes retain frozen packet and target evidence and actual-family independence. Executor promotion is not validation; normal evidence, review, commit, and external-action gates remain mandatory.\n\nConfigured hidden routes:\n{chr(10).join(policy_lines)}\n'''
     task_rules = '    "executor-fallback-*": allow\n    "reviewer-fallback-*": allow\n    "reviewer-architecture-fallback-*": allow\n    "final-reviewer-fallback-*": allow'
