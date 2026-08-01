@@ -45,20 +45,32 @@ exit 0
 '@ | Set-Content -LiteralPath $Mock -Encoding utf8
 
 function Invoke-Runner([string]$Mode){
-  $env:MOCK_MODE=$Mode;$env:EXPECTED_HASH=$ExpectedHash
-  $runnerArgs=@(
-    '-NoProfile','-File',$Runner,
-    '-ProjectDir',$Project,
-    '-Command','ai-resume',
-    '-TaskId','TASK-001',
-    '-ArgumentsFile',$PromptPath,
-    '-RoutingConfigPath',(Join-Path $Config 'opencode-governance-routing.json'),
-    '-ConfigDir',$Config,
-    '-OpenCodeCommand',(Get-Command pwsh).Source,
-    '-OpenCodePrefixArguments','-NoProfile','-File',$Mock
-  )
-  $output=& pwsh @runnerArgs 2>&1
-  [pscustomobject]@{code=$LASTEXITCODE;text=(($output|ForEach-Object{[string]$_})-join"`n")}
+  $env:MOCK_MODE=$Mode
+  $env:EXPECTED_HASH=$ExpectedHash
+  $wrapper=Join-Path $TempRoot ('runner-wrapper-'+[guid]::NewGuid().ToString('N')+'.ps1')
+  $escapedRunner=$Runner.Replace("'","''")
+  $escapedProject=$Project.Replace("'","''")
+  $escapedPrompt=$PromptPath.Replace("'","''")
+  $escapedRouting=(Join-Path $Config 'opencode-governance-routing.json').Replace("'","''")
+  $escapedConfig=$Config.Replace("'","''")
+  $escapedMock=$Mock.Replace("'","''")
+  @"
+`$ErrorActionPreference='Stop'
+& '$escapedRunner' ```
+  -ProjectDir '$escapedProject' ```
+  -Command ai-resume ```
+  -TaskId 'TASK-001' ```
+  -ArgumentsFile '$escapedPrompt' ```
+  -RoutingConfigPath '$escapedRouting' ```
+  -ConfigDir '$escapedConfig' ```
+  -OpenCodeCommand (Get-Command pwsh -ErrorAction Stop).Source ```
+  -OpenCodePrefixArguments @('-NoProfile','-File','$escapedMock')
+exit `$LASTEXITCODE
+"@ | Set-Content -LiteralPath $wrapper -Encoding utf8
+  $output=& pwsh -NoProfile -File $wrapper 2>&1
+  $code=$LASTEXITCODE
+  Remove-Item -LiteralPath $wrapper -Force -ErrorAction SilentlyContinue
+  [pscustomobject]@{code=$code;text=(($output|ForEach-Object{[string]$_})-join"`n")}
 }
 
 $before=(Get-FileHash -LiteralPath (Join-Path $Project '.ai/tasks/TASK-001/RUN_STATE.json') -Algorithm SHA256).Hash
