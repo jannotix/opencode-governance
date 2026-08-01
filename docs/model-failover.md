@@ -129,6 +129,8 @@ An empty `only_on` means any failure already allowed by the global policy. A non
 
 Authentication failure, invalid configuration, context overflow, permission denial, safety refusal, malformed packets, plan or validation defects, low-quality output and unclassified errors do not trigger automatic fallback. `PROJECT_STATE_CHANGED` is also never eligible: it is an integrity violation that requires human recovery.
 
+`ARCHITECT_PERMISSION_BLOCKED` / `HEADLESS_PERMISSION_CONTRACT_VIOLATION` (3.7.3+) is never eligible for model fallback. It means the headless Architect permission contract denied a tool or OpenCode auto-rejected an interactive `ask` in a non-interactive child. Restore `.ai/**` when safe, preserve logs, and correct Governance—do not rotate models.
+
 ## Provider versus model failure
 
 Provider outage, rate limit and plan quota exhaustion prefer the same model family through another provider.

@@ -25,6 +25,70 @@ routing_path=pathlib.Path(a.routing_config) if a.routing_config else config/'ope
 if not routing_path.is_file(): raise SystemExit(f'Routing profile/manifest not found: {routing_path}')
 if a.timeout_seconds<30: raise SystemExit('timeout-seconds must be at least 30.')
 
+def strip_jsonc(text: str) -> str:
+    output=[]; index=0; in_string=False; escaped=False; line_comment=False; block_comment=False
+    while index < len(text):
+        char=text[index]; nxt=text[index+1] if index+1 < len(text) else ''
+        if line_comment:
+            if char in '\r\n':
+                line_comment=False; output.append(char)
+            index += 1; continue
+        if block_comment:
+            if char=='*' and nxt=='/':
+                block_comment=False; index += 2
+            else:
+                if char in '\r\n': output.append(char)
+                index += 1
+            continue
+        if in_string:
+            output.append(char)
+            if escaped: escaped=False
+            elif char=='\\': escaped=True
+            elif char=='"': in_string=False
+            index += 1; continue
+        if char=='"':
+            in_string=True; output.append(char); index += 1
+        elif char=='/' and nxt=='/':
+            line_comment=True; index += 2
+        elif char=='/' and nxt=='*':
+            block_comment=True; index += 2
+        else:
+            output.append(char); index += 1
+    if in_string or block_comment:
+        raise ValueError('unterminated string or block comment')
+    cleaned=''.join(output)
+    out2=[]; index=0; in_string=False; escaped=False
+    while index < len(cleaned):
+        char=cleaned[index]
+        if in_string:
+            out2.append(char)
+            if escaped: escaped=False
+            elif char=='\\': escaped=True
+            elif char=='"': in_string=False
+            index += 1; continue
+        if char=='"':
+            in_string=True; out2.append(char); index += 1; continue
+        if char==',':
+            look=index+1
+            while look < len(cleaned) and cleaned[look].isspace(): look += 1
+            if look < len(cleaned) and cleaned[look] in '}]':
+                index += 1; continue
+        out2.append(char); index += 1
+    return ''.join(out2)
+
+def load_routing(path: pathlib.Path):
+    if path.is_symlink(): raise SystemExit('Routing profile may not be a symlink.')
+    raw=path.read_text(encoding='utf-8-sig')
+    source_hash=hashlib.sha256(raw.encode('utf-8')).hexdigest()
+    try:
+        cleaned=strip_jsonc(raw)
+        value=json.loads(cleaned)
+    except Exception as exc:
+        raise SystemExit(f'Routing profile is invalid JSON/JSONC: {exc}')
+    semantic=hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',',':'), ensure_ascii=False).encode('utf-8')).hexdigest()
+    print(f'ROUTING_MANIFEST_HASHES source_sha256={source_hash} semantic_sha256={semantic}', flush=True)
+    return value
+
 if a.arguments_file:
     arg_path=pathlib.Path(a.arguments_file).resolve()
     if not arg_path.is_file() or arg_path.is_symlink(): raise SystemExit('ARGUMENTS_FILE_UNSAFE_OR_MISSING')
@@ -45,8 +109,7 @@ if a.command=='ai-resume':
     if not a.task_id: raise SystemExit('RESUME_TASK_ID_REQUIRED')
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]+',a.task_id): raise SystemExit('RESUME_TASK_ID_INVALID')
 
-try: routing=json.loads(routing_path.read_text(encoding='utf-8-sig'))
-except Exception: raise SystemExit('Routing profile is invalid JSON.')
+routing=load_routing(routing_path)
 if routing.get('schema_version')!='1.0': raise SystemExit('Routing schema_version must be 1.0.')
 settings=routing.get('settings'); roles=routing.get('roles')
 if not isinstance(settings,dict) or not isinstance(roles,dict): raise SystemExit('Routing profile is missing settings or roles.')
@@ -94,23 +157,112 @@ for c in fallbacks:
     priorities.add(c['priority'])
 routes=[{'candidate':architect['primary'],'priority':0,'route':'architect-primary'}]+[{'candidate':c,'priority':c['priority'],'route':f"architect-fallback-{c['priority']}"} for c in sorted(fallbacks,key=lambda x:x['priority'])]
 
-# Deterministic CLI resolution.
+HEADLESS_CONTRACT='ARCHITECT_HEADLESS_PERMISSION_CONTRACT_V1'
+headless_policy_hash=None
+headless_config_content=None
+
+def build_headless_config(model, variant, external_roots):
+    bash={'*':'deny'}
+    for pattern in [
+        'git status','git status *','git diff','git diff *','git log','git log *','git show','git show *','git grep','git grep *',
+        'git rev-parse','git rev-parse *','git ls-files','git ls-files *','git submodule status','git submodule status *',
+        'git worktree list','git worktree list *','git branch --show-current','git branch --show-current *','git remote -v','git remote -v *',
+        'pwd','pwd *','ls','ls *','cat','cat *','head','head *','tail','tail *','grep','grep *','rg','rg *','stat','stat *',
+        'sha256sum','sha256sum *','realpath','realpath *','sed -n *','find * -print','find * -print *','find * -type *','find * -name *','find * -maxdepth *',
+        'Test-Path','Test-Path *','Get-ChildItem','Get-ChildItem *','Get-Content','Get-Content *','Get-Item','Get-Item *',
+        'Get-FileHash','Get-FileHash *','Resolve-Path','Resolve-Path *','Select-String','Select-String *','Get-Command','Get-Command *',
+        'ConvertFrom-Json','ConvertFrom-Json *','Select-Object','Select-Object *','Where-Object','Where-Object *',
+        'ForEach-Object','ForEach-Object *','Sort-Object','Sort-Object *','Measure-Object','Measure-Object *',
+        'Format-List','Format-List *','Format-Table','Format-Table *',
+    ]:
+        bash[pattern]='allow'
+    for pattern in [
+        'git push','git push *','git fetch','git fetch *','git pull','git pull *','git merge','git merge *','git rebase','git rebase *',
+        'git cherry-pick','git cherry-pick *','git revert','git revert *','git reset','git reset *','git checkout','git checkout *',
+        'git switch','git switch *','git clean','git clean *','git add','git add *','git commit','git commit *',
+        'git remote add *','git remote set-url *','git remote remove *','git remote rename *',
+        'rm *','rmdir *','del *','Remove-Item *','Set-Content *','Add-Content *','Out-File *','Move-Item *','Copy-Item *','New-Item *',
+        'Invoke-Expression *','iex *','pwsh *','powershell *','cmd *','bash -c *','sh -c *','python *','python3 *','node *','php *','ruby *','perl *',
+        'npm install *','npm update *','npm i *','composer install *','composer update *','pip install *',
+        'find * -delete *','find * -exec *','sed -i *','chmod *','chown *','curl *','wget *','ssh *','scp *',
+    ]:
+        bash[pattern]='deny'
+    edit={'*':'deny','.ai':'allow','.ai/*':'allow','.ai/**':'allow','*/.ai':'allow','*/.ai/*':'allow','*/.ai/**':'allow'}
+    read={'*':'allow','*.env':'deny','*.env.*':'deny','*.env.example':'allow','**/.ssh/**':'deny','**/id_rsa*':'deny','**/id_ed25519*':'deny','**/*credentials*':'deny','**/credentials.json':'deny','**/.aws/**':'deny','**/.azure/**':'deny','**/.config/gcloud/**':'deny'}
+    external={'*':'deny'}
+    for root in external_roots:
+        if not root: continue
+        norm=str(root).replace('\\','/')
+        external[norm]='allow'; external[norm+'/**']='allow'; external[norm+'/*']='allow'
+    agent_perm={
+        'bash':bash,'edit':edit,'read':read,'question':'deny','webfetch':'deny','websearch':'deny','doom_loop':'deny',
+        'external_directory':external,'skill':{'*':'allow'},'glob':'allow','grep':'allow','lsp':'allow',
+        'task':{'*':'deny','explore':'allow','scout':'allow','executor':'allow','reviewer':'allow','reviewer-architecture':'allow','final-reviewer':'allow'},
+    }
+    architect={'permission':agent_perm}
+    if model: architect['model']=model
+    if variant: architect['variant']=variant
+    config={
+        '$schema':'https://opencode.ai/config.json',
+        'permission':{'bash':{'*':'deny'},'question':'deny','webfetch':'deny','websearch':'deny','external_directory':external},
+        'agent':{'architect':architect},
+        'experimental':{'governance_headless_contract':HEADLESS_CONTRACT},
+    }
+    payload=json.dumps(config,separators=(',',':'),ensure_ascii=False)
+    digest=hashlib.sha256(payload.encode('utf-8')).hexdigest()
+    return payload, digest
+
+def permission_blocked(text: str) -> bool:
+    value=text.lower()
+    return any(m in value for m in (
+        'permission requested','auto-rejecting','the user rejected permission','user rejected permission to use this specific tool call'
+    ))
+
+def denied_tool(text: str) -> str:
+    m=re.search(r'permission requested:\s*([A-Za-z0-9_-]+)', text, flags=re.I)
+    if m: return m.group(1).lower()
+    if re.search(r'\bbash\b', text, flags=re.I): return 'bash'
+    return 'unknown'
+
+def permission_blocked_error(text, route, attempt, logs):
+    return (
+        f'ARCHITECT_PERMISSION_BLOCKED: HEADLESS_PERMISSION_CONTRACT_VIOLATION '
+        f'denied_tool={denied_tool(text)} command_class=sanitized route={route} attempt={attempt} '
+        f'permission_contract={HEADLESS_CONTRACT} logs={logs}'
+    )
+
+# Deterministic CLI resolution (exactly one launcher).
 def resolve_opencode():
-    explicit=a.opencode_command
-    prefix=list(a.opencode_prefix_argument)
-    candidates=[]
-    if explicit!='opencode': candidates=[explicit]
-    else:
+    explicit=(a.opencode_command or '').strip()
+    if not explicit: raise SystemExit('OPENCODE_CLI_NOT_FOUND: empty command')
+    if '\n' in explicit or '\r' in explicit: raise SystemExit('OPENCODE_CLI_NOT_FOUND: multi-line command')
+    prefix=list(a.opencode_prefix_argument or [])
+    if any(not isinstance(x,str) for x in prefix): raise SystemExit('OPENCODE_PREFIX_MALFORMED')
+    discovered=[]
+    if explicit=='opencode':
         found=shutil.which('opencode')
-        if found: candidates.append(found)
-        candidates += [str(pathlib.Path.home()/'.opencode/bin/opencode'),str(pathlib.Path.home()/'.local/bin/opencode'),'/usr/local/bin/opencode','/usr/bin/opencode']
-    for candidate in candidates:
-        path=shutil.which(candidate) or (candidate if pathlib.Path(candidate).is_file() else None)
-        if path:
-            return path,prefix
-    raise SystemExit('OPENCODE_CLI_NOT_FOUND')
-opencode_command,opencode_prefix=resolve_opencode()
-print(f'OPENCODE_CLI_RESOLVED command={opencode_command}',flush=True)
+        if found: discovered.append(found)
+        for candidate in [str(pathlib.Path.home()/'.opencode/bin/opencode'),str(pathlib.Path.home()/'.local/bin/opencode'),'/usr/local/bin/opencode','/usr/bin/opencode']:
+            if candidate not in discovered and pathlib.Path(candidate).is_file(): discovered.append(candidate)
+    else:
+        which=shutil.which(explicit)
+        if which: discovered.append(which)
+        elif pathlib.Path(explicit).is_file(): discovered.append(str(pathlib.Path(explicit).resolve()))
+    if not discovered: raise SystemExit('OPENCODE_CLI_NOT_FOUND')
+    if len(discovered)>1: print(f'OPENCODE_CLI_CANDIDATES count={len(discovered)} selected_index=0', flush=True)
+    launcher=discovered[0]
+    if isinstance(launcher,(list,tuple)): raise SystemExit('OPENCODE_CLI_AMBIGUOUS')
+    host=launcher
+    launcher_type='unix-exe'
+    if str(launcher).endswith('.ps1'):
+        launcher_type='npm-ps1'; host=shutil.which('pwsh') or shutil.which('powershell') or host
+        prefix=['-NoProfile','-File',launcher]+prefix
+    elif str(launcher).endswith(('.cmd','.bat')):
+        launcher_type='npm-cmd'; host=os.environ.get('ComSpec') or host
+        prefix=['/d','/s','/c',launcher]+prefix
+    return host, launcher, launcher_type, prefix
+opencode_command,opencode_launcher,opencode_launcher_type,opencode_prefix=resolve_opencode()
+print(f'OPENCODE_CLI_RESOLVED host={opencode_command} launcher_type={opencode_launcher_type} launcher={opencode_launcher} prefix_count={len(opencode_prefix)}',flush=True)
 
 config.mkdir(parents=True,exist_ok=True)
 state_path=config/'opencode-governance-routing-state.tsv'
@@ -200,12 +352,13 @@ def open_tx(tx,ai,ai_hash,existed,project_state,before):
     if tx.exists(): shutil.rmtree(tx)
     tx.mkdir(parents=True); backup=tx/'ai-snapshot'
     if existed: shutil.copytree(ai,backup)
-    meta={'schema':'ARCHITECT_TRANSACTION_V2','compatibility':'ARCHITECT_TRANSACTION_V1','command':a.command,'task_id':a.task_id,'arguments_sha256':arguments_hash,'checkpoint_sha256':before['hash'] if before else None,'project_dir':str(project),'pid':os.getpid(),'started_at_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'ai_existed':existed,'ai_hash':ai_hash,'project_state_fingerprint':project_state}
+    meta={'schema':'ARCHITECT_TRANSACTION_V2','compatibility':'ARCHITECT_TRANSACTION_V1','command':a.command,'task_id':a.task_id,'arguments_sha256':arguments_hash,'checkpoint_sha256':before['hash'] if before else None,'project_dir':str(project),'pid':os.getpid(),'started_at_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'ai_existed':existed,'ai_hash':ai_hash,'project_state_fingerprint':project_state,'permission_contract':HEADLESS_CONTRACT,'runtime_policy_sha256':headless_policy_hash}
     (tx/'meta.json').write_text(json.dumps(meta,separators=(',',':')),encoding='utf-8'); return backup
 def close_tx(tx):
     if tx.exists(): shutil.rmtree(tx)
 def classify(text,timed,code):
     if timed:return 'BOUNDED_TIMEOUT'
+    if permission_blocked(text): return 'ARCHITECT_PERMISSION_BLOCKED'
     t=text.lower()
     if re.search(r'tool[_\s-]?execution[_\s-]?aborted|execution aborted|tool aborted',t):return 'TOOL_EXECUTION_ABORTED'
     if re.search(r'quota.*(exhausted|exceeded)|plan limit',t):return 'PLAN_QUOTA_EXHAUSTED'
@@ -236,6 +389,14 @@ if a.command=='ai-resume':
     mode=resume_mode(); print(f'ARCHITECT_RESUME_MODE {mode} task={a.task_id}',flush=True)
     if mode=='POST_SIDE_EFFECT': raise SystemExit('RESUME_POST_SIDE_EFFECT')
 tmp=pathlib.Path(tempfile.mkdtemp(prefix='opencode-governance-')); logs=tmp/'logs'; logs.mkdir()
+external_roots=[str(config)]
+tools_root=config/'opencode-governance-tools'
+if tools_root.is_dir(): external_roots.append(str(tools_root))
+if a.arguments_file: external_roots.append(str(pathlib.Path(a.arguments_file).resolve().parent))
+headless_config_content, headless_policy_hash = build_headless_config(
+    architect['primary'].get('model'), architect['primary'].get('variant'), external_roots
+)
+print(f'HEADLESS_PERMISSION_CONTRACT version={HEADLESS_CONTRACT} runtime_policy_sha256={headless_policy_hash} auto=disabled', flush=True)
 existed=ai.exists(); ai_hash=tree_hash(ai); project_state=project_state_fingerprint(); backup=open_tx(tx,ai,ai_hash,existed,project_state,before)
 attempted=set(); failure=None; failed_family=''; attempt=0
 try:
@@ -246,10 +407,16 @@ try:
         if not candidates: raise RuntimeError(f'ARCHITECT_FAILOVER_BLOCKED: no eligible Architect route remains after {failure}')
         route=candidates[0]; attempted.add(route['route']); attempt+=1; c=route['candidate']
         print(f"ARCHITECT_ROUTE_ATTEMPT {attempt} {route['route']} {c['model']}",flush=True)
+        payload, policy_hash = build_headless_config(c.get('model'), c.get('variant'), external_roots)
+        headless_config_content, headless_policy_hash = payload, policy_hash
+        # Never pass blanket --auto. Deny-by-default bash eliminates ask; residual asks fail closed.
         cmd=[opencode_command,*opencode_prefix,'run','--dir',str(project),'--agent','architect','--model',c['model']]
         if c.get('variant'):cmd+=['--variant',c['variant']]
         cmd+=['--command',a.command,'--format','json',a.arguments]
-        env=dict(os.environ);env['OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE']='1'
+        env=dict(os.environ)
+        env['OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE']='1'
+        env['OPENCODE_GOVERNANCE_HEADLESS_CONTRACT']=HEADLESS_CONTRACT
+        env['OPENCODE_CONFIG_CONTENT']=payload
         timed=False
         try:r=subprocess.run(cmd,capture_output=True,text=True,timeout=a.timeout_seconds,env=env,cwd=project)
         except subprocess.TimeoutExpired as e:
@@ -259,16 +426,20 @@ try:
         (logs/f'attempt-{attempt}.stdout.log').write_text(r.stdout or '',encoding='utf-8');(logs/f'attempt-{attempt}.stderr.log').write_text(r.stderr or '',encoding='utf-8')
         if project_state_fingerprint()!=project_state: raise RuntimeError('ARCHITECT_FAILOVER_BLOCKED: PROJECT_STATE_CHANGED. HUMAN_RECOVERY_REQUIRED')
         text=(r.stdout or '')+'\n'+(r.stderr or '')
+        if permission_blocked(text):
+            raise RuntimeError(permission_blocked_error(text, route['route'], attempt, logs))
         if r.returncode==0 and not timed:
             if a.command=='ai-resume': validate_postcondition(before,ai_hash,text)
             cooldowns.pop(c['model'],None);save_cooldowns(cooldowns)
-            print(f"ARCHITECT_FAILOVER_COMPLETE route={route['route']} attempts={attempt} task={a.task_id or ''} ai_tree={tree_hash(ai)} postcondition=PASS")
+            print(f"ARCHITECT_FAILOVER_COMPLETE route={route['route']} attempts={attempt} task={a.task_id or ''} ai_tree={tree_hash(ai)} postcondition=PASS permission_contract={HEADLESS_CONTRACT} runtime_policy_sha256={headless_policy_hash}")
             if r.stdout: print(r.stdout.rstrip())
             if r.stderr: print(r.stderr.rstrip(),file=sys.stderr)
             close_tx(tx)
             if not a.keep_attempt_logs: shutil.rmtree(tmp)
             raise SystemExit(0)
         failure=classify(text,timed,r.returncode);failed_family=c['model_family'];print(f"Architect route failed: {failure} ({route['route']})",file=sys.stderr)
+        if failure=='ARCHITECT_PERMISSION_BLOCKED':
+            raise RuntimeError(permission_blocked_error(text, route['route'], attempt, logs))
         if failure not in eligible: raise RuntimeError(f'ARCHITECT_FAILOVER_BLOCKED: ineligible failure {failure}. Logs: {logs}')
         cooldowns[c['model']]=int(time.time())+cooldown;save_cooldowns(cooldowns);restore_ai(ai,backup,existed,ai_hash)
 except SystemExit:raise
@@ -279,6 +450,7 @@ except Exception as exc:
     except Exception:pass
     if restored:close_tx(tx)
     else:print(f'ARCHITECT_TRANSACTION_ORPHANED: {tx}',file=sys.stderr)
+    headless_config_content=None
     print(f'ATTEMPT_LOGS {logs}')
     print(str(exc),file=sys.stderr)
     raise SystemExit(1)

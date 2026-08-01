@@ -38,6 +38,64 @@ function Assert-SafeLeaf([string]$Path,[string]$Label){
   $item=Get-Item -LiteralPath $Path -Force
   if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint)-ne0){throw "$Label may not be a symlink, junction or reparse point: $Path"}
 }
+function Assert-SafeDirectory([string]$Path,[string]$Label){
+  if(-not(Test-Path -LiteralPath $Path -PathType Container)){throw "$Label not found: $Path"}
+  $item=Get-Item -LiteralPath $Path -Force
+  if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint)-ne0){throw "$Label may not be a symlink, junction or reparse point: $Path"}
+}
+
+# JSONC normalization (in-memory only; never mutates the installed routing source).
+function Remove-JsoncComments([string]$Text){
+  $builder=[Text.StringBuilder]::new();$index=0;$inString=$false;$escaped=$false;$lineComment=$false;$blockComment=$false
+  while($index-lt$Text.Length){
+    $char=$Text[$index];$next=if($index+1-lt$Text.Length){$Text[$index+1]}else{[char]0}
+    if($lineComment){if($char-eq"`r"-or$char-eq"`n"){$lineComment=$false;$null=$builder.Append($char)};$index++;continue}
+    if($blockComment){if($char-eq'*'-and$next-eq'/'){$blockComment=$false;$index+=2;continue};if($char-eq"`r"-or$char-eq"`n"){$null=$builder.Append($char)};$index++;continue}
+    if($inString){
+      $null=$builder.Append($char)
+      if($escaped){$escaped=$false}elseif($char-eq'\'){$escaped=$true}elseif($char-eq'"'){$inString=$false}
+      $index++;continue
+    }
+    if($char-eq'"'){$inString=$true;$null=$builder.Append($char);$index++;continue}
+    if($char-eq'/'-and$next-eq'/'){$lineComment=$true;$index+=2;continue}
+    if($char-eq'/'-and$next-eq'*'){$blockComment=$true;$index+=2;continue}
+    $null=$builder.Append($char);$index++
+  }
+  if($inString-or$blockComment){throw 'ROUTING_JSONC_INVALID: unterminated string or block comment.'}
+  $builder.ToString()
+}
+function Remove-TrailingCommas([string]$Text){
+  $builder=[Text.StringBuilder]::new();$index=0;$inString=$false;$escaped=$false
+  while($index-lt$Text.Length){
+    $char=$Text[$index]
+    if($inString){
+      $null=$builder.Append($char)
+      if($escaped){$escaped=$false}elseif($char-eq'\'){$escaped=$true}elseif($char-eq'"'){$inString=$false}
+      $index++;continue
+    }
+    if($char-eq'"'){$inString=$true;$null=$builder.Append($char);$index++;continue}
+    if($char-eq','){
+      $lookahead=$index+1
+      while($lookahead-lt$Text.Length-and[char]::IsWhiteSpace($Text[$lookahead])){$lookahead++}
+      if($lookahead-lt$Text.Length-and($Text[$lookahead]-eq'}'-or$Text[$lookahead]-eq']')){$index++;continue}
+    }
+    $null=$builder.Append($char);$index++
+  }
+  $builder.ToString()
+}
+function Read-RoutingProfile([string]$Path){
+  Assert-SafeLeaf $Path 'Routing profile'
+  $raw=[IO.File]::ReadAllText($Path)
+  $sourceHash=Get-TextHash $raw
+  try{
+    $clean=Remove-TrailingCommas (Remove-JsoncComments $raw)
+    $obj=$clean|ConvertFrom-Json
+  }catch{throw "Routing profile is invalid JSON/JSONC: $($_.Exception.Message)"}
+  if($null-eq$obj){throw 'Routing profile is invalid JSON/JSONC.'}
+  $semantic=Get-TextHash (($obj|ConvertTo-Json -Depth 50 -Compress))
+  Write-Host "ROUTING_MANIFEST_HASHES source_sha256=$sourceHash semantic_sha256=$semantic"
+  $obj
+}
 
 if($ArgumentsFile){
   Assert-SafeLeaf $ArgumentsFile 'Arguments file'
@@ -73,7 +131,7 @@ if($Command -eq 'ai-resume') {
   if($TaskId -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]+$') { throw 'RESUME_TASK_ID_INVALID' }
 }
 
-try{$Routing=Get-Content -LiteralPath $RoutingConfigPath -Raw|ConvertFrom-Json}catch{throw 'Routing profile is invalid JSON.'}
+$Routing=Read-RoutingProfile $RoutingConfigPath
 if([string]$Routing.schema_version -ne '1.0'){throw 'Routing schema_version must be 1.0.'}
 if($null-eq$Routing.settings-or$null-eq$Routing.roles){throw 'Routing profile is missing settings or roles.'}
 $AllowedFailures=@('PROVIDER_UNAVAILABLE','RATE_LIMIT','PLAN_QUOTA_EXHAUSTED','MODEL_RETIRED','MODEL_TEMPORARILY_UNAVAILABLE','BOUNDED_TIMEOUT','TOOL_EXECUTION_ABORTED')
@@ -132,23 +190,161 @@ foreach($route in $Fallbacks){Validate-Route $route $true;$p=Get-RoutePriority $
 $Routes=@([pscustomobject]@{candidate=$Architect.primary;priority=0;route='architect-primary'})+@($Fallbacks|Sort-Object{Get-RoutePriority $_}|ForEach-Object{[pscustomobject]@{candidate=$_;priority=(Get-RoutePriority $_);route="architect-fallback-$(Get-RoutePriority $_)"}})
 
 function Resolve-OpenCodeLaunch(){
-  $command=$OpenCodeCommand;$prefix=@($OpenCodePrefixArguments)
-  if($command-eq'opencode'){
-    $resolved=(Get-Command opencode -ErrorAction SilentlyContinue|Select-Object -First 1 -ExpandProperty Source)
-    $candidates=@($resolved,"$env:USERPROFILE\.opencode\bin\opencode.exe","$env:LOCALAPPDATA\Microsoft\WinGet\Links\opencode.exe","$env:APPDATA\npm\opencode.ps1","$env:APPDATA\npm\opencode.cmd","$env:USERPROFILE\scoop\shims\opencode.exe","$env:USERPROFILE\scoop\shims\opencode.cmd","C:\ProgramData\chocolatey\bin\opencode.exe")|Where-Object{$_-and(Test-Path -LiteralPath $_ -PathType Leaf)}|Select-Object -Unique
-    if(-not$candidates){throw 'OPENCODE_CLI_NOT_FOUND'}
-    $command=$candidates[0]
+  if($null-eq$OpenCodePrefixArguments){throw 'OPENCODE_PREFIX_MALFORMED: OpenCodePrefixArguments must be a string array.'}
+  if($OpenCodePrefixArguments -is [string]){throw 'OPENCODE_PREFIX_MALFORMED: OpenCodePrefixArguments must not be a scalar string; pass a string array.'}
+  $prefix=@($OpenCodePrefixArguments|ForEach-Object{[string]$_})
+  $explicit=([string]$OpenCodeCommand).Trim()
+  if([string]::IsNullOrWhiteSpace($explicit)){throw 'OPENCODE_CLI_NOT_FOUND: empty OpenCodeCommand.'}
+  $launcherPath=$null
+  $launcherType='unknown'
+  $hostExe=$null
+  if($explicit -eq 'opencode'){
+    $discovered=[System.Collections.Generic.List[string]]::new()
+    $resolved=@(Get-Command opencode -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source)
+    foreach($item in $resolved){if($item -and (Test-Path -LiteralPath $item -PathType Leaf) -and -not $discovered.Contains($item)){$discovered.Add($item)}}
+    foreach($candidate in @(
+      "$env:USERPROFILE\.opencode\bin\opencode.exe",
+      "$env:LOCALAPPDATA\Microsoft\WinGet\Links\opencode.exe",
+      "$env:APPDATA\npm\opencode.ps1",
+      "$env:APPDATA\npm\opencode.cmd",
+      "$env:USERPROFILE\scoop\shims\opencode.exe",
+      "$env:USERPROFILE\scoop\shims\opencode.cmd",
+      'C:\ProgramData\chocolatey\bin\opencode.exe'
+    )){
+      if($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf) -and -not $discovered.Contains($candidate)){$discovered.Add($candidate)}
+    }
+    if($discovered.Count -eq 0){throw 'OPENCODE_CLI_NOT_FOUND'}
+    if($discovered.Count -gt 1){Write-Host "OPENCODE_CLI_CANDIDATES count=$($discovered.Count) selected_index=0"}
+    $launcherPath=[string]$discovered[0]
+  }else{
+    if($explicit -match '[\r\n]'){throw 'OPENCODE_CLI_NOT_FOUND: multi-line OpenCodeCommand is not allowed.'}
+    if(Test-Path -LiteralPath $explicit -PathType Leaf){$launcherPath=(Resolve-Path -LiteralPath $explicit).Path}
+    else{
+      $found=Get-Command $explicit -ErrorAction SilentlyContinue | Select-Object -First 1
+      if($found -and $found.Source){$launcherPath=[string]$found.Source}
+      else{throw "OPENCODE_CLI_NOT_FOUND: $explicit"}
+    }
   }
-  if($command -match '\.ps1$'){$prefix=@('-NoProfile','-File',$command)+$prefix;$command=(Get-Command pwsh -ErrorAction Stop).Source}
-  elseif($command -match '\.(cmd|bat)$'){$prefix=@('/d','/s','/c',$command)+$prefix;$command=$env:ComSpec}
-  else{
-    $found=Get-Command $command -ErrorAction SilentlyContinue
-    if($found){$command=$found.Source}elseif(-not(Test-Path -LiteralPath $command -PathType Leaf)){throw "OPENCODE_CLI_NOT_FOUND: $command"}
+  if($launcherPath -is [array]){throw 'OPENCODE_CLI_AMBIGUOUS: launcher resolved to multiple paths.'}
+  $launcherPath=[string]$launcherPath
+  if([string]::IsNullOrWhiteSpace($launcherPath)){throw 'OPENCODE_CLI_NOT_FOUND'}
+  if($launcherPath -match '\.ps1$'){
+    $launcherType='npm-ps1'
+    $hostExe=(Get-Command pwsh -ErrorAction Stop).Source
+    $prefix=@('-NoProfile','-File',$launcherPath)+$prefix
+  }elseif($launcherPath -match '\.(cmd|bat)$'){
+    $launcherType='npm-cmd'
+    $hostExe=$env:ComSpec
+    if([string]::IsNullOrWhiteSpace($hostExe)){throw 'OPENCODE_CLI_NOT_FOUND: ComSpec missing for .cmd launcher.'}
+    $prefix=@('/d','/s','/c',$launcherPath)+$prefix
+  }else{
+    $launcherType=if($launcherPath -match '\.exe$'){'exe'}else{'unix-or-other'}
+    $hostExe=$launcherPath
+    $launcherPath=$hostExe
   }
-  [pscustomobject]@{command=$command;prefix=@($prefix)}
+  [pscustomobject]@{
+    host=$hostExe
+    launcher=$launcherPath
+    launcher_type=$launcherType
+    prefix=@($prefix)
+    command=$hostExe
+  }
 }
 $Launch=Resolve-OpenCodeLaunch
-Write-Host "OPENCODE_CLI_RESOLVED type=$([IO.Path]::GetExtension([string]$Launch.command)) command=$($Launch.command)"
+Write-Host "OPENCODE_CLI_RESOLVED host=$($Launch.host) launcher_type=$($Launch.launcher_type) launcher=$($Launch.launcher) prefix_count=$(@($Launch.prefix).Count)"
+
+# ARCHITECT_HEADLESS_PERMISSION_CONTRACT_V1 — temporary OPENCODE_CONFIG_CONTENT overlay (deny-by-default bash).
+$script:HeadlessContractVersion='ARCHITECT_HEADLESS_PERMISSION_CONTRACT_V1'
+$script:HeadlessPolicyHash=$null
+$script:HeadlessConfigContent=$null
+function New-HeadlessPermissionOverlay([string]$Model,[string]$Variant,[string[]]$ExternalRoots){
+  $bash=[ordered]@{'*'='deny'}
+  foreach($pattern in @(
+    'git status','git status *','git diff','git diff *','git log','git log *','git show','git show *','git grep','git grep *',
+    'git rev-parse','git rev-parse *','git ls-files','git ls-files *','git submodule status','git submodule status *',
+    'git worktree list','git worktree list *','git branch --show-current','git branch --show-current *','git remote -v','git remote -v *',
+    'pwd','pwd *','ls','ls *','cat','cat *','head','head *','tail','tail *','grep','grep *','rg','rg *','stat','stat *',
+    'sha256sum','sha256sum *','realpath','realpath *','sed -n *','find * -print','find * -print *','find * -type *','find * -name *','find * -maxdepth *',
+    'Test-Path','Test-Path *','Get-ChildItem','Get-ChildItem *','Get-Content','Get-Content *','Get-Item','Get-Item *',
+    'Get-FileHash','Get-FileHash *','Resolve-Path','Resolve-Path *','Select-String','Select-String *','Get-Command','Get-Command *',
+    'ConvertFrom-Json','ConvertFrom-Json *','Select-Object','Select-Object *','Where-Object','Where-Object *',
+    'ForEach-Object','ForEach-Object *','Sort-Object','Sort-Object *','Measure-Object','Measure-Object *',
+    'Format-List','Format-List *','Format-Table','Format-Table *'
+  )){$bash[$pattern]='allow'}
+  foreach($pattern in @(
+    'git push','git push *','git fetch','git fetch *','git pull','git pull *','git merge','git merge *','git rebase','git rebase *',
+    'git cherry-pick','git cherry-pick *','git revert','git revert *','git reset','git reset *','git checkout','git checkout *',
+    'git switch','git switch *','git clean','git clean *','git add','git add *','git commit','git commit *',
+    'git remote add *','git remote set-url *','git remote remove *','git remote rename *',
+    'rm *','rmdir *','del *','Remove-Item *','Set-Content *','Add-Content *','Out-File *','Move-Item *','Copy-Item *','New-Item *',
+    'Invoke-Expression *','iex *','pwsh *','powershell *','cmd *','bash -c *','sh -c *','python *','python3 *','node *','php *','ruby *','perl *',
+    'npm install *','npm update *','npm i *','composer install *','composer update *','pip install *',
+    'find * -delete *','find * -exec *','sed -i *','chmod *','chown *','curl *','wget *','ssh *','scp *'
+  )){$bash[$pattern]='deny'}
+  $edit=[ordered]@{
+    '*'='deny';'.ai'='allow';'.ai/*'='allow';'.ai/**'='allow';'*/.ai'='allow';'*/.ai/*'='allow';'*/.ai/**'='allow'
+    '.ai\*'='allow';'*\.ai'='allow';'*\.ai\*'='allow'
+  }
+  $read=[ordered]@{
+    '*'='allow';'*.env'='deny';'*.env.*'='deny';'*.env.example'='allow'
+    '**/.ssh/**'='deny';'**/id_rsa*'='deny';'**/id_ed25519*'='deny';'**/*credentials*'='deny';'**/credentials.json'='deny'
+    '**/.aws/**'='deny';'**/.azure/**'='deny';'**/.config/gcloud/**'='deny'
+  }
+  $external=[ordered]@{'*'='deny'}
+  foreach($root in @($ExternalRoots|Where-Object{$_})){
+    $norm=$root.Replace('\','/')
+    $win=$root.Replace('/','\')
+    $external[$norm]='allow';$external["$norm/**"]='allow';$external["$norm/*"]='allow'
+    $external[$win]='allow';$external["$win\*"]='allow';$external["$win\**"]='allow'
+  }
+  $agentPerm=[ordered]@{
+    bash=$bash
+    edit=$edit
+    read=$read
+    question='deny'
+    webfetch='deny'
+    websearch='deny'
+    doom_loop='deny'
+    external_directory=$external
+    skill=[ordered]@{'*'='allow'}
+    glob='allow'
+    grep='allow'
+    lsp='allow'
+    task=[ordered]@{'*'='deny';explore='allow';scout='allow';executor='allow';reviewer='allow';'reviewer-architecture'='allow';'final-reviewer'='allow'}
+  }
+  $architect=[ordered]@{permission=$agentPerm}
+  if(-not[string]::IsNullOrWhiteSpace($Model)){$architect['model']=$Model}
+  if(-not[string]::IsNullOrWhiteSpace($Variant)){$architect['variant']=$Variant}
+  $config=[ordered]@{
+    '$schema'='https://opencode.ai/config.json'
+    permission=[ordered]@{
+      bash=[ordered]@{'*'='deny'}
+      question='deny'
+      webfetch='deny'
+      websearch='deny'
+      external_directory=$external
+    }
+    agent=[ordered]@{architect=$architect}
+    experimental=[ordered]@{governance_headless_contract=$script:HeadlessContractVersion}
+  }
+  $json=$config|ConvertTo-Json -Depth 40 -Compress
+  $hash=Get-TextHash $json
+  [pscustomobject]@{json=$json;sha256=$hash;version=$script:HeadlessContractVersion}
+}
+function Test-PermissionBlocked([string]$Text){
+  $value=$Text.ToLowerInvariant()
+  ($value -match 'permission requested') -or ($value -match 'auto-rejecting') -or ($value -match 'the user rejected permission') -or ($value -match 'user rejected permission to use this specific tool call')
+}
+function Get-DeniedToolName([string]$Text){
+  $m=[regex]::Match($Text,'permission requested:\s*([A-Za-z0-9_-]+)',[Text.RegularExpressions.RegexOptions]::IgnoreCase)
+  if($m.Success){return $m.Groups[1].Value.ToLowerInvariant()}
+  if($Text -match '(?i)\bbash\b'){return 'bash'}
+  'unknown'
+}
+function New-PermissionBlockedError([string]$Text,[string]$Route,[int]$Attempt,[string]$Logs){
+  $tool=Get-DeniedToolName $Text
+  "ARCHITECT_PERMISSION_BLOCKED: HEADLESS_PERMISSION_CONTRACT_VIOLATION denied_tool=$tool command_class=sanitized route=$Route attempt=$Attempt permission_contract=$($script:HeadlessContractVersion) logs=$Logs"
+}
 
 $StatePath=Join-Path $ConfigDir 'opencode-governance-routing-state.tsv'
 New-Item -ItemType Directory -Force -Path $ConfigDir|Out-Null
@@ -222,6 +418,8 @@ function Open-Transaction([string]$Tx,[string]$Ai,[string]$AiHash,[bool]$Existed
     ai_existed=$Existed
     ai_hash=$AiHash
     project_state_fingerprint=$ProjectState
+    permission_contract=$script:HeadlessContractVersion
+    runtime_policy_sha256=$script:HeadlessPolicyHash
   }
   $meta | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $Tx 'meta.json') -Encoding utf8
   $backup
@@ -229,6 +427,7 @@ function Open-Transaction([string]$Tx,[string]$Ai,[string]$AiHash,[bool]$Existed
 function Close-Transaction([string]$Tx){if(Test-Path $Tx){Remove-Item $Tx -Recurse -Force}}
 function Classify-Failure([string]$Text,[bool]$TimedOut,[int]$ExitCode=1){
   if($TimedOut){ return 'BOUNDED_TIMEOUT' }
+  if(Test-PermissionBlocked $Text){ return 'ARCHITECT_PERMISSION_BLOCKED' }
   $value=$Text.ToLowerInvariant()
   if($value -match 'tool[_\s-]?execution[_\s-]?aborted|execution aborted|tool aborted'){ return 'TOOL_EXECUTION_ABORTED' }
   if($value -match 'quota.*(exhausted|exceeded)|plan limit'){ return 'PLAN_QUOTA_EXHAUSTED' }
@@ -253,6 +452,15 @@ function Candidate-Allowed([object]$Route,[string]$Failure,[string]$Family,[hash
 function Invoke-Route([object]$Route,[int]$Attempt,[string]$Logs){
   $stdout = Join-Path $Logs "attempt-$Attempt.stdout.log"
   $stderr = Join-Path $Logs "attempt-$Attempt.stderr.log"
+  $roots = [System.Collections.Generic.List[string]]::new()
+  $roots.Add($ConfigDir)
+  $toolsDir = Join-Path $ConfigDir 'opencode-governance-tools'
+  if(Test-Path -LiteralPath $toolsDir -PathType Container){ $roots.Add($toolsDir) }
+  if($ArgumentsFile){ $roots.Add([IO.Path]::GetDirectoryName($ArgumentsFile)) }
+  $overlay = New-HeadlessPermissionOverlay ([string]$Route.candidate.model) ([string]$Route.candidate.variant) @($roots)
+  $script:HeadlessConfigContent = $overlay.json
+  $script:HeadlessPolicyHash = $overlay.sha256
+  Write-Host "HEADLESS_PERMISSION_CONTRACT version=$($overlay.version) runtime_policy_sha256=$($overlay.sha256) auto=disabled"
   $info = [Diagnostics.ProcessStartInfo]::new()
   $info.FileName = [string]$Launch.command
   $info.WorkingDirectory = $ProjectDir
@@ -261,6 +469,9 @@ function Invoke-Route([object]$Route,[int]$Attempt,[string]$Logs){
   $info.RedirectStandardError = $true
   $info.CreateNoWindow = $true
   $info.Environment['OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE'] = '1'
+  $info.Environment['OPENCODE_GOVERNANCE_HEADLESS_CONTRACT'] = $script:HeadlessContractVersion
+  $info.Environment['OPENCODE_CONFIG_CONTENT'] = $overlay.json
+  # Never pass blanket --auto. Deny-by-default bash eliminates ask; residual asks fail closed.
   foreach($v in @($Launch.prefix)){ $null = $info.ArgumentList.Add([string]$v) }
   foreach($v in @('run','--dir',$ProjectDir,'--agent','architect','--model',[string]$Route.candidate.model)){ $null = $info.ArgumentList.Add([string]$v) }
   if(-not [string]::IsNullOrWhiteSpace([string]$Route.candidate.variant)){
@@ -279,7 +490,7 @@ function Invoke-Route([object]$Route,[int]$Attempt,[string]$Logs){
   $err = $errTask.GetAwaiter().GetResult()
   [IO.File]::WriteAllText($stdout,$out)
   [IO.File]::WriteAllText($stderr,$err)
-  [pscustomobject]@{exit=$process.ExitCode;timed_out=$timedOut;text=($out+"`n"+$err);stdout=$out;stderr=$err}
+  [pscustomobject]@{exit=$process.ExitCode;timed_out=$timedOut;text=($out+"`n"+$err);stdout=$out;stderr=$err;policy_sha256=$overlay.sha256}
 }
 function Validate-ResumePostcondition([object]$Before,[string]$BeforeAi,[object]$Result){
   $After=Get-TaskSnapshot
@@ -302,6 +513,15 @@ if($Command-eq'ai-resume'){
 $Temp=Join-Path ([IO.Path]::GetTempPath()) ("opencode-governance-"+[guid]::NewGuid().ToString('N'))
 $Logs=Join-Path $Temp 'logs'
 New-Item -ItemType Directory -Force -Path $Logs | Out-Null
+$ExternalRoots=[System.Collections.Generic.List[string]]::new()
+$ExternalRoots.Add($ConfigDir)
+$ToolsRoot=Join-Path $ConfigDir 'opencode-governance-tools'
+if(Test-Path -LiteralPath $ToolsRoot -PathType Container){$ExternalRoots.Add($ToolsRoot)}
+if($ArgumentsFile){$ExternalRoots.Add([IO.Path]::GetDirectoryName($ArgumentsFile))}
+$BaseOverlay=New-HeadlessPermissionOverlay ([string]$Architect.primary.model) ([string]$Architect.primary.variant) @($ExternalRoots)
+$script:HeadlessConfigContent=$BaseOverlay.json
+$script:HeadlessPolicyHash=$BaseOverlay.sha256
+Write-Host "HEADLESS_PERMISSION_CONTRACT version=$($BaseOverlay.version) runtime_policy_sha256=$($BaseOverlay.sha256) auto=disabled"
 $AiExisted=Test-Path $AiPath;$AiHash=Get-FileTreeHash $AiPath;$ProjectState=Get-ProjectStateFingerprint;$Backup=Open-Transaction $TxDir $AiPath $AiHash $AiExisted $ProjectState $BeforeTask
 $Attempted=@{};$Failure=$null;$FailedFamily='';$attempt=0
 try{
@@ -312,11 +532,15 @@ try{
     $route=$ordered[0];$Attempted[$route.route]=$true;$attempt++;Write-Host "ARCHITECT_ROUTE_ATTEMPT $attempt $($route.route) $($route.candidate.model)"
     $result=Invoke-Route $route $attempt $Logs
     if((Get-ProjectStateFingerprint) -ne $ProjectState){ throw 'ARCHITECT_FAILOVER_BLOCKED: PROJECT_STATE_CHANGED. HUMAN_RECOVERY_REQUIRED' }
+    # Permission blocks are ineligible for model fallback and never consume implementation/review cycles.
+    if(Test-PermissionBlocked $result.text){
+      throw (New-PermissionBlockedError $result.text $route.route $attempt $Logs)
+    }
     if($result.exit -eq 0 -and -not $result.timed_out){
       $post=$null
       if($Command -eq 'ai-resume'){ $post=Validate-ResumePostcondition $BeforeTask $AiHash $result }
       $Cooldowns.Remove([string]$route.candidate.model);Save-Cooldowns $Cooldowns
-      Write-Host "ARCHITECT_FAILOVER_COMPLETE route=$($route.route) attempts=$attempt task=$TaskId ai_tree=$(Get-FileTreeHash $AiPath) postcondition=PASS"
+      Write-Host "ARCHITECT_FAILOVER_COMPLETE route=$($route.route) attempts=$attempt task=$TaskId ai_tree=$(Get-FileTreeHash $AiPath) postcondition=PASS permission_contract=$($script:HeadlessContractVersion) runtime_policy_sha256=$($script:HeadlessPolicyHash)"
       if($result.stdout){ Write-Output $result.stdout.TrimEnd() }
       if($result.stderr){ Write-Warning $result.stderr.TrimEnd() }
       Close-Transaction $TxDir
@@ -324,11 +548,13 @@ try{
       exit 0
     }
     $Failure=Classify-Failure $result.text $result.timed_out ([int]$result.exit);$FailedFamily=[string]$route.candidate.model_family;Write-Warning "Architect route failed: $Failure ($($route.route))"
+    if($Failure -eq 'ARCHITECT_PERMISSION_BLOCKED'){ throw (New-PermissionBlockedError $result.text $route.route $attempt $Logs) }
     if($Failure-notin$Eligible){throw "ARCHITECT_FAILOVER_BLOCKED: ineligible failure $Failure. Logs: $Logs"}
     $Cooldowns[[string]$route.candidate.model]=(Get-Epoch)+$DefaultCooldown;Save-Cooldowns $Cooldowns;Restore-Ai $AiPath $Backup $AiExisted $AiHash
   }
 }catch{
   $restored=$false;try{if((Get-ProjectStateFingerprint)-eq$ProjectState){Restore-Ai $AiPath $Backup $AiExisted $AiHash;$restored=$true}}catch{}
   if($restored){Close-Transaction $TxDir}else{Write-Warning "ARCHITECT_TRANSACTION_ORPHANED: $TxDir"}
+  $script:HeadlessConfigContent=$null
   Write-Host "ATTEMPT_LOGS $Logs";Write-Error $_;exit 1
 }

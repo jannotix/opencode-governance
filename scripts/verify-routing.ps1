@@ -7,26 +7,26 @@ if(-not(Test-Path -LiteralPath $ManifestPath -PathType Leaf)){Write-Host 'PASS: 
 try{$Manifest=Get-Content -LiteralPath $ManifestPath -Raw|ConvertFrom-Json}catch{throw 'Routing manifest is invalid JSON.'}
 $Version=[string]$Manifest.governance_version
 if($Version-eq'3.3.0'){& (Join-Path $PSScriptRoot 'verify-routing-core.ps1') -ConfigDir $ConfigDir;return}
-$Supported=@('3.3.2','3.3.3','3.3.4','3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2')
+$Supported=@('3.3.2','3.3.3','3.3.4','3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3')
 if($Version-notin$Supported){throw "Unsupported routing manifest governance_version: $Version"}
 
 $ToolsDir=Join-Path $ConfigDir 'opencode-governance-tools'
 $BaseTools=@((Join-Path $ToolsDir 'architect-attempt.ps1'),(Join-Path $ToolsDir 'architect-attempt.sh'),(Join-Path $ToolsDir 'executor-attempt.ps1'),(Join-Path $ToolsDir 'executor-attempt.sh'))
 $ExpectedTools=@($BaseTools)
-$ContextVersions=@('3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2')
-$HardenedVersions=@('3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2')
-$FingerprintVersions=@('3.3.4','3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2')
-$PowerShell7Versions=@('3.3.3','3.3.4','3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2')
+$ContextVersions=@('3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3')
+$HardenedVersions=@('3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3')
+$FingerprintVersions=@('3.3.4','3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3')
+$PowerShell7Versions=@('3.3.3','3.3.4','3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3')
 if($Version-in$ContextVersions){
     $ExpectedRunner=if($Version-eq'3.4.0'){'3.3.4'}else{$Version}
     if([string]$Manifest.architect_runner_version-ne$ExpectedRunner){throw "architect_runner_version must be $ExpectedRunner for Governance $Version."}
     if([string]$Manifest.context_intelligence_version-ne$Version){throw "context_intelligence_version must be $Version for Governance $Version."}
     $ExpectedTools+=@((Join-Path $ToolsDir 'context-intelligence.ps1'),(Join-Path $ToolsDir 'context-intelligence.sh'),(Join-Path $ToolsDir 'context-intelligence.py'))
-    if($Version-in@('3.4.4','3.6.0','3.7.0','3.7.1','3.7.2')){
+    if($Version-in@('3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3')){
         if([string]$Manifest.workflow_continuation_version-ne$Version){throw "workflow_continuation_version must be $Version."}
         $ExpectedTools+=@((Join-Path $ToolsDir 'workflow-continuation.ps1'),(Join-Path $ToolsDir 'workflow-continuation.py'))
     }
-    if($Version-in@('3.6.0','3.7.0','3.7.1','3.7.2')){
+    if($Version-in@('3.6.0','3.7.0','3.7.1','3.7.2','3.7.3')){
         $ExpectedTools+=@(
             (Join-Path $ToolsDir 'governance-authority.py'),
             (Join-Path $ToolsDir 'governance-memory.py'),
@@ -55,9 +55,9 @@ foreach($Name in @('architect','build','plan')){$Text=Get-Content -LiteralPath (
 $GateMarkers=@('ARCHITECT_RUNNER_ENTRY_GATE','ARCHITECT_RUNNER_REQUIRED',$Marker,$BaseTools[0],$BaseTools[1])
 if($Version-in$PowerShell7Versions){$GateMarkers+='pwsh -NoProfile -File'}
 if($Version-in$FingerprintVersions){$GateMarkers+='PROJECT_STATE_CHANGED'}
-if($Version-in@('3.4.4','3.6.0','3.7.0','3.7.1','3.7.2')){$GateMarkers+=@('WINDOWS_COMMAND:','UNIX_COMMAND:','-ProjectDir','--project-dir','<ORIGINAL_ARGUMENTS>')}
+if($Version-in@('3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3')){$GateMarkers+=@('WINDOWS_COMMAND:','UNIX_COMMAND:','-ProjectDir','--project-dir','<ORIGINAL_ARGUMENTS>')}
 foreach($Command in @('ai-init','ai-audit','ai-discover','ai-plan')){$Text=Get-Content -LiteralPath (Join-Path $ConfigDir "commands/$Command.md") -Raw;foreach($Value in $GateMarkers){if($Text-notlike"*$Value*"){throw "$Command missing Architect entry gate marker: $Value"}}}
-if($Version-in@('3.7.2')){
+if($Version-in@('3.7.2','3.7.3')){
     $ResumeMarkers=$GateMarkers+@('RESUME_MODE_V1','PRE_SIDE_EFFECT','POST_SIDE_EFFECT','TOOL_EXECUTION_ABORTED')
     $ResumeText=Get-Content -LiteralPath (Join-Path $ConfigDir 'commands/ai-resume.md') -Raw
     foreach($Value in $ResumeMarkers){if($ResumeText-notlike"*$Value*"){throw "ai-resume missing Architect entry gate marker: $Value"}}
@@ -68,7 +68,8 @@ if($Version-in$FingerprintVersions){
     $PowerShellRunner=Get-Content -LiteralPath $BaseTools[0] -Raw;$UnixRunner=Get-Content -LiteralPath $BaseTools[1] -Raw
     foreach($Value in @('PROJECT_STATE_FINGERPRINT_V1','PROJECT_STATE_CHANGED','Get-ProjectStateFingerprint')){if($PowerShellRunner-notlike"*$Value*"){throw "PowerShell Architect runner missing project-state marker: $Value"}}
     foreach($Value in @('PROJECT_STATE_FINGERPRINT_V1','PROJECT_STATE_CHANGED','project_state_fingerprint')){if($UnixRunner-notlike"*$Value*"){throw "Unix Architect runner missing project-state marker: $Value"}}
-    if($Version-in@('3.7.2')){foreach($Value in @('ai-resume','TOOL_EXECUTION_ABORTED','ARCHITECT_ORPHAN_RECOVERED','RESUME_POST_SIDE_EFFECT','ARCHITECT_TRANSACTION_V1','PRE_SIDE_EFFECT','POST_SIDE_EFFECT')){if($PowerShellRunner-notlike"*$Value*"-or$UnixRunner-notlike"*$Value*"){throw "Architect runner missing 3.7.2 reliability marker: $Value"}}}
+    if($Version-in@('3.7.2','3.7.3')){foreach($Value in @('ai-resume','TOOL_EXECUTION_ABORTED','ARCHITECT_ORPHAN_RECOVERED','RESUME_POST_SIDE_EFFECT','ARCHITECT_TRANSACTION_V1','PRE_SIDE_EFFECT','POST_SIDE_EFFECT')){if($PowerShellRunner-notlike"*$Value*"-or$UnixRunner-notlike"*$Value*"){throw "Architect runner missing 3.7.2 reliability marker: $Value"}}}
+    if($Version-eq'3.7.3'){foreach($Value in @('ARCHITECT_HEADLESS_PERMISSION_CONTRACT_V1','OPENCODE_CONFIG_CONTENT','ARCHITECT_PERMISSION_BLOCKED','HEADLESS_PERMISSION_CONTRACT','auto=disabled','ROUTING_MANIFEST_HASHES')){if($PowerShellRunner-notlike"*$Value*"-or$UnixRunner-notlike"*$Value*"){throw "Architect runner missing 3.7.3 headless permission marker: $Value"}}}
     if($Version-in$HardenedVersions-and$PowerShellRunner-notlike'*default cooldown must be an integer between 60 and 86400 seconds.*'){throw 'PowerShell Architect runner missing cooldown validation.'}
 }
 if($Version-in$ContextVersions){
@@ -77,12 +78,12 @@ if($Version-in$ContextVersions){
     if($ShContext-notlike'*context-intelligence.py*'){throw 'Unix context wrapper does not invoke the managed Python core.'}
     if($Version-in$HardenedVersions){foreach($Value in @('GOVERNANCE_STATE_LINK_FORBIDDEN','REQUIRED_SECTION_UNAVAILABLE','TERMINAL_STATE_REQUIRED')){if($PsContext-notlike"*$Value*"-or$PyContext-notlike"*$Value*"){throw "Context hardening marker missing: $Value"}}}
 }
-if($Version-in@('3.4.4','3.6.0','3.7.0','3.7.1','3.7.2')){
+if($Version-in@('3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3')){
     $PsWorkflow=Get-Content -LiteralPath $ExpectedTools[7] -Raw;$PyWorkflow=Get-Content -LiteralPath $ExpectedTools[8] -Raw
     foreach($Value in @('WORKFLOW_CONTINUATION_GATE_V1','CONTINUE_REQUIRED','TERMINAL_ALLOWED','INVALID_RUN_STATE','AUDIT_PASS','LOCAL_COMMITTED')){if($PsWorkflow-notlike"*$Value*"-or$PyWorkflow-notlike"*$Value*"){throw "Workflow continuation helper missing marker: $Value"}}
     foreach($Command in @('ai-workflow','ai-resume')){$Text=Get-Content -LiteralPath (Join-Path $ConfigDir "commands/$Command.md") -Raw;foreach($Value in @('WORKFLOW_CONTINUATION_GATE_V1','WINDOWS_WORKFLOW_CONTINUATION_CORE','UNIX_WORKFLOW_CONTINUATION_CORE',$ExpectedTools[7],$ExpectedTools[8],'CONTINUE_REQUIRED','TERMINAL_ALLOWED')){if($Text-notlike"*$Value*"){throw "$Command missing workflow continuation marker: $Value"}}}
 }
-if($Version-in@('3.6.0','3.7.0','3.7.1','3.7.2')){
+if($Version-in@('3.6.0','3.7.0','3.7.1','3.7.2','3.7.3')){
     $Capabilities=Join-Path $PSScriptRoot 'governance-capabilities.py'
     if(-not(Test-Path -LiteralPath $Capabilities -PathType Leaf)){throw "Capability verifier not found: $Capabilities"}
     $Process=Start-Process -FilePath 'python' -ArgumentList @($Capabilities,'verify','--config-dir',$ConfigDir) -NoNewWindow -Wait -PassThru

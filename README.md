@@ -4,7 +4,7 @@ Provider- and model-agnostic product-lifecycle governance for [OpenCode](https:/
 
 > Community project. Not affiliated with the OpenCode team.
 
-Current release: **3.7.2 — Governed Authority, Memory & Evidence**.
+Current release: **3.7.3 — Headless Architect Reliability**.
 
 Installs seven specialized agents, twelve `/ai-*` commands, deterministic tooling and fail-closed contracts so planning, implementation, validation and review stay bound to approved requirements and current repository evidence.
 
@@ -185,6 +185,7 @@ Rerun the installer with the same local routing profile. Routing is preserved wh
 | [`docs/governance-authority-memory.md`](docs/governance-authority-memory.md) | Receipts, memory, evidence, simulation |
 | [`docs/context-intelligence-skill-routing.md`](docs/context-intelligence-skill-routing.md) | Context and skills |
 | [`docs/permissions.md`](docs/permissions.md) | Write and external-action boundaries |
+| [`docs/architect-headless-permission-contract.md`](docs/architect-headless-permission-contract.md) | Headless Architect permission contract (3.7.3) |
 | [`docs/troubleshooting.md`](docs/troubleshooting.md) | Recovery |
 | [`CHANGELOG.md`](CHANGELOG.md) | Release history |
 

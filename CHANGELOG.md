@@ -4,6 +4,16 @@ Dates use `YYYY-MM-DD`. Older micro-releases are summarized; see git history for
 
 ## Unreleased
 
+
+## 3.7.3 - 2026-08-02
+
+- Headless Architect permission contract `ARCHITECT_HEADLESS_PERMISSION_CONTRACT_V1` for external transactional runners.
+- Temporary `OPENCODE_CONFIG_CONTENT` deny-by-default bash overlay (no blanket `--auto`, no permanent Architect profile weakening).
+- Native tool preference for discovery (`read`/`list`/`glob`/`grep`/LSP/Explore/Scout before shell).
+- Precise `ARCHITECT_PERMISSION_BLOCKED` / `HEADLESS_PERMISSION_CONTRACT_VIOLATION` (no model fallback, rollback `.ai/**`).
+- JSONC-safe routing manifest load (source + semantic hashes; never mutates installed routing).
+- Hardened launcher resolution (single selection; `.ps1`/`.cmd`/exe; sanitised host/launcher logs).
+- Real incident regression: permission auto-reject no longer surfaces as false-success/no-progress only.
 - Executor permission surface denies `.ai/**` and `.git/**` (portable path forms after install) and denies `git push`.
 - Approval receipts support content-bound issue/validate via `--project-dir` (hashes real artifact files; `RECEIPT_ARTIFACT_MISMATCH` on drift).
 - Install remains a staged pipeline (`core 3.3.0 → base 3.4.4 → capabilities product version`) because intermediate `verify-routing` contracts require matching tool sets at each layer.
