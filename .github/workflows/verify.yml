@@ -88,25 +88,25 @@ jobs:
       - name: Validate PowerShell scripts
         shell: pwsh
         run: |
-          $ErrorActionPreference='Stop'
+          $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$true
           foreach($path in 'scripts/install.ps1','scripts/verify.ps1','scripts/verify-routing.ps1','scripts/run-governed.ps1','scripts/uninstall.ps1'){$tokens=$null;$errors=$null;[Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$errors)|Out-Null;if($errors.Count){throw "$path parse failed: $($errors -join '; ')"}}
       - name: Verify legacy installation
         shell: pwsh
         run: |
-          $ErrorActionPreference='Stop';$config=Join-Path $env:RUNNER_TEMP 'opencode-legacy'
+          $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$true;$config=Join-Path $env:RUNNER_TEMP 'opencode-legacy'
           ./scripts/install.ps1 -ConfigDir $config -NonInteractive -ArchitectModel test/architect -ArchitectVariant max -ExecutorModel test/executor -ReviewerImplementationModel test/reviewer -ReviewerImplementationVariant thinking -ReviewerArchitectureModel test/architecture -ReviewerArchitectureVariant high -FinalReviewerModel test/final -FinalReviewerVariant thinking
           ./scripts/verify.ps1 -ConfigDir $config;./scripts/verify-routing.ps1 -ConfigDir $config
       - name: Verify v3.1 reviewer-only profile compatibility
         shell: pwsh
         run: |
-          $ErrorActionPreference='Stop';$config=Join-Path $env:RUNNER_TEMP 'opencode-reviewers'
+          $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$true;$config=Join-Path $env:RUNNER_TEMP 'opencode-reviewers'
           ./scripts/install.ps1 -ConfigDir $config -NonInteractive -RoutingConfigPath (Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/reviewer-failover.valid.json')
           ./scripts/verify.ps1 -ConfigDir $config;./scripts/verify-routing.ps1 -ConfigDir $config
           if((Get-ChildItem "$config/agents" -Filter '*.md').Count -ne 15){throw 'Expected 15 agents'}
       - name: Verify Architect profile installation
         shell: pwsh
         run: |
-          $ErrorActionPreference='Stop';$config=Join-Path $env:RUNNER_TEMP 'opencode-architect'
+          $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$true;$config=Join-Path $env:RUNNER_TEMP 'opencode-architect'
           ./scripts/install.ps1 -ConfigDir $config -NonInteractive -RoutingConfigPath (Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/architect-failover.valid.json')
           ./scripts/verify.ps1 -ConfigDir $config;./scripts/verify-routing.ps1 -ConfigDir $config
           if((Get-ChildItem "$config/agents" -Filter '*.md').Count -ne 10){throw 'Expected 10 agents'}
@@ -114,7 +114,7 @@ jobs:
       - name: Verify transactional Architect failover
         shell: pwsh
         run: |
-          $ErrorActionPreference='Stop';$project=Join-Path $env:RUNNER_TEMP 'runner-project';$config=Join-Path $env:RUNNER_TEMP 'runner-config';$mock=Join-Path $env:RUNNER_TEMP 'mock-opencode.ps1';$state=Join-Path $env:RUNNER_TEMP 'mock-count'
+          $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$true;$project=Join-Path $env:RUNNER_TEMP 'runner-project';$config=Join-Path $env:RUNNER_TEMP 'runner-config';$mock=Join-Path $env:RUNNER_TEMP 'mock-opencode.ps1';$state=Join-Path $env:RUNNER_TEMP 'mock-count'
           New-Item -ItemType Directory -Force -Path (Join-Path $project '.ai'),$config|Out-Null;git -C $project init -q;'original'|Set-Content (Join-Path $project '.ai/STATUS.md')
           @'
           param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
