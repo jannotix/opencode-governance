@@ -48,7 +48,7 @@ def run(*arguments: object, ok: bool = True) -> subprocess.CompletedProcess[str]
 class GovernanceCapabilitiesTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
-        self.config = pathlib.Path(self.temporary.name) / "config"
+        self.config = (pathlib.Path(self.temporary.name) / "config").resolve()
         self.tools = self.config / "opencode-governance-tools"
         (self.config / "agents").mkdir(parents=True)
         (self.config / "commands").mkdir()
