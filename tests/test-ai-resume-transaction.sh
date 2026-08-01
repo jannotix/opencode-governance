@@ -49,6 +49,16 @@ fi
 [[ ! -e "$project/.ai/PARTIAL_RESUME.md" ]]
 [[ "$(cat "$project/.ai/BASELINE.md")" == baseline ]]
 printf 'success\n' > "$project/.ai/RESUME_OK.md"
+python3 - "$project/.ai/tasks/TASK-001/RUN_STATE.json" <<'PY_STATE'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+state = json.loads(path.read_text(encoding='utf-8'))
+state['state'] = 'READY_FOR_EXECUTION'
+state['current_phase'] = 'READY_FOR_EXECUTION'
+state['next_required_phase'] = 'IMPLEMENTING'
+path.write_text(json.dumps(state), encoding='utf-8')
+PY_STATE
+printf 'GOVERNANCE_RESULT\nTASK_ID: TASK-001\nSTATE: READY_FOR_EXECUTION\n'
 exit 0
 MOCK
 chmod +x "$mock"
@@ -180,6 +190,16 @@ project=''
 while [[ $# -gt 0 ]]; do case "$1" in --dir) project="$2"; shift 2 ;; *) shift ;; esac; done
 [[ ! -e "$project/.ai/ORPHAN_PARTIAL.md" ]]
 printf 'recovered\n' > "$project/.ai/RECOVERED.md"
+python3 - "$project/.ai/tasks/TASK-001/RUN_STATE.json" <<'PY_STATE'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+state = json.loads(path.read_text(encoding='utf-8'))
+state['state'] = 'READY_FOR_EXECUTION'
+state['current_phase'] = 'READY_FOR_EXECUTION'
+state['next_required_phase'] = 'IMPLEMENTING'
+path.write_text(json.dumps(state), encoding='utf-8')
+PY_STATE
+printf 'GOVERNANCE_RESULT\nTASK_ID: TASK-001\nSTATE: READY_FOR_EXECUTION\n'
 exit 0
 MOCK
 chmod +x "$mock"
