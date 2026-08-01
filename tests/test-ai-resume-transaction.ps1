@@ -116,6 +116,13 @@ if($model-eq'test/architect-primary'){
 if(Test-Path (Join-Path $project '.ai/PARTIAL_RESUME.md')){exit 23}
 if((Get-Content (Join-Path $project '.ai/BASELINE.md') -Raw).Trim()-ne'baseline'){exit 24}
 'success'|Set-Content (Join-Path $project '.ai/RESUME_OK.md')
+$runStatePath=Join-Path $project '.ai/tasks/TASK-001/RUN_STATE.json'
+$runState=Get-Content -LiteralPath $runStatePath -Raw|ConvertFrom-Json
+$runState|Add-Member NoteProperty state 'READY_FOR_EXECUTION' -Force
+$runState.current_phase='READY_FOR_EXECUTION'
+$runState.next_required_phase='IMPLEMENTING'
+$runState|ConvertTo-Json -Depth 10|Set-Content -LiteralPath $runStatePath -Encoding utf8
+Write-Output "GOVERNANCE_RESULT`nTASK_ID: TASK-001`nSTATE: READY_FOR_EXECUTION"
 exit 0
 '@ | Set-Content -LiteralPath $mock
 $env:MOCK_STATE = $state
@@ -171,6 +178,13 @@ $project=''
 for($i=0;$i-lt$Args.Count;$i++){if($Args[$i]-eq'--dir'){$project=$Args[++$i]}}
 if(Test-Path (Join-Path $project '.ai/ORPHAN_PARTIAL.md')){exit 25}
 'recovered'|Set-Content (Join-Path $project '.ai/RECOVERED.md')
+$runStatePath=Join-Path $project '.ai/tasks/TASK-001/RUN_STATE.json'
+$runState=Get-Content -LiteralPath $runStatePath -Raw|ConvertFrom-Json
+$runState|Add-Member NoteProperty state 'READY_FOR_EXECUTION' -Force
+$runState.current_phase='READY_FOR_EXECUTION'
+$runState.next_required_phase='IMPLEMENTING'
+$runState|ConvertTo-Json -Depth 10|Set-Content -LiteralPath $runStatePath -Encoding utf8
+Write-Output "GOVERNANCE_RESULT`nTASK_ID: TASK-001`nSTATE: READY_FOR_EXECUTION"
 exit 0
 '@ | Set-Content -LiteralPath $orphanMock
 $result = Invoke-ResumeRunner $orphanProject 'orphan-recovery' $orphanMock

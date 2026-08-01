@@ -16,16 +16,51 @@ Read:
 
 Reconstruct `WORK_CLASS`, `DISCOVERY_DEPTH`, `DISCOVERY_STATUS`, `PRODUCT_SCOPE_STATUS`, `PRODUCT_BLUEPRINT_VERSION`, `MATERIAL_UNKNOWN_COUNT`, approval and milestone state. Invalidate only evidence dependent on changed product/source/contract/dependency/environment/tool/recovery inputs. Preserve `GOVERNANCE_RESULT`, `ENVIRONMENT_FINGERPRINT`, `STALE`, `GOVERNANCE_MEMORY`, `DEPENDENCY_ADMISSION_GATE`, `PRE_CHANGE_SAFEPOINT`, `MEMORY_DECISION`, `OPERATIONAL_ASSURANCE`.
 
+## LOSSLESS_RESUME_HANDOFF_V1
+
+Before any project write, resolve exactly one task ID from the first `/ai-resume` argument and bind the resume only to:
+
+`.ai/tasks/<TASK-ID>/RUN_STATE.json`
+
+Never select the newest, first, or most recently modified task checkpoint. If the task ID is absent, invalid, missing, or disagrees with `RUN_STATE.json`, stop with `RESUME_TASK_ID_REQUIRED`, `RESUME_TASK_NOT_FOUND`, or `RESUME_TASK_ID_MISMATCH` as appropriate.
+
+When the Architect runner marker is absent and the resume is `PRE_SIDE_EFFECT`, do not reconstruct, summarize, shorten, quote-normalize or inline the owner prompt into a shell command. Preserve the exact substituted `$ARGUMENTS` text as UTF-8 in a user-local, non-project handoff file under the OpenCode configuration directory. Reject symlinks, junctions, reparse points and path escapes. Compute and report its SHA-256. The external handoff must pass:
+
+- the exact installed runner path;
+- the canonical project directory;
+- `-Command ai-resume` / `--command ai-resume`;
+- explicit `-TaskId <TASK-ID>` / `--task-id <TASK-ID>`;
+- `-ArgumentsFile <handoff-file>` / `--arguments-file <handoff-file>`.
+
+Do not place the full prompt in process arguments or logs. Do not write `.ai/**` before the external runner is active. If a safe handoff file cannot be created, return `RESUME_HANDOFF_FAILED` without project mutation.
+
 ## RESUME_MODE_V1
 
-Before any `.ai/**` write, classify resume mode from authoritative `RUN_STATE.json` (`current_phase`, `next_required_phase`, and when needed `state` / `last_safe_transition`):
+Before any `.ai/**` write, classify resume mode from the authoritative task-bound `RUN_STATE.json` (`current_phase`, `next_required_phase`, and when needed `state` / `last_safe_transition`):
 
 - `PRE_SIDE_EFFECT` — at or before `READY_FOR_EXECUTION` / `PRE_CHANGE_SAFEPOINT_WHEN_REQUIRED`. Must run through the transactional Architect runner (`ARCHITECT_RUNNER_ENTRY_GATE`). Partial governance writes are never authoritative; failed exits restore `.ai/**`.
 - `POST_SIDE_EFFECT` — `IMPLEMENTING` or later (implementation/review/release boundary already crossed). Do **not** invoke the transactional runner and do **not** roll back the whole `.ai/**` tree automatically. Reconcile evidence, invalidate only dependent artifacts, and continue the original `top_level_command`.
 
 Unknown or unprovable phase → `RESUME_PHASE_UNKNOWN` / `HUMAN_INPUT_REQUIRED`. Never guess.
 
-Orphan Architect transactions (`ARCHITECT_TRANSACTION_V1` under the OpenCode config directory) are recovered only for pre-side-effect resumes when project content fingerprint still matches the frozen transaction.
+Orphan Architect transactions (`ARCHITECT_TRANSACTION_V2` under the OpenCode config directory) are recovered only for pre-side-effect resumes when project content fingerprint still matches the frozen transaction.
+
+## RESUME_POSTCONDITION_V1
+
+A zero child exit code is necessary but not sufficient for success.
+
+For a pre-side-effect `/ai-resume`, the runner must bind and compare:
+
+- explicit task ID;
+- exact checkpoint path and SHA-256;
+- complete `.ai/**` hash;
+- semantic state/phase/next action;
+- project-state fingerprint;
+- child `GOVERNANCE_RESULT`.
+
+Success requires a valid persisted task transition or an explicit persisted terminal blocker plus a matching machine-readable `GOVERNANCE_RESULT`. If the child exits zero while the task checkpoint and `.ai/**` remain byte-identical, return `ARCHITECT_NO_PROGRESS`, restore the snapshot and retain attempt logs. If `GOVERNANCE_RESULT` is missing, return `ARCHITECT_CHILD_RESULT_MISSING`. If output and persisted checkpoint disagree, return `ARCHITECT_CHILD_RESULT_MISMATCH`.
+
+`ARCHITECT_NO_PROGRESS`, missing child results and postcondition failures are not provider-availability failures and must not trigger model fallback by default.
 
 ## Resume integrity contract
 
