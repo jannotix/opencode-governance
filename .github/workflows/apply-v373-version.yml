@@ -1,0 +1,120 @@
+name: Apply v3.7.3 version alignment
+on:
+  push:
+    branches: [fix/3.7.3-resume-postcondition]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/3.7.3-resume-postcondition
+          fetch-depth: 0
+      - name: Align release version and contracts
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str, count: int | None = 1) -> None:
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              actual = text.count(old)
+              if count is not None and actual != count:
+                  raise SystemExit(f'{path}: expected {count} occurrences of {old!r}, found {actual}')
+              if count is None and actual < 1:
+                  raise SystemExit(f'{path}: missing {old!r}')
+              p.write_text(text.replace(old, new), encoding='utf-8')
+
+          Path('VERSION').write_text('3.7.3\n', encoding='utf-8')
+          replace('pyproject.toml', 'version = "3.7.2"', 'version = "3.7.3"')
+          replace('README.md', 'Current release: **3.7.2 — Governed Authority, Memory & Evidence**.', 'Current release: **3.7.3 — Governed Authority, Memory & Evidence**.')
+          replace('scripts/governance-capabilities.py', 'VERSION = "3.7.2"', 'VERSION = "3.7.3"')
+          replace('scripts/install.sh', 'Installed OpenCode Governance v3.7.2 — Governed Authority, Memory & Evidence.', 'Installed OpenCode Governance v3.7.3 — Governed Authority, Memory & Evidence.')
+          replace('scripts/install.ps1', 'Installed OpenCode Governance 3.7.2 with routing and capability tools.', 'Installed OpenCode Governance 3.7.3 with routing and capability tools.')
+
+          p = Path('scripts/uninstall.sh')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace("if [[ \"$version\" == '3.7.2' ]]; then", "if [[ \"$version\" == '3.7.2' || \"$version\" == '3.7.3' ]]; then")
+          text = text.replace('Removed OpenCode Governance 3.7.2 canonical agents, commands, managed routes and managed tools.', 'Removed OpenCode Governance 3.7.3 canonical agents, commands, managed routes and managed tools.')
+          if "'3.7.3'" not in text: raise SystemExit('scripts/uninstall.sh was not aligned')
+          p.write_text(text, encoding='utf-8')
+
+          p = Path('scripts/uninstall.ps1')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace("if([string]$Manifest.governance_version-eq'3.7.2'){", "if([string]$Manifest.governance_version-in@('3.7.2','3.7.3')){")
+          text = text.replace('Removed OpenCode Governance 3.7.2 canonical agents, commands, managed routes and managed tools.', 'Removed OpenCode Governance 3.7.3 canonical agents, commands, managed routes and managed tools.')
+          if "'3.7.3'" not in text: raise SystemExit('scripts/uninstall.ps1 was not aligned')
+          p.write_text(text, encoding='utf-8')
+
+          p = Path('scripts/verify-routing.sh')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace('|3.7.2);;', '|3.7.2|3.7.3);;')
+          text = text.replace("'3.7.2'}", "'3.7.2','3.7.3'}")
+          text = text.replace("if version == '3.7.2':\n    resume_markers=", "if version in {'3.7.2','3.7.3'}:\n    resume_markers=")
+          text = text.replace(
+              "    text=(root/'commands'/'ai-resume.md').read_text(encoding='utf-8')\n    for value in resume_markers:",
+              "    if version == '3.7.3': resume_markers += ['LOSSLESS_RESUME_HANDOFF_V1','RESUME_POSTCONDITION_V1','ARCHITECT_NO_PROGRESS','ARCHITECT_CHILD_RESULT_MISSING','ArgumentsFile','TaskId']\n    text=(root/'commands'/'ai-resume.md').read_text(encoding='utf-8')\n    for value in resume_markers:",
+          )
+          text = text.replace("    if version == '3.7.2':\n        for value in", "    if version in {'3.7.2','3.7.3'}:\n        for value in")
+          text = text.replace(
+              "            if value not in ps_runner or value not in sh_runner: raise SystemExit(f'Architect runner missing 3.7.2 reliability marker: {value}')",
+              "            if value not in ps_runner or value not in sh_runner: raise SystemExit(f'Architect runner missing transactional resume reliability marker: {value}')\n    if version == '3.7.3':\n        for value in ['ARCHITECT_TRANSACTION_V2','ARCHITECT_NO_PROGRESS','ARCHITECT_CHILD_RESULT_MISSING','arguments_sha256','task_id']:\n            if value not in ps_runner or value not in sh_runner: raise SystemExit(f'Architect runner missing 3.7.3 semantic completion marker: {value}')",
+          )
+          if '3.7.3' not in text or 'ARCHITECT_TRANSACTION_V2' not in text: raise SystemExit('scripts/verify-routing.sh was not aligned')
+          p.write_text(text, encoding='utf-8')
+
+          p = Path('scripts/verify-routing.ps1')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace(",'3.7.2')", ",'3.7.2','3.7.3')")
+          text = text.replace(
+              "$ResumeMarkers=$GateMarkers+@('RESUME_MODE_V1','PRE_SIDE_EFFECT','POST_SIDE_EFFECT','TOOL_EXECUTION_ABORTED')",
+              "$ResumeMarkers=$GateMarkers+@('RESUME_MODE_V1','PRE_SIDE_EFFECT','POST_SIDE_EFFECT','TOOL_EXECUTION_ABORTED');if($Version-eq'3.7.3'){$ResumeMarkers+=@('LOSSLESS_RESUME_HANDOFF_V1','RESUME_POSTCONDITION_V1','ARCHITECT_NO_PROGRESS','ARCHITECT_CHILD_RESULT_MISSING','ArgumentsFile','TaskId')}",
+          )
+          text = text.replace(
+              "throw \"Architect runner missing 3.7.2 reliability marker: $Value\"}}}",
+              "throw \"Architect runner missing transactional resume reliability marker: $Value\"}};if($Version-eq'3.7.3'){foreach($Value in @('ARCHITECT_TRANSACTION_V2','ARCHITECT_NO_PROGRESS','ARCHITECT_CHILD_RESULT_MISSING','arguments_sha256','task_id')){if($PowerShellRunner-notlike\"*$Value*\"-or$UnixRunner-notlike\"*$Value*\"){throw \"Architect runner missing 3.7.3 semantic completion marker: $Value\"}}}}",
+          )
+          if "'3.7.3'" not in text or 'ARCHITECT_TRANSACTION_V2' not in text: raise SystemExit('scripts/verify-routing.ps1 was not aligned')
+          p.write_text(text, encoding='utf-8')
+
+          replace('tests/test-governance-capabilities.py', '"3.7.2", manifest[', '"3.7.3", manifest[', count=None)
+          replace('tests/test-unified-release.py', 'assert manifest["governance_version"] == "3.7.2"', 'assert manifest["governance_version"] == "3.7.3"')
+
+          p = Path('docs/architect-runner-integration.md')
+          p.write_text(p.read_text(encoding='utf-8').replace('3.7.2', '3.7.3'), encoding='utf-8')
+
+          changelog = Path('CHANGELOG.md')
+          text = changelog.read_text(encoding='utf-8')
+          anchor = '## 3.7.2 - 2026-08-01\n'
+          section = '''## 3.7.3 - 2026-08-01
+
+- Lossless UTF-8 `/ai-resume` handoff through `ArgumentsFile`, with explicit task binding and prompt/checkpoint hashes in `ARCHITECT_TRANSACTION_V2`.
+- Zero-exit/no-progress attempts now fail as `ARCHITECT_NO_PROGRESS`; missing or inconsistent child results fail closed and restore `.ai/**`.
+- Windows resolves npm `.ps1`/`.cmd`, WinGet, Scoop and Chocolatey OpenCode launchers automatically; all children run from the canonical project root.
+- Successful resume requires persisted task progress plus a matching `GOVERNANCE_RESULT`; validated child output is surfaced to the operator.
+- Added Windows and Unix regressions for long Unicode prompts, multiple task checkpoints, no-progress rollback and semantic completion.
+
+'''
+          if '## 3.7.3 - 2026-08-01' in text: raise SystemExit('CHANGELOG already contains 3.7.3')
+          if anchor not in text: raise SystemExit('CHANGELOG 3.7.2 anchor missing')
+          changelog.write_text(text.replace(anchor, section + anchor, 1), encoding='utf-8')
+          PY
+
+          bash -n scripts/verify-routing.sh scripts/install.sh scripts/uninstall.sh
+          python3 -m py_compile scripts/governance-capabilities.py tests/test-governance-capabilities.py tests/test-unified-release.py
+          rm .github/workflows/apply-v373-version.yml
+      - name: Commit release alignment
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add VERSION pyproject.toml README.md CHANGELOG.md scripts/governance-capabilities.py scripts/install.sh scripts/install.ps1 scripts/uninstall.sh scripts/uninstall.ps1 scripts/verify-routing.sh scripts/verify-routing.ps1 tests/test-governance-capabilities.py tests/test-unified-release.py docs/architect-runner-integration.md .github/workflows/apply-v373-version.yml
+          git commit -m 'release: align OpenCode Governance 3.7.3'
+          git push origin HEAD:fix/3.7.3-resume-postcondition
