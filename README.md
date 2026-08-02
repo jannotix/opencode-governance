@@ -175,6 +175,22 @@ git pull --ff-only
 
 Rerun the installer with the same local routing profile. Routing is preserved when the profile remains valid.
 
+### Effect plugin (standalone install / self-test)
+
+The effect-enforcement plugin is normally installed by the umbrella installer,
+but it can be managed directly. `--config-dir` is a top-level option and must
+precede the subcommand (S-019):
+
+```powershell
+python .\scripts\install-effect-plugin.py --config-dir $env:OPENCODE_CONFIG_DIR install
+python .\scripts\install-effect-plugin.py --config-dir $env:OPENCODE_CONFIG_DIR self-test --non-mutating
+```
+
+```bash
+python3 ./scripts/install-effect-plugin.py --config-dir "$OPENCODE_CONFIG_DIR" install
+python3 ./scripts/install-effect-plugin.py --config-dir "$OPENCODE_CONFIG_DIR" self-test --non-mutating
+```
+
 ## Documentation
 
 | Doc | Topic |
