@@ -3,85 +3,23 @@ param(
     [Parameter(Mandatory=$true)][ValidateSet('ai-workflow','ai-resume')][string]$ExpectedCommand
 )
 
-$ErrorActionPreference='Stop'
-$Schema='WORKFLOW_CONTINUATION_GATE_V1'
-$NonTerminal=@(
-    'IDEA_INTAKE','PRODUCT_CLASSIFICATION','ADAPTIVE_PRODUCT_DISCOVERY','ADAPTIVE_DISCOVERY',
-    'GOVERNED_DOMAIN_RESEARCH','CONSTRUCTIVE_CHALLENGE','PRODUCT_DEFINITION',
-    'DISCOVERY_DUAL_REVIEW','DISCOVERY_ADJUDICATION','DISCOVERY_PASS','DISCOVERY_DEFECT',
-    'PRODUCT_SCOPE_APPROVAL','PRODUCT_SCOPE_APPROVED','CONTEXT_ROUTING','CONTEXT_SUFFICIENT',
-    'DELIVERY_ARCHITECTURE','VERTICAL_MILESTONE_PLANNING','EVIDENCE_PLANNING','OPERATIONAL_PLANNING',
-    'READY_FOR_EXECUTION','PRE_CHANGE_SAFEPOINT_WHEN_REQUIRED','IMPLEMENTING','IMPLEMENTATION',
-    'DOCUMENTATION_SYNC','EVIDENCE_VALIDATION','OPERATIONAL_VALIDATION','EVIDENCE_AND_OPERATIONAL_VALIDATION',
-    'TASK_VALIDATED','DUAL_REVIEW','DUAL_REVIEW_COMPLETE','TASK_DUAL_REVIEW','FINAL_ADJUDICATION',
-    'FINAL_ADJUDICATION_PASS','TASK_FINAL_ADJUDICATION','PASS','IMPLEMENTATION_DEFECT','PLAN_DEFECT',
-    'PRODUCT_COMPLETENESS_RECONCILIATION','PRODUCT_COMPLETE','PRODUCT_DEFECT','PRODUCT_INCOMPLETE',
-    'MILESTONE_VALIDATED','RELEASE_READINESS','RELEASE_READY','READY_FOR_PRODUCTION',
-    'NOT_READY_FOR_PRODUCTION','VALIDATED_LEARNING','AUDIT_PASS','BASELINE_PASS','BASELINE_DEFECT',
-    'BASELINE_VALIDATED'
-)
-$TerminalSuccess=@('LOCAL_COMMITTED')
-$TerminalBlockers=@(
-    'BLOCKED','HUMAN_INPUT_REQUIRED','LICENSE_DECISION_REQUIRED','GOVERNANCE_PERMISSION_BLOCKED',
-    'EXECUTOR_FAILOVER_BLOCKED','BASELINE_BLOCKED','DISCOVERY_BLOCKED','PRODUCT_BLOCKED',
-    'RELEASE_BLOCKED','CONTEXT_BLOCKED','PLAN_BLOCKED','PERMISSION_BLOCKED','SAFETY_BLOCKED',
-    'EXTERNAL_TOOL_BLOCKED'
-)
+# Thin wrapper: semantic evaluation is owned by workflow-continuation.py /
+# SEMANTIC_WORKFLOW_STATE_MACHINE_V1 (generated contract). Markers retained:
+# WORKFLOW_CONTINUATION_GATE_V1 CONTINUE_REQUIRED TERMINAL_ALLOWED INVALID_RUN_STATE
+# AUDIT_PASS LOCAL_COMMITTED
 
-function Emit([int]$Code,[hashtable]$Payload){
-    $Body=[ordered]@{schema=$Schema}
-    foreach($Key in $Payload.Keys){$Body[$Key]=$Payload[$Key]}
-    [Console]::Out.WriteLine(($Body|ConvertTo-Json -Depth 10 -Compress))
-    exit $Code
+$ErrorActionPreference = 'Stop'
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$PyCore = Join-Path $ScriptDir 'workflow-continuation.py'
+if (-not (Test-Path -LiteralPath $PyCore -PathType Leaf)) {
+    Write-Error "WORKFLOW_CONTINUATION_PYTHON_MISSING: $PyCore"
+    exit 2
 }
-
-if(-not(Test-Path -LiteralPath $RunStatePath -PathType Leaf)){
-    Emit 2 @{decision='INVALID_RUN_STATE';error='RUN_STATE_NOT_FOUND'}
+$python = Get-Command python -ErrorAction SilentlyContinue
+if (-not $python) { $python = Get-Command python3 -ErrorAction SilentlyContinue }
+if (-not $python) {
+    Write-Error 'WORKFLOW_CONTINUATION_PYTHON_MISSING: python is required for SEMANTIC_WORKFLOW_STATE_MACHINE_V1'
+    exit 2
 }
-try{$State=Get-Content -LiteralPath $RunStatePath -Raw|ConvertFrom-Json}catch{
-    Emit 2 @{decision='INVALID_RUN_STATE';error='RUN_STATE_INVALID_JSON'}
-}
-$Required=@('top_level_command','current_phase','next_required_phase','terminal_reason')
-$Missing=@($Required|Where-Object{$null-eq$State.PSObject.Properties[$_]})
-if($Missing.Count){Emit 2 @{decision='INVALID_RUN_STATE';error='REQUIRED_FIELDS_MISSING';missing_fields=$Missing}}
-
-$Command=[string]$State.top_level_command
-$Phase=[string]$State.current_phase
-$Next=$State.next_required_phase
-$Reason=$State.terminal_reason
-if($ExpectedCommand-eq'ai-workflow'-and$Command-ne'ai-workflow'){Emit 2 @{decision='INVALID_RUN_STATE';error='TOP_LEVEL_COMMAND_MISMATCH'}}
-if($ExpectedCommand-eq'ai-resume'-and$Command-ne'ai-workflow'){Emit 2 @{decision='INVALID_RUN_STATE';error='ORIGINAL_TOP_LEVEL_COMMAND_REQUIRED'}}
-if([string]::IsNullOrWhiteSpace($Phase)){Emit 2 @{decision='INVALID_RUN_STATE';error='CURRENT_PHASE_REQUIRED'}}
-
-if($Phase-in$TerminalSuccess){
-    if($null-ne$Next-and-not[string]::IsNullOrWhiteSpace([string]$Next)){Emit 2 @{decision='INVALID_RUN_STATE';error='SUCCESS_TERMINAL_FIELDS_INVALID'}}
-    if($null-ne$Reason-and-not[string]::IsNullOrWhiteSpace([string]$Reason)){Emit 2 @{decision='INVALID_RUN_STATE';error='SUCCESS_TERMINAL_FIELDS_INVALID'}}
-    Emit 0 @{decision='TERMINAL_ALLOWED';terminal_class='SUCCESS';top_level_command=$Command;current_phase=$Phase;next_required_phase=$null;terminal_reason=$null}
-}
-if($Phase-in$TerminalBlockers){
-    if($null-ne$Next-and-not[string]::IsNullOrWhiteSpace([string]$Next)){Emit 2 @{decision='INVALID_RUN_STATE';error='BLOCKER_NEXT_PHASE_FORBIDDEN'}}
-    if($null-eq$Reason-or[string]::IsNullOrWhiteSpace([string]$Reason)){Emit 2 @{decision='INVALID_RUN_STATE';error='TERMINAL_REASON_REQUIRED'}}
-    Emit 0 @{decision='TERMINAL_ALLOWED';terminal_class='BLOCKER';top_level_command=$Command;current_phase=$Phase;next_required_phase=$null;terminal_reason=([string]$Reason).Trim()}
-}
-if($Phase-in$NonTerminal){
-    if($null-eq$Next-or[string]::IsNullOrWhiteSpace([string]$Next)){Emit 2 @{decision='INVALID_RUN_STATE';error='NEXT_REQUIRED_PHASE_REQUIRED'}}
-    if($null-ne$Reason-and-not[string]::IsNullOrWhiteSpace([string]$Reason)){Emit 2 @{decision='INVALID_RUN_STATE';error='NON_TERMINAL_REASON_FORBIDDEN'}}
-    $Action=$State.next_action
-    if($null-eq$Action){Emit 2 @{decision='INVALID_RUN_STATE';error='ACTIONABLE_CONTINUATION_REQUIRED'}}
-    $Kind=[string]$Action.kind
-    $KnownCommands=@('/ai-init','/ai-audit','/ai-docs','/ai-discover','/ai-plan','/ai-execute','/ai-review','/ai-workflow','/ai-status','/ai-resume','/ai-metrics','/ai-release')
-    if($Kind-eq'execute'){
-        $ActionCommand=[string]$Action.command
-        if($KnownCommands-notcontains$ActionCommand){Emit 2 @{decision='INVALID_RUN_STATE';error='NON_EXECUTABLE_CONTINUATION'}}
-        $Arguments=@($Action.arguments)
-        if($null-eq$Action.arguments){$Arguments=@()}
-        if(@($Arguments|Where-Object{$_ -isnot [string]}).Count-gt0){Emit 2 @{decision='INVALID_RUN_STATE';error='INVALID_CONTINUATION_ARGUMENTS'}}
-        if([string]::IsNullOrWhiteSpace([string]$Action.expected_postcondition)){Emit 2 @{decision='INVALID_RUN_STATE';error='CONTINUATION_POSTCONDITION_REQUIRED'}}
-    }elseif($Kind-eq'human_decision'){
-        if([string]::IsNullOrWhiteSpace([string]$Action.decision_required)-or$null-eq$Action.available_choices){Emit 2 @{decision='INVALID_RUN_STATE';error='INVALID_HUMAN_DECISION'}}
-    }else{
-        Emit 2 @{decision='INVALID_RUN_STATE';error='NON_EXECUTABLE_CONTINUATION'}
-    }
-    Emit 3 @{decision='CONTINUE_REQUIRED';terminal_class=$null;top_level_command=$Command;current_phase=$Phase;next_required_phase=([string]$Next).Trim();terminal_reason=$null;next_action_kind=$Kind}
-}
-Emit 2 @{decision='INVALID_RUN_STATE';error='UNKNOWN_WORKFLOW_PHASE';current_phase=$Phase}
+& $python.Source $PyCore --run-state $RunStatePath --expected-command $ExpectedCommand
+exit $LASTEXITCODE

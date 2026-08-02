@@ -38,10 +38,15 @@ jobs:
             tests/test-architect-headless-contract.py \
             tests/test-nested-governance-roots.py \
             tests/test-legacy-orphan-recovery.py \
+            tests/test-semantic-transition-matrix.py \
             scripts/context-intelligence.py \
             scripts/legacy-architect-orphan-recovery.py \
             scripts/normalize-jsonc.py \
             scripts/workflow-continuation.py \
+            scripts/governance-semantic.py \
+            scripts/opencode-compatibility.py \
+            scripts/governance-metrics.py \
+            scripts/generate-governance-contract.py \
             scripts/architect-headless-contract.py \
             scripts/workspace-repository-root-contract.py \
             scripts/governance-authority.py \
@@ -50,7 +55,8 @@ jobs:
             scripts/governance-pre-commit.py \
             scripts/governance-simulation.py \
             scripts/governance-capabilities.py \
-            scripts/governance-install-transaction.py
+            scripts/governance-install-transaction.py \
+            scripts/generated/governance_contract_data.py
           bash -n \
             scripts/install.sh \
             scripts/install-base.sh \
@@ -76,6 +82,8 @@ jobs:
           python3 tests/test-jsonc-preservation.py
           python3 tests/test-jsonc-readable.py
           python3 tests/test-workflow-continuation.py
+          python3 -m unittest tests.test-semantic-transition-matrix
+          python3 scripts/generate-governance-contract.py --root . --check
           bash tests/test-workflow-continuation.sh
           bash tests/test-executor-transaction.sh
           bash tests/test-project-state-integrity.sh
@@ -95,6 +103,7 @@ jobs:
           python3 tests/test-governance-capabilities.py
           python3 tests/test-governance-simulation-fixture.py
           python3 tests/test-governance-simulation-run.py
+          python3 tests/test-all-commands-simulation.py
 
   windows-hardening:
     runs-on: windows-latest
@@ -108,11 +117,11 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
           $errors=$null
-          foreach($path in @('tests/test-runner-contract.ps1','tests/test-jsonc-preservation.ps1','tests/test-jsonc-readable.ps1','tests/test-workflow-continuation.ps1','tests/test-context-intelligence.ps1','tests/test-project-state-integrity.ps1','tests/test-ai-resume-transaction.ps1','tests/test-ai-resume-postcondition.ps1','tests/test-architect-headless-permissions.ps1','tests/test-prompt-transport.ps1','tests/test-nested-governance-roots.ps1','scripts/workflow-continuation.ps1','scripts/run-governed.ps1','scripts/executor-attempt.ps1','scripts/install.ps1','scripts/install-base.ps1','scripts/install-core.ps1','scripts/uninstall.ps1','scripts/uninstall-base.ps1','scripts/uninstall-core.ps1','scripts/verify-routing.ps1','scripts/normalize-jsonc.ps1')){
+          foreach($path in @('tests/test-runner-contract.ps1','tests/test-jsonc-preservation.ps1','tests/test-jsonc-readable.ps1','tests/test-workflow-continuation.ps1','tests/test-executor-transaction.ps1','tests/test-context-intelligence.ps1','tests/test-project-state-integrity.ps1','tests/test-ai-resume-transaction.ps1','tests/test-ai-resume-postcondition.ps1','tests/test-architect-headless-permissions.ps1','tests/test-prompt-transport.ps1','tests/test-nested-governance-roots.ps1','scripts/workflow-continuation.ps1','scripts/run-governed.ps1','scripts/executor-attempt.ps1','scripts/install.ps1','scripts/install-base.ps1','scripts/install-core.ps1','scripts/uninstall.ps1','scripts/uninstall-base.ps1','scripts/uninstall-core.ps1','scripts/verify-routing.ps1','scripts/normalize-jsonc.ps1')){
             [Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path),[ref]$null,[ref]$errors)|Out-Null
             if($errors.Count){throw "$path`n$($errors|Out-String)"}
           }
-          python -m py_compile tests/test-governance-authority-memory.py tests/test-governance-pre-commit.py tests/test-governance-capabilities.py tests/test-governance-simulation-fixture.py tests/test-governance-simulation-run.py tests/test-context-intelligence.py tests/test-architect-headless-contract.py tests/test-nested-governance-roots.py tests/test-legacy-orphan-recovery.py scripts/architect-headless-contract.py scripts/workspace-repository-root-contract.py scripts/legacy-architect-orphan-recovery.py scripts/governance-authority.py scripts/governance-memory.py scripts/governance-evidence.py scripts/governance-pre-commit.py scripts/governance-simulation.py scripts/governance-capabilities.py scripts/governance-install-transaction.py
+          python -m py_compile tests/test-governance-authority-memory.py tests/test-governance-pre-commit.py tests/test-governance-capabilities.py tests/test-governance-simulation-fixture.py tests/test-governance-simulation-run.py tests/test-context-intelligence.py tests/test-architect-headless-contract.py tests/test-nested-governance-roots.py tests/test-legacy-orphan-recovery.py tests/test-semantic-transition-matrix.py scripts/architect-headless-contract.py scripts/workspace-repository-root-contract.py scripts/legacy-architect-orphan-recovery.py scripts/workflow-continuation.py scripts/governance-semantic.py scripts/opencode-compatibility.py scripts/governance-metrics.py scripts/generate-governance-contract.py scripts/generated/governance_contract_data.py scripts/governance-authority.py scripts/governance-memory.py scripts/governance-evidence.py scripts/governance-pre-commit.py scripts/governance-simulation.py scripts/governance-capabilities.py scripts/governance-install-transaction.py
       - name: Run Windows hardening regressions
         shell: pwsh
         run: |
@@ -122,6 +131,7 @@ jobs:
           pwsh -NoProfile -File tests/test-jsonc-preservation.ps1
           pwsh -NoProfile -File tests/test-jsonc-readable.ps1
           pwsh -NoProfile -File tests/test-workflow-continuation.ps1
+          pwsh -NoProfile -File tests/test-executor-transaction.ps1
           pwsh -NoProfile -File tests/test-context-intelligence.ps1
           pwsh -NoProfile -File tests/test-project-state-integrity.ps1
           pwsh -NoProfile -File tests/test-ai-resume-transaction.ps1
@@ -137,3 +147,7 @@ jobs:
           python tests/test-governance-capabilities.py
           python tests/test-governance-simulation-fixture.py
           python tests/test-governance-simulation-run.py
+          python tests/test-workflow-continuation.py
+          python -m unittest tests.test-semantic-transition-matrix
+          python scripts/generate-governance-contract.py --root . --check
+          python tests/test-all-commands-simulation.py

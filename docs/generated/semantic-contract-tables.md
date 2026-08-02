@@ -1,0 +1,126 @@
+<!-- GENERATED_FROM=governance-spec/governance-contract.json -->
+<!-- SOURCE_SPEC_SHA256=76e941a91b0df9b8a3c4ed5fcc2da0d5782e513b30ef447b9ca82f51549ea5bc -->
+<!-- GENERATOR_VERSION=1.0.0 -->
+<!-- DO_NOT_EDIT_MANUALLY -->
+
+# Semantic governance contract tables (3.8.0)
+
+- Schema: `GOVERNANCE_CONTRACT_V1`
+- Machine: `SEMANTIC_WORKFLOW_STATE_MACHINE_V1`
+- Spec SHA-256: `76e941a91b0df9b8a3c4ed5fcc2da0d5782e513b30ef447b9ca82f51549ea5bc`
+- Transitions: **54**
+- Phases: **67**
+- Commands: **12**
+
+## Commands
+
+| Command |
+|---------|
+| `ai-init` |
+| `ai-audit` |
+| `ai-docs` |
+| `ai-discover` |
+| `ai-plan` |
+| `ai-execute` |
+| `ai-review` |
+| `ai-workflow` |
+| `ai-status` |
+| `ai-resume` |
+| `ai-metrics` |
+| `ai-release` |
+
+## Managed tools
+
+| Tool |
+|------|
+| `architect-attempt.ps1` |
+| `architect-attempt.sh` |
+| `architect-headless-contract.py` |
+| `legacy-architect-orphan-recovery.py` |
+| `executor-attempt.ps1` |
+| `executor-attempt.sh` |
+| `context-intelligence.ps1` |
+| `context-intelligence.sh` |
+| `context-intelligence.py` |
+| `workflow-continuation.ps1` |
+| `workflow-continuation.py` |
+| `governance-authority.py` |
+| `governance-memory.py` |
+| `governance-evidence.py` |
+| `governance-simulation.py` |
+| `governance-pre-commit.py` |
+| `governance-semantic.py` |
+| `opencode-compatibility.py` |
+| `governance-metrics.py` |
+
+## Transitions
+
+| ID | From | To | Command | Attempt consumed |
+|----|------|----|---------|------------------|
+| `T001_BASELINE_VALIDATED_TO_IDEA_INTAKE` | `BASELINE_VALIDATED` | `IDEA_INTAKE` | `/ai-init` | `False` |
+| `T002_IDEA_INTAKE_TO_PRODUCT_CLASSIFICATION` | `IDEA_INTAKE` | `PRODUCT_CLASSIFICATION` | `/ai-discover` | `False` |
+| `T003_PRODUCT_CLASSIFICATION_TO_ADAPTIVE_PRODUCT_DISCOVERY` | `PRODUCT_CLASSIFICATION` | `ADAPTIVE_PRODUCT_DISCOVERY` | `/ai-discover` | `False` |
+| `T004_ADAPTIVE_PRODUCT_DISCOVERY_TO_GOVERNED_DOMAIN_RESEARCH` | `ADAPTIVE_PRODUCT_DISCOVERY` | `GOVERNED_DOMAIN_RESEARCH` | `/ai-discover` | `False` |
+| `T005_GOVERNED_DOMAIN_RESEARCH_TO_CONSTRUCTIVE_CHALLENGE` | `GOVERNED_DOMAIN_RESEARCH` | `CONSTRUCTIVE_CHALLENGE` | `/ai-discover` | `False` |
+| `T006_CONSTRUCTIVE_CHALLENGE_TO_PRODUCT_DEFINITION` | `CONSTRUCTIVE_CHALLENGE` | `PRODUCT_DEFINITION` | `/ai-discover` | `False` |
+| `T007_PRODUCT_DEFINITION_TO_DISCOVERY_DUAL_REVIEW` | `PRODUCT_DEFINITION` | `DISCOVERY_DUAL_REVIEW` | `/ai-review` | `False` |
+| `T008_DISCOVERY_DUAL_REVIEW_TO_DISCOVERY_ADJUDICATION` | `DISCOVERY_DUAL_REVIEW` | `DISCOVERY_ADJUDICATION` | `/ai-review` | `False` |
+| `T009_DISCOVERY_ADJUDICATION_TO_PRODUCT_SCOPE_APPROVAL` | `DISCOVERY_ADJUDICATION` | `PRODUCT_SCOPE_APPROVAL` | `/ai-workflow` | `False` |
+| `T010_PRODUCT_SCOPE_APPROVAL_TO_PRODUCT_SCOPE_APPROVED` | `PRODUCT_SCOPE_APPROVAL` | `PRODUCT_SCOPE_APPROVED` | `/ai-workflow` | `False` |
+| `T011_PRODUCT_SCOPE_APPROVED_TO_CONTEXT_ROUTING` | `PRODUCT_SCOPE_APPROVED` | `CONTEXT_ROUTING` | `/ai-plan` | `False` |
+| `T012_CONTEXT_ROUTING_TO_CONTEXT_SUFFICIENT` | `CONTEXT_ROUTING` | `CONTEXT_SUFFICIENT` | `/ai-plan` | `False` |
+| `T013_CONTEXT_SUFFICIENT_TO_DELIVERY_ARCHITECTURE` | `CONTEXT_SUFFICIENT` | `DELIVERY_ARCHITECTURE` | `/ai-plan` | `False` |
+| `T014_DELIVERY_ARCHITECTURE_TO_VERTICAL_MILESTONE_PLANNING` | `DELIVERY_ARCHITECTURE` | `VERTICAL_MILESTONE_PLANNING` | `/ai-plan` | `False` |
+| `T015_VERTICAL_MILESTONE_PLANNING_TO_EVIDENCE_PLANNING` | `VERTICAL_MILESTONE_PLANNING` | `EVIDENCE_PLANNING` | `/ai-plan` | `False` |
+| `T016_EVIDENCE_PLANNING_TO_OPERATIONAL_PLANNING` | `EVIDENCE_PLANNING` | `OPERATIONAL_PLANNING` | `/ai-plan` | `False` |
+| `T017_OPERATIONAL_PLANNING_TO_READY_FOR_EXECUTION` | `OPERATIONAL_PLANNING` | `READY_FOR_EXECUTION` | `/ai-plan` | `False` |
+| `T018_READY_FOR_EXECUTION_TO_PRE_CHANGE_SAFEPOINT_WHEN_REQUIRED` | `READY_FOR_EXECUTION` | `PRE_CHANGE_SAFEPOINT_WHEN_REQUIRED` | `/ai-execute` | `False` |
+| `T019_PRE_CHANGE_SAFEPOINT_WHEN_REQUIRED_TO_IMPLEMENTING` | `PRE_CHANGE_SAFEPOINT_WHEN_REQUIRED` | `IMPLEMENTING` | `/ai-execute` | `True` |
+| `T020_IMPLEMENTING_TO_DOCUMENTATION_SYNC` | `IMPLEMENTING` | `DOCUMENTATION_SYNC` | `/ai-docs` | `True` |
+| `T021_DOCUMENTATION_SYNC_TO_EVIDENCE_VALIDATION` | `DOCUMENTATION_SYNC` | `EVIDENCE_VALIDATION` | `/ai-execute` | `False` |
+| `T022_EVIDENCE_VALIDATION_TO_OPERATIONAL_VALIDATION` | `EVIDENCE_VALIDATION` | `OPERATIONAL_VALIDATION` | `/ai-execute` | `False` |
+| `T023_OPERATIONAL_VALIDATION_TO_EVIDENCE_AND_OPERATIONAL_VALIDATION` | `OPERATIONAL_VALIDATION` | `EVIDENCE_AND_OPERATIONAL_VALIDATION` | `/ai-execute` | `False` |
+| `T024_EVIDENCE_AND_OPERATIONAL_VALIDATION_TO_TASK_VALIDATED` | `EVIDENCE_AND_OPERATIONAL_VALIDATION` | `TASK_VALIDATED` | `/ai-execute` | `False` |
+| `T025_TASK_VALIDATED_TO_DUAL_REVIEW` | `TASK_VALIDATED` | `DUAL_REVIEW` | `/ai-review` | `False` |
+| `T026_DUAL_REVIEW_TO_DUAL_REVIEW_COMPLETE` | `DUAL_REVIEW` | `DUAL_REVIEW_COMPLETE` | `/ai-review` | `False` |
+| `T027_DUAL_REVIEW_COMPLETE_TO_FINAL_ADJUDICATION` | `DUAL_REVIEW_COMPLETE` | `FINAL_ADJUDICATION` | `/ai-review` | `False` |
+| `T028_FINAL_ADJUDICATION_TO_FINAL_ADJUDICATION_PASS` | `FINAL_ADJUDICATION` | `FINAL_ADJUDICATION_PASS` | `/ai-review` | `False` |
+| `T029_FINAL_ADJUDICATION_PASS_TO_PRODUCT_COMPLETENESS_RECONCILIATION` | `FINAL_ADJUDICATION_PASS` | `PRODUCT_COMPLETENESS_RECONCILIATION` | `/ai-workflow` | `False` |
+| `T030_PRODUCT_COMPLETENESS_RECONCILIATION_TO_MILESTONE_VALIDATED` | `PRODUCT_COMPLETENESS_RECONCILIATION` | `MILESTONE_VALIDATED` | `/ai-workflow` | `False` |
+| `T031_MILESTONE_VALIDATED_TO_RELEASE_READINESS` | `MILESTONE_VALIDATED` | `RELEASE_READINESS` | `/ai-release` | `False` |
+| `T032_RELEASE_READINESS_TO_RELEASE_READY` | `RELEASE_READINESS` | `RELEASE_READY` | `/ai-release` | `False` |
+| `T033_RELEASE_READY_TO_VALIDATED_LEARNING` | `RELEASE_READY` | `VALIDATED_LEARNING` | `/ai-metrics` | `False` |
+| `T034_VALIDATED_LEARNING_TO_LOCAL_COMMITTED` | `VALIDATED_LEARNING` | `LOCAL_COMMITTED` | `/ai-workflow` | `False` |
+| `T035_IMPLEMENTATION_TO_DOCUMENTATION_SYNC` | `IMPLEMENTATION` | `DOCUMENTATION_SYNC` | `/ai-docs` | `True` |
+| `T036_IMPLEMENTING_TO_IMPLEMENTATION` | `IMPLEMENTING` | `IMPLEMENTATION` | `/ai-execute` | `True` |
+| `T037_TASK_DUAL_REVIEW_TO_FINAL_ADJUDICATION` | `TASK_DUAL_REVIEW` | `FINAL_ADJUDICATION` | `/ai-review` | `False` |
+| `T038_TASK_FINAL_ADJUDICATION_TO_PRODUCT_COMPLETENESS_RECONCILIATION` | `TASK_FINAL_ADJUDICATION` | `PRODUCT_COMPLETENESS_RECONCILIATION` | `/ai-workflow` | `False` |
+| `T039_PASS_TO_PRODUCT_COMPLETENESS_RECONCILIATION` | `PASS` | `PRODUCT_COMPLETENESS_RECONCILIATION` | `/ai-workflow` | `False` |
+| `T040_AUDIT_PASS_TO_IDEA_INTAKE` | `AUDIT_PASS` | `IDEA_INTAKE` | `/ai-init` | `False` |
+| `T041_BASELINE_PASS_TO_IDEA_INTAKE` | `BASELINE_PASS` | `IDEA_INTAKE` | `/ai-init` | `False` |
+| `T042_BASELINE_DEFECT_TO_BASELINE_VALIDATED` | `BASELINE_DEFECT` | `BASELINE_VALIDATED` | `/ai-audit` | `False` |
+| `T043_DISCOVERY_DEFECT_TO_ADAPTIVE_PRODUCT_DISCOVERY` | `DISCOVERY_DEFECT` | `ADAPTIVE_PRODUCT_DISCOVERY` | `/ai-discover` | `False` |
+| `T044_DISCOVERY_PASS_TO_PRODUCT_SCOPE_APPROVAL` | `DISCOVERY_PASS` | `PRODUCT_SCOPE_APPROVAL` | `/ai-workflow` | `False` |
+| `T045_IMPLEMENTATION_DEFECT_TO_IMPLEMENTING` | `IMPLEMENTATION_DEFECT` | `IMPLEMENTING` | `/ai-execute` | `False` |
+| `T046_PLAN_DEFECT_TO_CONTEXT_ROUTING` | `PLAN_DEFECT` | `CONTEXT_ROUTING` | `/ai-plan` | `False` |
+| `T047_PRODUCT_DEFECT_TO_IMPLEMENTING` | `PRODUCT_DEFECT` | `IMPLEMENTING` | `/ai-execute` | `False` |
+| `T048_PRODUCT_COMPLETE_TO_RELEASE_READINESS` | `PRODUCT_COMPLETE` | `RELEASE_READINESS` | `/ai-release` | `False` |
+| `T049_PRODUCT_INCOMPLETE_TO_IMPLEMENTING` | `PRODUCT_INCOMPLETE` | `IMPLEMENTING` | `/ai-execute` | `False` |
+| `T050_NOT_READY_FOR_PRODUCTION_TO_VALIDATED_LEARNING` | `NOT_READY_FOR_PRODUCTION` | `VALIDATED_LEARNING` | `/ai-metrics` | `False` |
+| `T051_READY_FOR_PRODUCTION_TO_LOCAL_COMMITTED` | `READY_FOR_PRODUCTION` | `LOCAL_COMMITTED` | `/ai-workflow` | `False` |
+| `T052_ADAPTIVE_DISCOVERY_TO_PRODUCT_DEFINITION` | `ADAPTIVE_DISCOVERY` | `PRODUCT_DEFINITION` | `/ai-discover` | `False` |
+| `T053_TASK_REVIEW_TO_DUAL_REVIEW` | `TASK_REVIEW` | `DUAL_REVIEW` | `/ai-review` | `False` |
+| `T054_PRODUCT_SCOPE_APPROVAL_TO_HUMAN_INPUT_REQUIRED` | `PRODUCT_SCOPE_APPROVAL` | `HUMAN_INPUT_REQUIRED` | `` | `False` |
+
+## Assurance levels (3.8.0 claims)
+
+- `EXTERNALLY_ATTESTED`: claimed=False — Independent external attestor outside this repository.
+- `LOCAL_INTEGRITY`: claimed=True — Local hashes, fingerprints, transaction journals and closed evidence bundles.
+- `SEMANTICALLY_ENFORCED`: claimed=True — Code-enforced state transitions and contract generation consistency for covered machines.
+- `SIGNED_ATTESTED`: claimed=False — Cryptographic signatures from external trust anchors.
+
+## Supported OpenCode versions
+
+- `*`: `SUPPORTED_UNTESTED` — Unknown newer versions require explicit matrix update for SUPPORTED_TESTED.
+- `0.0.0`: `INCOMPATIBLE` — Placeholder incompatible sentinel for installer fail-closed tests.
+- `1.0.0`: `SUPPORTED_UNTESTED` — Baseline assumed protocol; expand with real binary CI when available.

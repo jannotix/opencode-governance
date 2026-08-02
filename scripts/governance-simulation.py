@@ -94,8 +94,16 @@ def validate_scenario(scenario: dict[str, Any]) -> dict[str, Any]:
         fail("INVALID_COMMAND_COVERAGE")
     if len(set(coverage)) != len(coverage):
         fail("DUPLICATE_COMMAND_COVERAGE")
-    if len(coverage) == len(ALL_COMMANDS) and set(coverage) != ALL_COMMANDS:
+    claim = scenario.get("coverage_claim")
+    if claim in {"COMPLETE", "ALL_COMMANDS"} and set(coverage) != ALL_COMMANDS:
         fail("INCOMPLETE_COMMAND_COVERAGE")
+    if scenario.get("claims_complete_coverage") is True and set(coverage) != ALL_COMMANDS:
+        fail("INCOMPLETE_COMMAND_COVERAGE")
+    # Honest naming: fixtures titled as all-commands must cover all twelve.
+    name = str(scenario.get("name") or "").lower()
+    if "all-command" in name or "all_command" in name:
+        if set(coverage) != ALL_COMMANDS:
+            fail("ALL_COMMANDS_FIXTURE_INCOMPLETE")
     return {
         "status": "SIMULATION_SCENARIO_VALID",
         "name": scenario["name"],

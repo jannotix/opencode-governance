@@ -1,0 +1,16 @@
+{
+  "name": "ai-plan-protocol-contract",
+  "request": "Exercise the ai-plan command contract locally without external actions.",
+  "covers_commands": [
+    "ai-plan"
+  ],
+  "steps": [
+    {
+      "assistant_text": "LOCAL_COMMITTED",
+      "command": "ai-plan"
+    }
+  ],
+  "terminal": "LOCAL_COMMITTED",
+  "forbids_external_action": true,
+  "schema": "ALL_COMMANDS_SIMULATION_CONTRACT_V1"
+}

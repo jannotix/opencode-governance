@@ -18,61 +18,6 @@ RECEIPT_SCHEMA = "opencode-governance.approval-receipt/v1"
 # Historical prose name accepted on validate only; new receipts always emit RECEIPT_SCHEMA.
 RECEIPT_SCHEMA_ALIASES = {RECEIPT_SCHEMA, "GOVERNANCE_APPROVAL_RECEIPT_V1"}
 PROJECTIONS = {"workspace", "staged", "commit", "base-diff"}
-# Keep in lockstep with scripts/workflow-continuation.py NON_TERMINAL_PHASES.
-NON_TERMINAL_PHASES = {
-    "IDEA_INTAKE",
-    "PRODUCT_CLASSIFICATION",
-    "ADAPTIVE_PRODUCT_DISCOVERY",
-    "ADAPTIVE_DISCOVERY",
-    "GOVERNED_DOMAIN_RESEARCH",
-    "CONSTRUCTIVE_CHALLENGE",
-    "PRODUCT_DEFINITION",
-    "DISCOVERY_DUAL_REVIEW",
-    "DISCOVERY_ADJUDICATION",
-    "DISCOVERY_PASS",
-    "DISCOVERY_DEFECT",
-    "PRODUCT_SCOPE_APPROVAL",
-    "PRODUCT_SCOPE_APPROVED",
-    "CONTEXT_ROUTING",
-    "CONTEXT_SUFFICIENT",
-    "DELIVERY_ARCHITECTURE",
-    "VERTICAL_MILESTONE_PLANNING",
-    "EVIDENCE_PLANNING",
-    "OPERATIONAL_PLANNING",
-    "READY_FOR_EXECUTION",
-    "PRE_CHANGE_SAFEPOINT_WHEN_REQUIRED",
-    "IMPLEMENTING",
-    "IMPLEMENTATION",
-    "DOCUMENTATION_SYNC",
-    "EVIDENCE_VALIDATION",
-    "OPERATIONAL_VALIDATION",
-    "EVIDENCE_AND_OPERATIONAL_VALIDATION",
-    "TASK_VALIDATED",
-    "DUAL_REVIEW",
-    "DUAL_REVIEW_COMPLETE",
-    "TASK_DUAL_REVIEW",
-    "FINAL_ADJUDICATION",
-    "FINAL_ADJUDICATION_PASS",
-    "TASK_FINAL_ADJUDICATION",
-    "PASS",
-    "IMPLEMENTATION_DEFECT",
-    "PLAN_DEFECT",
-    "PRODUCT_COMPLETENESS_RECONCILIATION",
-    "PRODUCT_COMPLETE",
-    "PRODUCT_DEFECT",
-    "PRODUCT_INCOMPLETE",
-    "MILESTONE_VALIDATED",
-    "RELEASE_READINESS",
-    "RELEASE_READY",
-    "READY_FOR_PRODUCTION",
-    "NOT_READY_FOR_PRODUCTION",
-    "VALIDATED_LEARNING",
-    "AUDIT_PASS",
-    "BASELINE_PASS",
-    "BASELINE_DEFECT",
-    "BASELINE_VALIDATED",
-    "TASK_REVIEW",
-}
 GATES = {"post-apply", "pre-commit", "pre-push", "pre-pr", "release"}
 APPROVING_VERDICTS = {"PASS", "READY_FOR_PRODUCTION", "LOCAL_COMMITTED"}
 HASH_FIELDS = (
@@ -94,32 +39,22 @@ DEFAULT_ARTIFACT_PATHS = {
     "architecture_review_hash": ".ai/REVIEW_ARCHITECTURE.md",
     "final_adjudication_hash": ".ai/FINAL_ADJUDICATION.md",
 }
-KNOWN_COMMANDS = {
-    "/ai-init",
-    "/ai-audit",
-    "/ai-docs",
-    "/ai-discover",
-    "/ai-plan",
-    "/ai-execute",
-    "/ai-review",
-    "/ai-workflow",
-    "/ai-status",
-    "/ai-resume",
-    "/ai-metrics",
-    "/ai-release",
-}
-# Terminal reasons that may appear when a run is finished or blocked.
-# Phase-aware validation below prevents using these on non-terminal phases.
-TERMINAL_REASONS = {
-    "LOCAL_COMMITTED",
-    "READY_FOR_PRODUCTION",
-    "NOT_READY_FOR_PRODUCTION",
-    "BLOCKED",
-    "PLAN_ONLY_COMPLETE",
-    "REVIEW_COMPLETE",
-    "AUDIT_COMPLETE",
-    "DOCUMENTATION_COMPLETE",
-}
+
+# Single semantic authority: import generated constants via governance-semantic (no handwritten lists).
+import importlib.util as _ilu
+
+_SEM_PATH = pathlib.Path(__file__).resolve().parent / "governance-semantic.py"
+_SEM_SPEC = _ilu.spec_from_file_location("governance_semantic_auth", _SEM_PATH)
+assert _SEM_SPEC and _SEM_SPEC.loader
+_SEM = _ilu.module_from_spec(_SEM_SPEC)
+_SEM_SPEC.loader.exec_module(_SEM)
+NON_TERMINAL_PHASES = _SEM.NON_TERMINAL_PHASES
+KNOWN_COMMANDS = _SEM.KNOWN_COMMANDS
+TERMINAL_REASONS = _SEM.TERMINAL_REASONS
+TERMINAL_SUCCESS = _SEM.TERMINAL_SUCCESS
+TERMINAL_BLOCKERS = _SEM.TERMINAL_BLOCKERS
+validate_continuation_authority = _SEM.validate_continuation_authority
+SemanticError = _SEM.SemanticError
 
 
 class ContractError(Exception):
@@ -478,7 +413,7 @@ def issue_receipt(
         raise ContractError("TASK_ID_REQUIRED")
     receipt = {
         "schema": RECEIPT_SCHEMA,
-        "governance_version": "3.7.7",
+        "governance_version": "3.8.0",
         "task_id": task_id.strip(),
         "candidate": candidate,
         "bindings": hash_bindings,
@@ -503,7 +438,7 @@ def validate_receipt(
         raise ContractError("INVALID_GATE", gate)
     if receipt.get("schema") not in RECEIPT_SCHEMA_ALIASES:
         raise ContractError("INVALID_RECEIPT_SCHEMA")
-    if receipt.get("governance_version") != "3.7.7":
+    if receipt.get("governance_version") != "3.8.0":
         raise ContractError("INVALID_RECEIPT_VERSION", str(receipt.get("governance_version")))
     receipt_hash = receipt.get("receipt_hash")
     if not valid_hash(receipt_hash):
@@ -554,63 +489,14 @@ def validate_receipt(
 
 
 def validate_continuation(state: dict[str, Any]) -> dict[str, Any]:
-    """Validate RUN_STATE continuation in lockstep with WORKFLOW_CONTINUATION_GATE_V1."""
+    """Validate RUN_STATE continuation via SEMANTIC_WORKFLOW_STATE_MACHINE_V1 (single authority)."""
     for field in ("top_level_command", "current_phase", "next_required_phase", "terminal_reason"):
         if field not in state:
             raise ContractError("RUN_STATE_FIELD_MISSING", field)
-    phase = state.get("current_phase")
-    if not isinstance(phase, str) or not phase.strip():
-        raise ContractError("CURRENT_PHASE_REQUIRED")
-    phase = phase.strip()
-    next_phase = state.get("next_required_phase")
-    terminal_reason = state.get("terminal_reason")
-
-    if phase == "LOCAL_COMMITTED":
-        if next_phase not in (None, "") or terminal_reason not in (None, ""):
-            raise ContractError("SUCCESS_TERMINAL_FIELDS_INVALID")
-        return {
-            "status": "TERMINAL_CONTINUATION_VALID",
-            "terminal_reason": None,
-            "current_phase": phase,
-        }
-
-    if terminal_reason not in (None, ""):
-        if phase in NON_TERMINAL_PHASES:
-            raise ContractError("NON_TERMINAL_REASON_FORBIDDEN", phase)
-        if terminal_reason not in TERMINAL_REASONS:
-            raise ContractError("INVALID_TERMINAL_REASON", str(terminal_reason))
-        return {
-            "status": "TERMINAL_CONTINUATION_VALID",
-            "terminal_reason": terminal_reason,
-            "current_phase": phase,
-        }
-
-    if not isinstance(next_phase, str) or not next_phase.strip():
-        raise ContractError("NEXT_REQUIRED_PHASE_REQUIRED")
-    action = state.get("next_action")
-    if not isinstance(action, dict):
-        raise ContractError("ACTIONABLE_CONTINUATION_REQUIRED")
-    kind = action.get("kind")
-    if kind == "execute":
-        command = action.get("command")
-        if command not in KNOWN_COMMANDS:
-            raise ContractError("NON_EXECUTABLE_CONTINUATION", str(command))
-        arguments = action.get("arguments", [])
-        if not isinstance(arguments, list) or any(not isinstance(item, str) for item in arguments):
-            raise ContractError("INVALID_CONTINUATION_ARGUMENTS")
-        if not action.get("expected_postcondition"):
-            raise ContractError("CONTINUATION_POSTCONDITION_REQUIRED")
-    elif kind == "human_decision":
-        if not action.get("decision_required") or not isinstance(action.get("available_choices"), list):
-            raise ContractError("INVALID_HUMAN_DECISION")
-    else:
-        raise ContractError("NON_EXECUTABLE_CONTINUATION", str(kind))
-    return {
-        "status": "ACTIONABLE_CONTINUATION_VALID",
-        "kind": kind,
-        "current_phase": phase,
-        "next_required_phase": next_phase.strip(),
-    }
+    try:
+        return validate_continuation_authority(state)
+    except SemanticError as exc:
+        raise ContractError(exc.code, exc.detail) from exc
 
 
 LENS_MAP = {
