@@ -34,6 +34,13 @@ if($Version-in$ContextVersions){
         if([string]$Manifest.workflow_continuation_version-ne$Version){throw "workflow_continuation_version must be $Version."}
         $ExpectedTools+=@((Join-Path $ToolsDir 'workflow-continuation.ps1'),(Join-Path $ToolsDir 'workflow-continuation.py'))
     }
+    if($Version-eq'3.8.0'){
+        $ExpectedTools+=@(
+            (Join-Path $ToolsDir 'governance-semantic.py'),
+            (Join-Path $ToolsDir 'opencode-compatibility.py'),
+            (Join-Path $ToolsDir 'governance-metrics.py')
+        )
+    }
     if($Version-in@('3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0')){
         $ExpectedTools+=@(
             (Join-Path $ToolsDir 'governance-authority.py'),

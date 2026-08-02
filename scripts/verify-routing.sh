@@ -37,6 +37,8 @@ if version in context_versions:
     if version in workflow_versions:
         if data.get('workflow_continuation_version')!=version: raise SystemExit(f'workflow_continuation_version must be {version}.')
         expected += [workflow_ps,workflow_py]
+    if version == '3.8.0':
+        expected += [tools/name for name in ['governance-semantic.py','opencode-compatibility.py','governance-metrics.py']]
     if version in capability_versions:
         expected += [tools/name for name in ['governance-authority.py','governance-memory.py','governance-evidence.py','governance-simulation.py','governance-pre-commit.py']]
 else:
