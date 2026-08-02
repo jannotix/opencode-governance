@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""4.0.1 ROLE_EFFECT_ENFORCEMENT_V1_1 — installed plugin, shell/path/ingest negatives."""
+"""4.0.2 ROLE_EFFECT_ENFORCEMENT_V1_2 — installed plugin, shell/path/ingest negatives."""
 from __future__ import annotations
 
 import hashlib
@@ -33,7 +33,9 @@ class EffectPluginUnitTests(unittest.TestCase):
 
     def _run_enforce(self, role: str, tool: str, args: dict, env_extra: dict | None = None, active: bool = True) -> subprocess.CompletedProcess[str]:
         script = f"""
-import {{ enforce, loadPolicy }} from {json.dumps(self.plugin_url)};
+import Plugin from {json.dumps(self.plugin_url)};
+const enforce = Plugin._enforce;
+const loadPolicy = Plugin._loadPolicy;
 const policy = loadPolicy();
 const input = {{ tool: {json.dumps(tool)} }};
 const output = {{ args: {json.dumps(args)} }};
@@ -65,8 +67,8 @@ try {{
 
     def test_policy_schema_v1_1(self) -> None:
         body = json.loads(POLICY.read_text(encoding="utf-8"))
-        self.assertEqual(body["schema"], "ROLE_EFFECT_ENFORCEMENT_V1_1")
-        self.assertEqual(body["governance_version"], "4.0.1")
+        self.assertEqual(body["schema"], "ROLE_EFFECT_ENFORCEMENT_V1_2")
+        self.assertEqual(body["governance_version"], "4.0.2")
 
     def test_export_contract(self) -> None:
         r = subprocess.run(
@@ -74,8 +76,8 @@ try {{
                 self.node,
                 "--input-type=module",
                 "-e",
-                f"import {{ HOOK, SCHEMA, PLUGIN_ID, PLUGIN_EXPORT_CONTRACT }} from {json.dumps(self.plugin_url)}; "
-                f"console.log(JSON.stringify({{HOOK, SCHEMA, PLUGIN_ID, PLUGIN_EXPORT_CONTRACT}}));",
+                f"import Plugin from {json.dumps(self.plugin_url)}; "
+                f"console.log(JSON.stringify({{HOOK:Plugin.HOOK, SCHEMA:Plugin.SCHEMA, PLUGIN_ID:Plugin.PLUGIN_ID, PLUGIN_EXPORT_CONTRACT:Plugin.PLUGIN_EXPORT_CONTRACT}}));",
             ],
             capture_output=True,
             text=True,
@@ -83,7 +85,7 @@ try {{
         )
         data = json.loads(r.stdout.strip())
         self.assertEqual(data["HOOK"], "tool.execute.before")
-        self.assertEqual(data["SCHEMA"], "ROLE_EFFECT_ENFORCEMENT_V1_1")
+        self.assertEqual(data["SCHEMA"], "ROLE_EFFECT_ENFORCEMENT_V1_2")
         self.assertIn("named_async", data["PLUGIN_EXPORT_CONTRACT"])
 
     def test_inactive_passthrough(self) -> None:
@@ -346,14 +348,12 @@ class EffectPluginInstallTests(unittest.TestCase):
 class ReportIngestV2Tests(unittest.TestCase):
     def _envelope(self, role: str, task_id: str, body: str, **extra) -> dict:
         env = {
-            "schema": "opencode-governance.role-report/v1",
+            "schema": "opencode-governance.role-report/v3",
             "role": role,
             "task_id": task_id,
             "packet_sha256": "ab" * 32,
             "candidate_identity": "cand1",
             "evidence_manifest_sha256": "cd" * 32,
-            "route_id": "r1",
-            "model_family": "family-a",
             "report_body_sha256": sha256_text(body),
             "permission_policy_sha256": "ef" * 32,
             "verdict": "PASS",
@@ -361,6 +361,14 @@ class ReportIngestV2Tests(unittest.TestCase):
         }
         env.update(extra)
         return env
+
+    def _write_route_receipt(self, root: pathlib.Path, role: str, family: str) -> pathlib.Path:
+        path = root / f"route-{role}.json"
+        path.write_text(
+            json.dumps({"route_id": f"route-{role}", "model_family": family, "role": role}, sort_keys=True),
+            encoding="utf-8",
+        )
+        return path
 
     def test_ingest_and_chain(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -371,13 +379,26 @@ class ReportIngestV2Tests(unittest.TestCase):
                 "final-reviewer": ("# Final\nVERDICT: PASS\n", "family-c"),
             }
             for role, (body, family) in bodies.items():
-                env = self._envelope(role, "T1", body, model_family=family)
+                env = self._envelope(role, "T1", body)
                 ep = root / f"{role}.json"
                 bp = root / f"{role}.md"
                 ep.write_text(json.dumps(env), encoding="utf-8")
                 bp.write_text(body, encoding="utf-8")
+                rr = self._write_route_receipt(root, role, family)
                 r = subprocess.run(
-                    [sys.executable, str(INGEST), "ingest", "--project-dir", str(root), "--envelope", str(ep), "--body", str(bp)],
+                    [
+                        sys.executable,
+                        str(INGEST),
+                        "ingest",
+                        "--project-dir",
+                        str(root),
+                        "--envelope",
+                        str(ep),
+                        "--body",
+                        str(bp),
+                        "--route-receipt",
+                        str(rr),
+                    ],
                     capture_output=True,
                     text=True,
                 )
@@ -390,7 +411,7 @@ class ReportIngestV2Tests(unittest.TestCase):
             self.assertEqual(att.returncode, 0, att.stdout + att.stderr)
             payload = json.loads(att.stdout)
             self.assertEqual(payload["status"], "REVIEW_CHAIN_ATTESTED")
-            self.assertEqual(payload["attestation"]["schema"], "REVIEW_CHAIN_ATTESTATION_V2")
+            self.assertEqual(payload["attestation"]["schema"], "REVIEW_CHAIN_ATTESTATION_V3")
 
     def test_task_id_traversal_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -403,7 +424,7 @@ class ReportIngestV2Tests(unittest.TestCase):
                 ep.write_text(json.dumps(env), encoding="utf-8")
                 bp.write_text(body, encoding="utf-8")
                 r = subprocess.run(
-                    [sys.executable, str(INGEST), "ingest", "--project-dir", str(root), "--envelope", str(ep), "--body", str(bp)],
+                    [sys.executable, str(INGEST), "ingest", "--project-dir", str(root), "--envelope", str(ep), "--body", str(bp), "--route-receipt", str(self._write_route_receipt(root, "implementation-reviewer", "family-a"))],
                     capture_output=True,
                     text=True,
                 )
@@ -421,7 +442,7 @@ class ReportIngestV2Tests(unittest.TestCase):
             bp.write_text(body, encoding="utf-8")
             self.assertEqual(
                 subprocess.run(
-                    [sys.executable, str(INGEST), "ingest", "--project-dir", str(root), "--envelope", str(ep), "--body", str(bp)],
+                    [sys.executable, str(INGEST), "ingest", "--project-dir", str(root), "--envelope", str(ep), "--body", str(bp), "--route-receipt", str(self._write_route_receipt(root, "implementation-reviewer", "family-a"))],
                     capture_output=True,
                     text=True,
                 ).returncode,
@@ -432,7 +453,7 @@ class ReportIngestV2Tests(unittest.TestCase):
             ep.write_text(json.dumps(env2), encoding="utf-8")
             bp.write_text(body2, encoding="utf-8")
             r = subprocess.run(
-                [sys.executable, str(INGEST), "ingest", "--project-dir", str(root), "--envelope", str(ep), "--body", str(bp)],
+                [sys.executable, str(INGEST), "ingest", "--project-dir", str(root), "--envelope", str(ep), "--body", str(bp), "--route-receipt", str(self._write_route_receipt(root, "implementation-reviewer", "family-a"))],
                 capture_output=True,
                 text=True,
             )
@@ -453,7 +474,7 @@ class ReportIngestV2Tests(unittest.TestCase):
                 ep.write_text(json.dumps(env), encoding="utf-8")
                 bp.write_text(body, encoding="utf-8")
                 subprocess.run(
-                    [sys.executable, str(INGEST), "ingest", "--project-dir", str(root), "--envelope", str(ep), "--body", str(bp)],
+                    [sys.executable, str(INGEST), "ingest", "--project-dir", str(root), "--envelope", str(ep), "--body", str(bp), "--route-receipt", str(self._write_route_receipt(root, role, family))],
                     check=True,
                     capture_output=True,
                     text=True,
@@ -480,7 +501,7 @@ class ReportIngestV2Tests(unittest.TestCase):
                 ep.write_text(json.dumps(env), encoding="utf-8")
                 bp.write_text(body, encoding="utf-8")
                 subprocess.run(
-                    [sys.executable, str(INGEST), "ingest", "--project-dir", str(root), "--envelope", str(ep), "--body", str(bp)],
+                    [sys.executable, str(INGEST), "ingest", "--project-dir", str(root), "--envelope", str(ep), "--body", str(bp), "--route-receipt", str(self._write_route_receipt(root, role, "same-family"))],
                     check=True,
                     capture_output=True,
                     text=True,
@@ -507,7 +528,7 @@ class ReportIngestV2Tests(unittest.TestCase):
                 ep.write_text(json.dumps(env), encoding="utf-8")
                 bp.write_text(body, encoding="utf-8")
                 subprocess.run(
-                    [sys.executable, str(INGEST), "ingest", "--project-dir", str(root), "--envelope", str(ep), "--body", str(bp)],
+                    [sys.executable, str(INGEST), "ingest", "--project-dir", str(root), "--envelope", str(ep), "--body", str(bp), "--route-receipt", str(self._write_route_receipt(root, role, family))],
                     check=True,
                     capture_output=True,
                     text=True,

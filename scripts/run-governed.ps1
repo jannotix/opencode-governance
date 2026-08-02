@@ -875,7 +875,7 @@ function Invoke-Route([object]$Route,[int]$Attempt,[string]$Logs){
   $info.Environment['OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE'] = '1'
   $info.Environment['OPENCODE_GOVERNANCE_HEADLESS_CONTRACT'] = $script:HeadlessContractVersion
   $info.Environment['OPENCODE_CONFIG_CONTENT'] = $overlay.json
-  # GOVERNED_ROLE_LAUNCH_CONTRACT_V1 — fail closed if effect plugin is not installed/hash-bound.
+  # GOVERNED_ROLE_LAUNCH_CONTRACT_V2 — fail closed if effect plugin is not installed/hash-bound.
   $launchHelper = Join-Path $ConfigDir 'opencode-governance-tools\governed-role-launch.py'
   if(-not (Test-Path -LiteralPath $launchHelper -PathType Leaf)){
     $launchHelper = Join-Path $PSScriptRoot 'governed-role-launch.py'
@@ -883,19 +883,9 @@ function Invoke-Route([object]$Route,[int]$Attempt,[string]$Logs){
   if(-not (Test-Path -LiteralPath $launchHelper -PathType Leaf)){
     throw 'EFFECT_PLUGIN_NOT_ACTIVE: governed-role-launch.py missing (install 4.0.1 capabilities).'
   }
+  # R-008: non-mutating preflight only — never install --skip-self-test from a governed runner.
   $pre = & python $launchHelper preflight-plugin --config-dir $ConfigDir 2>&1
-  if($LASTEXITCODE -ne 0){
-    # Auto-install owned plugin when managed installer is available (upgrade/test fixtures).
-    $installer = Join-Path $ConfigDir 'opencode-governance-tools\install-effect-plugin.py'
-    if(-not (Test-Path -LiteralPath $installer -PathType Leaf)){ $installer = Join-Path $PSScriptRoot 'install-effect-plugin.py' }
-    $sourceDir = if(Test-Path -LiteralPath (Join-Path $ConfigDir 'opencode-governance-tools\opencode-governance-effect-enforcement\index.mjs')){ Join-Path $ConfigDir 'opencode-governance-tools' } else { $PSScriptRoot }
-    if(Test-Path -LiteralPath $installer -PathType Leaf){
-      # Heal path: install plugin files + hashes; full self-test remains the product install path.
-      $null = & python $installer --config-dir $ConfigDir --source-dir $sourceDir install --skip-self-test 2>&1
-    }
-    $pre = & python $launchHelper preflight-plugin --config-dir $ConfigDir 2>&1
-    if($LASTEXITCODE -ne 0){ throw "EFFECT_PLUGIN_NOT_ACTIVE: $pre" }
-  }
+  if($LASTEXITCODE -ne 0){ throw "EFFECT_PLUGIN_NOT_ACTIVE: $pre" }
   $repoRoot = if($script:RepositoryDir){ [string]$script:RepositoryDir } elseif($RepositoryDir){ [string]$RepositoryDir } else { [string]$ProjectDir }
   $effectPolicy = Join-Path $ConfigDir 'plugins\opencode-governance-effect-enforcement\role-effect-policy.json'
   $effectSha = ''
@@ -908,12 +898,14 @@ function Invoke-Route([object]$Route,[int]$Attempt,[string]$Logs){
   $writeArgs = @(
     $launchHelper,'write','--out',$launchPath,'--role','architect','--expected-agent','architect',
     '--workspace',[string]$ProjectDir,'--repository',$repoRoot,'--phase',[string]$Command,
-    '--effect-policy',$effectPolicy,'--effect-policy-sha256',$effectSha,'--config-dir',$ConfigDir,'--require-plugin'
+    '--effect-policy-sha256',$effectSha,'--config-dir',$ConfigDir,'--require-plugin'
   )
   if($TaskId){ $writeArgs += @('--task-id',[string]$TaskId) }
   if($script:HeadlessPolicyHash){ $writeArgs += @('--permission-policy-sha256',[string]$script:HeadlessPolicyHash) }
   $written = & python @writeArgs 2>&1
   if($LASTEXITCODE -ne 0){ throw "GOVERNED_ROLE_LAUNCH_REQUIRED: $written" }
+  $launchObj = $null
+  try { $launchObj = ($written | Select-Object -Last 1 | ConvertFrom-Json) } catch {}
   $info.Environment['OPENCODE_GOVERNANCE_EFFECT_ENFORCEMENT_ACTIVE'] = '1'
   $info.Environment['OPENCODE_GOVERNANCE_ROLE'] = 'architect'
   $info.Environment['OPENCODE_GOVERNANCE_EXPECTED_AGENT'] = 'architect'
@@ -921,8 +913,12 @@ function Invoke-Route([object]$Route,[int]$Attempt,[string]$Logs){
   $info.Environment['OPENCODE_GOVERNANCE_WORKSPACE'] = [string]$ProjectDir
   $info.Environment['OPENCODE_GOVERNANCE_REPOSITORY'] = $repoRoot
   $info.Environment['OPENCODE_GOVERNANCE_LAUNCH_FILE'] = $launchPath
+  if($launchObj -and $launchObj.sha256){ $info.Environment['OPENCODE_GOVERNANCE_LAUNCH_SHA256'] = [string]$launchObj.sha256 }
   $info.Environment['OPENCODE_GOVERNANCE_EFFECT_POLICY'] = $effectPolicy
   $info.Environment['OPENCODE_GOVERNANCE_EFFECT_POLICY_SHA256'] = $effectSha
+  $hsDir = Join-Path $Logs 'handshakes'
+  New-Item -ItemType Directory -Force -Path $hsDir | Out-Null
+  $info.Environment['OPENCODE_GOVERNANCE_HANDSHAKE_PATH'] = (Join-Path $hsDir "architect-$Attempt.json")
   if($TaskId){ $info.Environment['OPENCODE_GOVERNANCE_TASK_ID'] = [string]$TaskId }
   if($script:HeadlessPolicyHash){ $info.Environment['OPENCODE_GOVERNANCE_PERMISSION_POLICY_SHA256'] = [string]$script:HeadlessPolicyHash }
   # Never place the governed prompt on argv, in environment variables, or via shell interpolation.
