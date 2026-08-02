@@ -145,14 +145,39 @@ function Resolve-WorkspaceRepositoryRoots(){
   }
   # Bind exact canonical Governance roots the runner owns (even if not yet created).
   # Unrelated nested .ai directories elsewhere remain inside the project fingerprint.
+  # Fail closed if an existing .ai is a symlink/junction/reparse or resolves outside the workspace.
+  function Bind-ManagedAiRoot([string]$AiPath,[string]$Role,[string]$WorkspaceFull){
+    $literal=[IO.Path]::GetFullPath($AiPath)
+    if(Test-Path -LiteralPath $AiPath){
+      $item=Get-Item -LiteralPath $AiPath -Force
+      if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint)-ne0){
+        throw "MANAGED_GOVERNANCE_ROOT_REPARSE_FORBIDDEN: $AiPath may not be a symlink, junction or reparse point."
+      }
+      if(-not $item.PSIsContainer){throw "MANAGED_GOVERNANCE_ROOT_NOT_DIRECTORY: $AiPath"}
+      # Identity for snapshot/restore is the literal path under the workspace, never a followed outside target.
+      $resolved=(Resolve-Path -LiteralPath $AiPath).Path
+      if(-not ($resolved.Equals($literal,[StringComparison]::OrdinalIgnoreCase))){
+        # Resolve-Path followed a reparse that Get-Item missed — still fail closed if target left workspace.
+        if(-not ($resolved.Equals($WorkspaceFull,[StringComparison]::OrdinalIgnoreCase) -or $resolved.StartsWith($WorkspaceFull.TrimEnd('\','/')+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase))){
+          throw "MANAGED_GOVERNANCE_ROOT_OUTSIDE_WORKSPACE: $AiPath -> $resolved"
+        }
+      }
+      if(-not ($literal.Equals($WorkspaceFull,[StringComparison]::OrdinalIgnoreCase) -or $literal.StartsWith($WorkspaceFull.TrimEnd('\','/')+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase))){
+        throw "MANAGED_GOVERNANCE_ROOT_OUTSIDE_WORKSPACE: $literal"
+      }
+    }else{
+      if(-not ($literal.Equals($WorkspaceFull,[StringComparison]::OrdinalIgnoreCase) -or $literal.StartsWith($WorkspaceFull.TrimEnd('\','/')+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase))){
+        throw "MANAGED_GOVERNANCE_ROOT_OUTSIDE_WORKSPACE: $literal"
+      }
+    }
+    [pscustomobject]@{canonical_path=$literal;role=$Role;recognized=(Test-RecognizedGovernanceRoot $AiPath)}
+  }
   $managed=[System.Collections.Generic.List[object]]::new()
   $wsAi=Join-Path $workspace '.ai'
   $repoAi=Join-Path $repository '.ai'
-  $wsAiCanon=if(Test-Path -LiteralPath $wsAi){(Resolve-Path -LiteralPath $wsAi).Path}else{[IO.Path]::GetFullPath($wsAi)}
-  $managed.Add([pscustomobject]@{canonical_path=$wsAiCanon;role='workspace_governance';recognized=(Test-RecognizedGovernanceRoot $wsAi)})
+  $managed.Add((Bind-ManagedAiRoot $wsAi 'workspace_governance' $workspaceFull))
   if(-not $repositoryFull.Equals($workspaceFull,[StringComparison]::OrdinalIgnoreCase)){
-    $repoAiCanon=if(Test-Path -LiteralPath $repoAi){(Resolve-Path -LiteralPath $repoAi).Path}else{[IO.Path]::GetFullPath($repoAi)}
-    $managed.Add([pscustomobject]@{canonical_path=$repoAiCanon;role='repository_governance';recognized=(Test-RecognizedGovernanceRoot $repoAi)})
+    $managed.Add((Bind-ManagedAiRoot $repoAi 'repository_governance' $workspaceFull))
   }
   $script:RepositoryDir=$repository
   $script:ManagedGovernanceRoots=@($managed)
@@ -756,15 +781,17 @@ function Invoke-ExplicitTransactionRecovery(){
   if(Test-PidAlive ([int]$meta.pid)){throw 'ARCHITECT_TRANSACTION_ACTIVE'}
   $metaText=Get-Content -LiteralPath $metaPath -Raw
   $txHash=Get-TextHash $metaText
+  if($RecoveryDecision -eq 'adopt-governance-only' -and [string]::IsNullOrWhiteSpace($ExpectedTransactionHash)){
+    throw 'RECOVERY_TRANSACTION_HASH_REQUIRED: adopt-governance-only requires -ExpectedTransactionHash'
+  }
   if(-not [string]::IsNullOrWhiteSpace($ExpectedTransactionHash) -and $txHash -ne $ExpectedTransactionHash.ToLowerInvariant()){
     throw "RECOVERY_TRANSACTION_HASH_MISMATCH: expected=$ExpectedTransactionHash actual=$txHash"
   }
   if([string]$meta.task_id -ne $TaskId){throw "RECOVERY_TASK_MISMATCH: meta=$($meta.task_id) requested=$TaskId"}
-  if([string]$meta.workspace_root -and [string]$meta.workspace_root -ne $ProjectDir){throw 'RECOVERY_WORKSPACE_MISMATCH'}
-  if($script:RepositoryDir -and $meta.repository_root -and [string]$meta.repository_root -ne $script:RepositoryDir){throw 'RECOVERY_REPOSITORY_MISMATCH'}
+  if([string]$meta.workspace_root -and -not [string]::Equals([string]$meta.workspace_root,$ProjectDir,[StringComparison]::OrdinalIgnoreCase)){throw 'RECOVERY_WORKSPACE_MISMATCH'}
+  if($script:RepositoryDir -and $meta.repository_root -and -not [string]::Equals([string]$meta.repository_root,$script:RepositoryDir,[StringComparison]::OrdinalIgnoreCase)){throw 'RECOVERY_REPOSITORY_MISMATCH'}
   $beforeFp=[string]$meta.project_state_fingerprint
   $afterFp=Get-ProjectStateFingerprint
-  $beforeRows=@()
   if($RecoveryDecision -eq 'rollback'){
     if($meta.managed_governance_roots){Restore-ManagedGovernanceRoots @($meta.managed_governance_roots)}
     else{
@@ -777,17 +804,11 @@ function Invoke-ExplicitTransactionRecovery(){
   }
   # adopt-governance-only: require fingerprint match against transaction baseline (app source unchanged)
   if($afterFp -ne $beforeFp){
-    # Recompute whether only managed governance roots advanced relative to snapshot — fingerprint already excludes them,
-    # so mismatch means application/project content changed → refuse adoption.
     throw 'ARCHITECT_RECOVERY_BLOCKED: PROJECT_STATE_CHANGED (application or non-managed paths). HUMAN_RECOVERY_REQUIRED'
   }
-  # Fingerprint match means only managed governance roots (excluded) may differ; verify no app mutation and valid checkpoint.
   $snap=Get-TaskSnapshot
   if(-not $snap){throw 'RECOVERY_CHECKPOINT_MISSING'}
-  if([string]$snap.state -notin @('READY_FOR_EXECUTION') -and [string]$snap.phase -notin @('READY_FOR_EXECUTION')){
-    # Allow adoption for any advanced governance state when owner explicitly requested; still require GOVERNANCE progress evidence.
-    Write-Host "ARCHITECT_RECOVERY_NOTE state=$($snap.state) phase=$($snap.phase)"
-  }
+  $state=[string]$snap.state; if([string]::IsNullOrWhiteSpace($state)){$state=[string]$snap.phase}
   $receipt=[ordered]@{
     schema='ARCHITECT_RECOVERY_RECEIPT_V1'
     decision='adopt-governance-only'
@@ -807,14 +828,16 @@ function Invoke-ExplicitTransactionRecovery(){
   $receiptDir=Split-Path -Parent $receiptPath
   if(-not(Test-Path $receiptDir)){New-Item -ItemType Directory -Force -Path $receiptDir|Out-Null}
   ($receipt|ConvertTo-Json -Depth 8)|Set-Content -LiteralPath $receiptPath -Encoding utf8
-  # Archive then close orphan
   $archive=Join-Path $ConfigDir ("opencode-governance-architect-tx-archive/"+(Get-TextHash $ProjectDir.ToLowerInvariant())+"/$txHash")
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $archive)|Out-Null
   if(Test-Path $archive){Remove-Item $archive -Recurse -Force}
   Copy-Item -LiteralPath $tx -Destination $archive -Recurse -Force
   Close-Transaction $tx
-  Write-Host "ARCHITECT_RECOVERY_COMPLETE decision=adopt-governance-only task=$TaskId transaction_hash=$txHash receipt=$receiptPath"
-  Write-Host "ARCHITECT_PHASE_ADVANCED STATE=$($snap.state) NEXT_COMMAND=/ai-execute ATTEMPT_CONSUMED=false"
+  Write-Host "ARCHITECT_RECOVERY_COMPLETE decision=adopt-governance-only task=$TaskId transaction_hash=$txHash receipt=$receiptPath state=$state next_required_phase=$($snap.next)"
+  # Only advertise /ai-execute when the adopted checkpoint is actually READY_FOR_EXECUTION.
+  if($state -eq 'READY_FOR_EXECUTION' -or [string]$snap.next -eq 'IMPLEMENTING'){
+    Write-Host "ARCHITECT_PHASE_ADVANCED STATE=$state NEXT_COMMAND=/ai-execute ATTEMPT_CONSUMED=false"
+  }
   return $true
 }
 function Classify-Failure([string]$Text,[bool]$TimedOut,[int]$ExitCode=1){

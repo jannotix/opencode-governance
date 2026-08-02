@@ -228,41 +228,40 @@ def is_recognized_governance_root(ai_path: pathlib.Path) -> bool:
     return False
 
 
+def _bind_managed_ai(ai_path: pathlib.Path, role: str, workspace: pathlib.Path) -> dict[str, Any]:
+    """Bind a managed Governance root using the literal path; fail closed on symlink/reparse."""
+    literal = pathlib.Path(os.path.normpath(str(ai_path)))
+    if literal.exists() or literal.is_symlink():
+        if literal.is_symlink() or _is_reparse(literal):
+            raise RootContractError(
+                "MANAGED_GOVERNANCE_ROOT_REPARSE_FORBIDDEN",
+                f"{literal} may not be a symlink, junction or reparse point",
+            )
+        if not literal.is_dir():
+            raise RootContractError("MANAGED_GOVERNANCE_ROOT_NOT_DIRECTORY", str(literal))
+    if not _is_within(literal, workspace) and _norm_key(literal) != _norm_key(workspace):
+        # Allow workspace/.ai which is within workspace when it exists or is a future path under workspace
+        try:
+            literal.relative_to(workspace)
+        except ValueError as exc:
+            raise RootContractError("MANAGED_GOVERNANCE_ROOT_OUTSIDE_WORKSPACE", str(literal)) from exc
+    return {
+        "canonical_path": str(literal),
+        "role": role,
+        "existed_before": literal.exists(),
+        "tree_hash_before": tree_hash(literal) if literal.exists() else "ABSENT",
+        "recognized": is_recognized_governance_root(literal),
+    }
+
+
 def discover_managed_governance_roots(
     workspace: pathlib.Path,
     repository: pathlib.Path,
 ) -> list[dict[str, Any]]:
-    candidates: list[tuple[pathlib.Path, str]] = []
-    workspace_ai = workspace / ".ai"
-    repository_ai = repository / ".ai"
-    if is_recognized_governance_root(workspace_ai):
-        candidates.append((workspace_ai.resolve(), "workspace_governance"))
-    if _norm_key(repository) != _norm_key(workspace) and is_recognized_governance_root(repository_ai):
-        candidates.append((repository_ai.resolve(), "repository_governance"))
-    elif _norm_key(repository) == _norm_key(workspace) and is_recognized_governance_root(repository_ai):
-        # Same root: already recorded as workspace_governance
-        if not candidates:
-            candidates.append((repository_ai.resolve(), "repository_governance"))
-
-    roots: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for path, role in candidates:
-        key = _norm_key(path)
-        if key in seen:
-            continue
-        if not _is_within(path, workspace) and _norm_key(path.parent) != _norm_key(workspace):
-            # Must remain under workspace
-            if not _is_within(path, workspace):
-                raise RootContractError("MANAGED_GOVERNANCE_ROOT_OUTSIDE_WORKSPACE", str(path))
-        seen.add(key)
-        roots.append(
-            {
-                "canonical_path": str(path),
-                "role": role,
-                "existed_before": path.exists(),
-                "tree_hash_before": tree_hash(path) if path.exists() else "ABSENT",
-            }
-        )
+    # Always bind exact workspace/.ai and repository/.ai (even if not yet created).
+    roots = [_bind_managed_ai(workspace / ".ai", "workspace_governance", workspace)]
+    if _norm_key(repository) != _norm_key(workspace):
+        roots.append(_bind_managed_ai(repository / ".ai", "repository_governance", workspace))
     return roots
 
 
@@ -328,16 +327,16 @@ def resolve_roots(
                 resolution_source = "workspace_is_git"
             else:
                 nested = find_nested_git_roots(workspace)
-                if len(nested) == 0:
-                    raise RootContractError(
-                        "REPOSITORY_ROOT_NOT_FOUND",
-                        "workspace is not a Git repository and no unique nested Git root was found; pass -RepositoryDir",
-                    )
                 if len(nested) > 1:
                     detail = "; ".join(str(p) for p in nested)
                     raise RootContractError("REPOSITORY_ROOT_AMBIGUOUS", detail)
-                repository = nested[0]
-                resolution_source = "unique_nested_git"
+                if len(nested) == 1:
+                    repository = nested[0]
+                    resolution_source = "unique_nested_git"
+                else:
+                    # NON_GIT_PROJECT_SUPPORTED: workspace is the application root when no Git repository exists.
+                    repository = workspace
+                    resolution_source = "workspace_non_git"
 
     assert repository is not None
     if not _is_within(repository, workspace) and _norm_key(repository) != _norm_key(workspace):

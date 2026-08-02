@@ -190,12 +190,28 @@ def resolve_roots():
         inside=repository==workspace
     if not inside and repository!=workspace:
         raise SystemExit(f'REPOSITORY_ROOT_OUTSIDE_WORKSPACE: repository={repository} workspace={workspace}')
+    def bind_managed_ai(ai_path: pathlib.Path, role: str):
+        # Fail closed on symlink/reparse managed roots; bind the literal path under the workspace.
+        literal=ai_path if ai_path.is_absolute() else (workspace/ai_path)
+        literal=pathlib.Path(os.path.normpath(str(literal)))
+        if literal.exists() or literal.is_symlink():
+            if literal.is_symlink():
+                raise SystemExit(f'MANAGED_GOVERNANCE_ROOT_REPARSE_FORBIDDEN: {literal} may not be a symlink or reparse point.')
+            if not literal.is_dir():
+                raise SystemExit(f'MANAGED_GOVERNANCE_ROOT_NOT_DIRECTORY: {literal}')
+        try:
+            literal.relative_to(workspace)
+            inside=True
+        except ValueError:
+            inside=literal==workspace
+        if not inside:
+            raise SystemExit(f'MANAGED_GOVERNANCE_ROOT_OUTSIDE_WORKSPACE: {literal}')
+        return {'canonical_path':str(literal),'role':role}
+
     managed=[]
-    ws_ai=workspace/'.ai'
-    managed.append({'canonical_path':str(ws_ai.resolve() if ws_ai.exists() else ws_ai),'role':'workspace_governance'})
+    managed.append(bind_managed_ai(workspace/'.ai','workspace_governance'))
     if repository!=workspace:
-        repo_ai=repository/'.ai'
-        managed.append({'canonical_path':str(repo_ai.resolve() if repo_ai.exists() else repo_ai),'role':'repository_governance'})
+        managed.append(bind_managed_ai(repository/'.ai','repository_governance'))
     managed_governance_roots=managed
     print(f'WORKSPACE_REPOSITORY_ROOT_CONTRACT contract={WORKSPACE_ROOT_CONTRACT} workspace={workspace} repository={repository} source={source} managed_roots={len(managed)}', flush=True)
 
@@ -634,9 +650,17 @@ def explicit_recovery():
     meta=json.loads(meta_text)
     if pid_alive(meta.get('pid')): raise SystemExit('ARCHITECT_TRANSACTION_ACTIVE')
     tx_hash=hashlib.sha256(meta_text.encode()).hexdigest()
+    if a.recovery_decision=='adopt-governance-only' and not a.expected_transaction_hash:
+        raise SystemExit('RECOVERY_TRANSACTION_HASH_REQUIRED: adopt-governance-only requires --expected-transaction-hash')
     if a.expected_transaction_hash and tx_hash!=a.expected_transaction_hash.lower():
         raise SystemExit(f'RECOVERY_TRANSACTION_HASH_MISMATCH: expected={a.expected_transaction_hash} actual={tx_hash}')
     if str(meta.get('task_id'))!=a.task_id: raise SystemExit('RECOVERY_TASK_MISMATCH')
+    meta_ws=str(meta.get('workspace_root') or '')
+    meta_repo=str(meta.get('repository_root') or '')
+    if meta_ws and os.path.normcase(meta_ws)!=os.path.normcase(str(project)):
+        raise SystemExit('RECOVERY_WORKSPACE_MISMATCH')
+    if meta_repo and repository is not None and os.path.normcase(meta_repo)!=os.path.normcase(str(repository)):
+        raise SystemExit('RECOVERY_REPOSITORY_MISMATCH')
     before_fp=str(meta.get('project_state_fingerprint'))
     after_fp=project_state_fingerprint()
     if a.recovery_decision=='rollback':
@@ -647,9 +671,9 @@ def explicit_recovery():
         return True
     if after_fp!=before_fp:
         raise SystemExit('ARCHITECT_RECOVERY_BLOCKED: PROJECT_STATE_CHANGED (application or non-managed paths). HUMAN_RECOVERY_REQUIRED')
-    # Force command context for checkpoint read
     a.command='ai-resume'
     snap=task_snapshot()
+    state=snap['state'] or snap['phase']
     receipt={
         'schema':'ARCHITECT_RECOVERY_RECEIPT_V1','decision':'adopt-governance-only','task_id':a.task_id,
         'workspace_root':str(project),'repository_root':str(repository),'transaction_hash':tx_hash,
@@ -664,8 +688,13 @@ def explicit_recovery():
     archive.parent.mkdir(parents=True, exist_ok=True)
     if archive.exists(): shutil.rmtree(archive)
     shutil.copytree(tx, archive); close_tx(tx)
-    print(f'ARCHITECT_RECOVERY_COMPLETE decision=adopt-governance-only task={a.task_id} transaction_hash={tx_hash} receipt={receipt_path}', flush=True)
-    print(f"ARCHITECT_PHASE_ADVANCED STATE={snap['state']} NEXT_COMMAND=/ai-execute ATTEMPT_CONSUMED=false", flush=True)
+    print(
+        f'ARCHITECT_RECOVERY_COMPLETE decision=adopt-governance-only task={a.task_id} '
+        f'transaction_hash={tx_hash} receipt={receipt_path} state={state} next_required_phase={snap["next"]}',
+        flush=True,
+    )
+    if state=='READY_FOR_EXECUTION' or snap.get('next')=='IMPLEMENTING':
+        print(f'ARCHITECT_PHASE_ADVANCED STATE={state} NEXT_COMMAND=/ai-execute ATTEMPT_CONSUMED=false', flush=True)
     return True
 def classify(text,timed,code):
     if timed:return 'BOUNDED_TIMEOUT'
