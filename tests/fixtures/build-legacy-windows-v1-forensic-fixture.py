@@ -78,6 +78,8 @@ def main() -> int:
     write(ws / ".ai" / "STATUS.md", "workspace-status-before\n")
     write(ws / ".ai" / "PROJECT_HISTORY.md", "# history before\n")
     write(repo / "app" / "file.php", "<?php // app unchanged\n")
+    # Root dependency manifest so V1 adapter derives dependency-hashes (not empty {}).
+    write(repo / "composer.json", '{"name":"fixture/app","require":{}}\n')
     write(repo / ".ai" / "STATUS.md", "repo-status-before\n")
     write(repo / ".ai" / "RUN_STATE.json", '{"state":"DISCOVERY"}\n')
     task_dir = repo / ".ai" / "tasks" / task
@@ -202,11 +204,13 @@ def main() -> int:
 
     # Non-managed inventory (closed set)
     app_rel = "Source_Code/app/file.php"
+    composer_rel = "Source_Code/composer.json"
     non_ai_rows = [
         tsv_header(),
         tsv_dir_row("Source_Code"),
         tsv_dir_row("Source_Code/app"),
         tsv_file_row(app_rel, repo / "app" / "file.php"),
+        tsv_file_row(composer_rel, repo / "composer.json"),
     ]
     non_ai_text = "\n".join(non_ai_rows) + "\n"
     recent_text = non_ai_text  # supplementary; same closed set for fixture

@@ -559,7 +559,6 @@ def adapt_legacy_v1_to_canonical(
             shutil.copy2(idx_file, canon / "git" / "index.sha256")
         else:
             (canon / "git" / "index.sha256").write_text("ABSENT\n", encoding="utf-8", newline="\n")
-        (canon / "git" / "dependency-hashes.json").write_text("{}\n", encoding="utf-8", newline="\n")
 
         # inventory from TSV
         prefixes = managed_prefixes(workspace, repository)
@@ -568,6 +567,36 @@ def adapt_legacy_v1_to_canonical(
             raise RecoveryError("LEGACY_INVENTORY_MISSING", "project-non-ai-current.tsv")
         rows = parse_tsv_inventory(non_ai)
         files = tsv_to_workspace_files(rows, prefixes)
+        # Derive dependency digests from closed forensic inventory when present.
+        # Do not emit empty {} — that falsely binds "no dependency manifests".
+        try:
+            repo_rel = repository.resolve().relative_to(workspace.resolve()).as_posix()
+        except Exception:
+            repo_rel = ""
+        if repo_rel in {"", "."}:
+            repo_prefix = ""
+        else:
+            repo_prefix = repo_rel.rstrip("/") + "/"
+        dep_from_forensics: dict[str, str] = {}
+        for rel, digest in files.items():
+            if repo_prefix:
+                if not rel.startswith(repo_prefix):
+                    continue
+                leaf = rel[len(repo_prefix) :]
+            else:
+                leaf = rel
+            # Only repository-root dependency manifests (not nested package trees)
+            if "/" in leaf or "\\" in leaf:
+                continue
+            if leaf in DEPENDENCY_NAMES:
+                dep_from_forensics[leaf] = digest
+        if dep_from_forensics:
+            (canon / "git" / "dependency-hashes.json").write_text(
+                json.dumps(dep_from_forensics, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+        # If no dependency digests in forensics, omit the file so verification is unbound.
         (canon / "inventory").mkdir(parents=True)
         (canon / "inventory" / "workspace-files.json").write_text(
             json.dumps(files, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n"
@@ -1230,6 +1259,10 @@ def run_recovery(args: argparse.Namespace) -> dict[str, Any]:
             print_typed_validation(result)
             return result
 
+        # adopt: require archive destination before any durable receipt write
+        if not args.config_dir and not args.archive_dir:
+            raise RecoveryError("ARCHIVE_DIR_REQUIRED", "pass --config-dir or --archive-dir")
+
         # adopt: write receipt first, then archive, then remove live tx
         receipt = {
             "schema": RECEIPT_SCHEMA,
@@ -1285,8 +1318,6 @@ def run_recovery(args: argparse.Namespace) -> dict[str, Any]:
         receipt_hash = write_receipt(receipt_path, receipt)
         # Archive transaction only after durable receipt
         # Short path segments avoid Windows MAX_PATH issues under deep temp trees.
-        if not args.config_dir and not args.archive_dir:
-            raise RecoveryError("ARCHIVE_DIR_REQUIRED", "pass --config-dir or --archive-dir")
         archive_root = pathlib.Path(args.archive_dir) if args.archive_dir else (
             pathlib.Path(args.config_dir)
             / "opencode-governance-architect-tx-archive"
