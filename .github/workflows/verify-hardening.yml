@@ -62,7 +62,8 @@ jobs:
             tests/test-project-state-integrity.sh \
             tests/test-ai-resume-transaction.sh \
             tests/test-ai-resume-postcondition.sh \
-            tests/test-architect-headless-permissions.sh
+            tests/test-architect-headless-permissions.sh \
+            tests/test-prompt-transport.sh
       - name: Run hardening regressions
         run: |
           python3 tests/test-hardening.py
@@ -76,6 +77,7 @@ jobs:
           bash tests/test-ai-resume-transaction.sh
           bash tests/test-ai-resume-postcondition.sh
           bash tests/test-architect-headless-permissions.sh
+          bash tests/test-prompt-transport.sh
           python3 tests/test-architect-headless-contract.py
           python3 tests/test-context-intelligence.py
           python3 tests/test-command-contracts.py
@@ -98,7 +100,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
           $errors=$null
-          foreach($path in @('tests/test-runner-contract.ps1','tests/test-jsonc-preservation.ps1','tests/test-jsonc-readable.ps1','tests/test-workflow-continuation.ps1','tests/test-context-intelligence.ps1','tests/test-project-state-integrity.ps1','tests/test-ai-resume-transaction.ps1','tests/test-ai-resume-postcondition.ps1','tests/test-architect-headless-permissions.ps1','scripts/workflow-continuation.ps1','scripts/run-governed.ps1','scripts/executor-attempt.ps1','scripts/install.ps1','scripts/install-base.ps1','scripts/install-core.ps1','scripts/uninstall.ps1','scripts/uninstall-base.ps1','scripts/uninstall-core.ps1','scripts/verify-routing.ps1','scripts/normalize-jsonc.ps1')){
+          foreach($path in @('tests/test-runner-contract.ps1','tests/test-jsonc-preservation.ps1','tests/test-jsonc-readable.ps1','tests/test-workflow-continuation.ps1','tests/test-context-intelligence.ps1','tests/test-project-state-integrity.ps1','tests/test-ai-resume-transaction.ps1','tests/test-ai-resume-postcondition.ps1','tests/test-architect-headless-permissions.ps1','tests/test-prompt-transport.ps1','scripts/workflow-continuation.ps1','scripts/run-governed.ps1','scripts/executor-attempt.ps1','scripts/install.ps1','scripts/install-base.ps1','scripts/install-core.ps1','scripts/uninstall.ps1','scripts/uninstall-base.ps1','scripts/uninstall-core.ps1','scripts/verify-routing.ps1','scripts/normalize-jsonc.ps1')){
             [Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path),[ref]$null,[ref]$errors)|Out-Null
             if($errors.Count){throw "$path`n$($errors|Out-String)"}
           }
@@ -117,6 +119,7 @@ jobs:
           pwsh -NoProfile -File tests/test-ai-resume-transaction.ps1
           pwsh -NoProfile -File tests/test-ai-resume-postcondition.ps1
           pwsh -NoProfile -File tests/test-architect-headless-permissions.ps1
+          pwsh -NoProfile -File tests/test-prompt-transport.ps1
           python tests/test-architect-headless-contract.py
           python tests/test-command-contracts.py
           python tests/test-release-publisher.py

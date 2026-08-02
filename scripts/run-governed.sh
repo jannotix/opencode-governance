@@ -98,6 +98,19 @@ if a.arguments_file:
 arguments_hash=hashlib.sha256(a.arguments.encode('utf-8')).hexdigest()
 marker='[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]'
 if marker not in a.arguments: a.arguments=(a.arguments+'\n\n'+marker).strip()
+PROMPT_TRANSPORT_CONTRACT='ARCHITECT_STDIN_PROMPT_TRANSPORT_V1'
+prompt_utf8=a.arguments.encode('utf-8')
+prompt_utf8_bytes=len(prompt_utf8)
+prompt_transport_sha256=hashlib.sha256(prompt_utf8).hexdigest()
+prompt_max_bytes=67108864
+env_max=os.environ.get('OPENCODE_GOVERNANCE_PROMPT_MAX_BYTES','').strip()
+if env_max.isdigit() and int(env_max)>=1048576:
+    prompt_max_bytes=int(env_max)
+if prompt_utf8_bytes>prompt_max_bytes:
+    raise SystemExit(
+        f'ARCHITECT_PROMPT_SIZE_LIMIT_EXCEEDED: prompt_bytes={prompt_utf8_bytes} max_bytes={prompt_max_bytes} '
+        f'sha256={prompt_transport_sha256} contract={PROMPT_TRANSPORT_CONTRACT}'
+    )
 
 if a.command=='ai-resume':
     if not a.task_id:
@@ -333,7 +346,26 @@ def open_tx(tx,ai,ai_hash,existed,project_state,before):
     if tx.exists(): shutil.rmtree(tx)
     tx.mkdir(parents=True); backup=tx/'ai-snapshot'
     if existed: shutil.copytree(ai,backup)
-    meta={'schema':'ARCHITECT_TRANSACTION_V2','compatibility':'ARCHITECT_TRANSACTION_V1','command':a.command,'task_id':a.task_id,'arguments_sha256':arguments_hash,'checkpoint_sha256':before['hash'] if before else None,'project_dir':str(project),'pid':os.getpid(),'started_at_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'ai_existed':existed,'ai_hash':ai_hash,'project_state_fingerprint':project_state,'permission_contract':HEADLESS_CONTRACT,'runtime_policy_sha256':headless_policy_hash}
+    meta={
+        'schema':'ARCHITECT_TRANSACTION_V2',
+        'compatibility':'ARCHITECT_TRANSACTION_V1',
+        'command':a.command,
+        'task_id':a.task_id,
+        'arguments_sha256':arguments_hash,
+        'prompt_transport':'stdin',
+        'prompt_transport_contract':PROMPT_TRANSPORT_CONTRACT,
+        'arguments_utf8_bytes':prompt_utf8_bytes,
+        'argv_prompt_bytes':0,
+        'checkpoint_sha256':before['hash'] if before else None,
+        'project_dir':str(project),
+        'pid':os.getpid(),
+        'started_at_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),
+        'ai_existed':existed,
+        'ai_hash':ai_hash,
+        'project_state_fingerprint':project_state,
+        'permission_contract':HEADLESS_CONTRACT,
+        'runtime_policy_sha256':headless_policy_hash,
+    }
     (tx/'meta.json').write_text(json.dumps(meta,separators=(',',':')),encoding='utf-8'); return backup
 def close_tx(tx):
     if tx.exists(): shutil.rmtree(tx)
@@ -390,31 +422,83 @@ try:
         print(f"ARCHITECT_ROUTE_ATTEMPT {attempt} {route['route']} {c['model']}",flush=True)
         payload, policy_hash = build_headless_config(c.get('model'), c.get('variant'), external_roots)
         headless_config_content, headless_policy_hash = payload, policy_hash
+        # ARCHITECT_STDIN_PROMPT_TRANSPORT_V1: control argv only; complete handoff on stdin (UTF-8, no BOM).
         # Never pass blanket --auto. Deny-by-default bash eliminates ask; residual asks fail closed.
+        print(
+            f'ARCHITECT_PROMPT_TRANSPORT contract={PROMPT_TRANSPORT_CONTRACT} mode=stdin '
+            f'bytes={prompt_utf8_bytes} sha256={prompt_transport_sha256} argv_prompt_bytes=0',
+            flush=True,
+        )
         cmd=[opencode_command,*opencode_prefix,'run','--dir',str(project),'--agent','architect','--model',c['model']]
         if c.get('variant'):cmd+=['--variant',c['variant']]
-        cmd+=['--command',a.command,'--format','json',a.arguments]
+        cmd+=['--command',a.command,'--format','json']
+        # Fail closed if the governed handoff ever reappears on argv (no silent CLI transport).
+        for arg in cmd:
+            if arg==a.arguments:
+                raise RuntimeError(
+                    f'ARCHITECT_PROMPT_TRANSPORT_FAILED: contract={PROMPT_TRANSPORT_CONTRACT} mode=stdin '
+                    f'route={route["route"]} attempt={attempt} bytes={prompt_utf8_bytes} '
+                    f'sha256={prompt_transport_sha256} argv_prompt_bytes=0 logs={logs} '
+                    f'detail=argv contained complete prompt payload'
+                )
         env=dict(os.environ)
         env['OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE']='1'
         env['OPENCODE_GOVERNANCE_HEADLESS_CONTRACT']=HEADLESS_CONTRACT
         env['OPENCODE_CONFIG_CONTENT']=payload
         timed=False
-        try:r=subprocess.run(cmd,capture_output=True,text=True,timeout=a.timeout_seconds,env=env,cwd=project)
+        stdout_text=''; stderr_text=''
+        try:
+            # Binary-safe UTF-8 stdin; preserve child exit code (no shell pipeline).
+            r=subprocess.run(
+                cmd,
+                input=prompt_utf8,
+                capture_output=True,
+                timeout=a.timeout_seconds,
+                env=env,
+                cwd=str(project),
+            )
+            stdout_text=(r.stdout or b'').decode('utf-8', errors='replace')
+            stderr_text=(r.stderr or b'').decode('utf-8', errors='replace')
+        except BrokenPipeError as e:
+            raise RuntimeError(
+                f'ARCHITECT_PROMPT_TRANSPORT_FAILED: contract={PROMPT_TRANSPORT_CONTRACT} mode=stdin '
+                f'route={route["route"]} attempt={attempt} bytes={prompt_utf8_bytes} '
+                f'sha256={prompt_transport_sha256} argv_prompt_bytes=0 logs={logs} '
+                f'detail=broken pipe during stdin transport: {e}'
+            )
+        except OSError as e:
+            err=str(e)
+            if 'too long' in err.lower() or getattr(e,'errno',None) in {7,22}:  # E2BIG / EINVAL on some hosts
+                raise RuntimeError(
+                    f'ARCHITECT_PROMPT_TRANSPORT_FAILED: contract={PROMPT_TRANSPORT_CONTRACT} mode=stdin '
+                    f'route={route["route"]} attempt={attempt} bytes={prompt_utf8_bytes} '
+                    f'sha256={prompt_transport_sha256} argv_prompt_bytes=0 logs={logs} '
+                    f'detail=process start/transport OS error: {e}'
+                )
+            raise RuntimeError(
+                f'ARCHITECT_PROMPT_TRANSPORT_FAILED: contract={PROMPT_TRANSPORT_CONTRACT} mode=stdin '
+                f'route={route["route"]} attempt={attempt} bytes={prompt_utf8_bytes} '
+                f'sha256={prompt_transport_sha256} argv_prompt_bytes=0 logs={logs} '
+                f'detail=transport OS error: {e}'
+            )
         except subprocess.TimeoutExpired as e:
             timed=True
             class R:pass
-            r=R();r.returncode=124;r.stdout=e.stdout or '';r.stderr=e.stderr or ''
-        (logs/f'attempt-{attempt}.stdout.log').write_text(r.stdout or '',encoding='utf-8');(logs/f'attempt-{attempt}.stderr.log').write_text(r.stderr or '',encoding='utf-8')
+            r=R();r.returncode=124
+            stdout_text=(e.stdout or b'').decode('utf-8', errors='replace') if isinstance(e.stdout,(bytes,bytearray)) else (e.stdout or '')
+            stderr_text=(e.stderr or b'').decode('utf-8', errors='replace') if isinstance(e.stderr,(bytes,bytearray)) else (e.stderr or '')
+        (logs/f'attempt-{attempt}.stdout.log').write_text(stdout_text,encoding='utf-8')
+        (logs/f'attempt-{attempt}.stderr.log').write_text(stderr_text,encoding='utf-8')
         if project_state_fingerprint()!=project_state: raise RuntimeError('ARCHITECT_FAILOVER_BLOCKED: PROJECT_STATE_CHANGED. HUMAN_RECOVERY_REQUIRED')
-        text=(r.stdout or '')+'\n'+(r.stderr or '')
+        text=stdout_text+'\n'+stderr_text
         if permission_blocked(text):
             raise RuntimeError(permission_blocked_error(text, route['route'], attempt, logs))
         if r.returncode==0 and not timed:
             if a.command=='ai-resume': validate_postcondition(before,ai_hash,text)
             cooldowns.pop(c['model'],None);save_cooldowns(cooldowns)
             print(f"ARCHITECT_FAILOVER_COMPLETE route={route['route']} attempts={attempt} task={a.task_id or ''} ai_tree={tree_hash(ai)} postcondition=PASS permission_contract={HEADLESS_CONTRACT} runtime_policy_sha256={headless_policy_hash}")
-            if r.stdout: print(r.stdout.rstrip())
-            if r.stderr: print(r.stderr.rstrip(),file=sys.stderr)
+            if stdout_text: print(stdout_text.rstrip())
+            if stderr_text: print(stderr_text.rstrip(),file=sys.stderr)
             close_tx(tx)
             if not a.keep_attempt_logs: shutil.rmtree(tmp)
             raise SystemExit(0)

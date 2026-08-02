@@ -1,6 +1,6 @@
 # Governance Authority, Memory and Evidence
 
-OpenCode Governance 3.7.3 includes deterministic candidate authority, content-bound approval receipts, actionable continuation, focused review lenses, governed engineering memory, exact evidence reuse, a staged pre-commit gate, headless Architect permission contracts and deterministic OpenCode simulation.
+OpenCode Governance 3.7.4 includes deterministic candidate authority, content-bound approval receipts, actionable continuation, focused review lenses, governed engineering memory, exact evidence reuse, a staged pre-commit gate, headless Architect permission contracts, stdin prompt transport and deterministic OpenCode simulation.
 
 These capabilities are installed and verified through the canonical governance lifecycle. They use the single `opencode-governance-routing.json` manifest; no separate runtime manifest or overlay installer exists.
 

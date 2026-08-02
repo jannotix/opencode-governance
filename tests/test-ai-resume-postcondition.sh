@@ -33,8 +33,11 @@ cat > "$MOCK" <<'PY'
 import hashlib,json,os,pathlib,sys
 args=sys.argv[1:]
 project=pathlib.Path(args[args.index('--dir')+1])
-prompt=args[-1]
+# ARCHITECT_STDIN_PROMPT_TRANSPORT_V1: complete handoff arrives on stdin, never argv.
+prompt=sys.stdin.read()
 raw=prompt.split('\n\n[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]',1)[0]
+if any(a==prompt or (len(a)>1000 and 'x'*100 in a) for a in args):
+    print('prompt leaked to argv',file=sys.stderr);sys.exit(43)
 if os.getcwd()!=str(project):
     print('wrong cwd',file=sys.stderr);sys.exit(41)
 if hashlib.sha256(raw.encode('utf-8')).hexdigest()!=os.environ['EXPECTED_HASH']:

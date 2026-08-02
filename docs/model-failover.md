@@ -131,6 +131,8 @@ Authentication failure, invalid configuration, context overflow, permission deni
 
 `ARCHITECT_PERMISSION_BLOCKED` / `HEADLESS_PERMISSION_CONTRACT_VIOLATION` (3.7.3+) is never eligible for model fallback. It means the headless Architect permission contract denied a tool or OpenCode auto-rejected an interactive `ask` in a non-interactive child. Restore `.ai/**` when safe, preserve logs, and correct Governance—do not rotate models.
 
+`ARCHITECT_PROMPT_TRANSPORT_FAILED` / `ARCHITECT_PROMPT_SIZE_LIMIT_EXCEEDED` (3.7.4+) are never eligible for model fallback. They mean the runner could not deliver the governed prompt over stdin (or the explicit safety size limit was exceeded) before a useful OpenCode attempt. Restore `.ai/**` when safe; do not rotate models.
+
 ## Provider versus model failure
 
 Provider outage, rate limit and plan quota exhaustion prefer the same model family through another provider.

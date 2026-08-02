@@ -1,6 +1,6 @@
 # Architect Runner Integration
 
-OpenCode Governance installs deterministic Architect runners (`architect-attempt.ps1|.sh`) with transactional failover, PowerShell 7 host checks, content-aware project-state integrity, routing validation, durable transaction journals, headless permission contracts and workflow-continuation gates. This document describes the current **3.7.3** surface.
+OpenCode Governance installs deterministic Architect runners (`architect-attempt.ps1|.sh`) with transactional failover, PowerShell 7 host checks, content-aware project-state integrity, routing validation, durable transaction journals, headless permission contracts, stdin prompt transport and workflow-continuation gates. This document describes the current **3.7.4** surface.
 
 ## Scope
 
@@ -28,7 +28,7 @@ The runner is not used for `ai-workflow`, `ai-execute`, `ai-review` or `ai-relea
 
 ## Installed tools
 
-With routing and 3.7.3 capabilities enabled, the installation records fifteen managed tools, including:
+With routing and 3.7.4 capabilities enabled, the installation records fifteen managed tools, including:
 
 ```text
 opencode-governance-tools/architect-attempt.ps1
@@ -51,10 +51,10 @@ opencode-governance-tools/governance-pre-commit.py
 The routing manifest records:
 
 ```text
-governance_version: 3.7.3
-architect_runner_version: 3.7.3
-context_intelligence_version: 3.7.3
-workflow_continuation_version: 3.7.3
+governance_version: 3.7.4
+architect_runner_version: 3.7.4
+context_intelligence_version: 3.7.4
+workflow_continuation_version: 3.7.4
 ```
 
 Before replacing an existing routing installation, the wrapper validates the complete new profile. An invalid profile cannot remove the current manifest, aliases or managed tools. Every existing managed tool is copied into the timestamped installation backup before replacement.
@@ -200,6 +200,11 @@ TOOL_EXECUTION_ABORTED
 ```
 
 Matched from phrases such as `tool execution aborted`, `tool call aborted`, `process killed`, `terminated by signal`, or abnormal exit codes (`< 0` or `>= 128`). Profiles may list `TOOL_EXECUTION_ABORTED` under `settings.eligible_failures` to allow bounded failover after an abort; otherwise the failure is ineligible but `.ai/**` is still restored when the project fingerprint is unchanged.
+
+New in 3.7.4:
+
+- `ARCHITECT_STDIN_PROMPT_TRANSPORT_V1` — complete governed handoffs stream over redirected stdin (UTF-8, no BOM); control arguments stay on argv; `argv_prompt_bytes=0`.
+- Transport failures surface as `ARCHITECT_PROMPT_TRANSPORT_FAILED` / `ARCHITECT_PROMPT_SIZE_LIMIT_EXCEEDED` (no model fallback). See [`architect-stdin-prompt-transport.md`](architect-stdin-prompt-transport.md).
 
 New in 3.7.3:
 
