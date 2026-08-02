@@ -226,17 +226,25 @@ def wait_for_ready(hs_path: pathlib.Path, deadline: float, expected_launch_sha: 
 
 def validate_ready(ready: dict[str, Any], expected: dict[str, Any]) -> None:
     """S-011: full handshake/READY validation. Every required field must be
-    present and match; an empty value is not valid evidence."""
+    present and match; an empty value is not valid evidence. Route receipt is
+    required only when the launch binds one (so a bare discovery session is not
+    blocked, but a routed Executor/review session is bound)."""
     required_fields = [
         "plugin_id", "plugin_sha256", "policy_sha256", "launch_receipt_sha256",
         "launch_id", "launch_nonce", "role", "expected_agent", "task_id",
-        "phase", "packet_sha256", "candidate_identity", "route_receipt_sha256",
+        "phase", "packet_sha256", "candidate_identity",
         "process_id", "session_id", "opencode_version", "ready_at_utc",
     ]
     for f in required_fields:
         v = str(ready.get(f) or "").strip()
         if not v:
             fail_typed("EFFECT_PLUGIN_HANDSHAKE_INVALID", field=f, reason="empty_or_missing")
+    # Route receipt binding is mandatory when the launch declares one.
+    if expected.get("route_receipt_required"):
+        required_fields = required_fields + ["route_receipt_sha256"]
+        v = str(ready.get("route_receipt_sha256") or "").strip()
+        if not v:
+            fail_typed("EFFECT_PLUGIN_HANDSHAKE_INVALID", field="route_receipt_sha256", reason="empty_or_missing")
     if str(ready.get("plugin_id")) != "opencode-governance-effect-enforcement":
         fail_typed("EFFECT_PLUGIN_HANDSHAKE_PLUGIN_ID_MISMATCH", got=ready.get("plugin_id"))
     if expected.get("plugin_sha256") and str(ready.get("plugin_sha256")) != expected["plugin_sha256"]:
@@ -378,6 +386,10 @@ def launch_role(args: argparse.Namespace) -> dict[str, Any]:
     env["OPENCODE_GOVERNANCE_OPENCODE_BINARY"] = opencode
     if args.session_id:
         env["OPENCODE_GOVERNANCE_SESSION_ID"] = args.session_id
+    elif not env.get("OPENCODE_GOVERNANCE_SESSION_ID"):
+        # Bind a deterministic session identity for this run so READY can echo it
+        # even when OpenCode does not surface a sessionID at plugin-load time.
+        env["OPENCODE_GOVERNANCE_SESSION_ID"] = f"gov-{launch_body.get('launch_id', '')[:16]}-{os.getpid()}"
 
     agent = ROLES[role]["agent"]
     # S-005: prompt transport = stdin. NO positional message on argv.
@@ -435,6 +447,7 @@ def launch_role(args: argparse.Namespace) -> dict[str, Any]:
         "policy_sha256": pre_j["policy_sha256"],
         "launch_sha256": launch_sha,
         "launch_nonce": str(launch_body.get("nonce") or ""),
+        "route_receipt_required": bool(args.route_receipt_sha256 or launch_body.get("route_receipt_sha256")),
     }
     try:
         ready_body = wait_for_ready(hs_path, ready_deadline, launch_sha)
