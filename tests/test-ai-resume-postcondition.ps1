@@ -27,12 +27,16 @@ $Mock=Join-Path $TempRoot 'mock.ps1'
 param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
 $project=''
 for($i=0;$i-lt$Args.Count;$i++){if($Args[$i]-eq'--dir'){$project=$Args[++$i]}}
-$prompt=$Args[-1]
+# ARCHITECT_STDIN_PROMPT_TRANSPORT_V1: complete handoff arrives on stdin, never argv.
+$ms=[IO.MemoryStream]::new(); [Console]::OpenStandardInput().CopyTo($ms); $rawBytes=$ms.ToArray()
+$prompt=[Text.UTF8Encoding]::new($false).GetString($rawBytes)
 $raw=($prompt -split "`n`n\[\[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1\]\]",2)[0]
 $bytes=[Text.Encoding]::UTF8.GetBytes($raw)
 $sha=[Security.Cryptography.SHA256]::Create()
 try{$hash=([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}
 if($hash-ne$env:EXPECTED_HASH){[Console]::Error.WriteLine('prompt hash mismatch');exit 42}
+# Prompt must not appear as an argv element.
+foreach($a in $Args){ if($a -ceq $prompt -or ($a.Length -gt 1000 -and $raw.Length -gt 1000 -and $a.Contains('x'*100))){ [Console]::Error.WriteLine('prompt leaked to argv'); exit 43 } }
 if((Get-Location).Path-ne$project){[Console]::Error.WriteLine('wrong cwd');exit 41}
 if($env:MOCK_MODE-eq'progress'){
   $path=Join-Path $project '.ai/tasks/TASK-001/RUN_STATE.json'

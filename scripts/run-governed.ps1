@@ -105,7 +105,21 @@ if($ArgumentsFile){
 $ArgumentsHash=Get-TextHash $Arguments
 $Marker='[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]'
 $env:OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE='1'
-$RoutedArguments=if($Arguments -like "*$Marker*"){$Arguments}elseif([string]::IsNullOrWhiteSpace($Arguments)){$Marker}else{"$Arguments`n`n$Marker"}
+$script:PromptTransportContract='ARCHITECT_STDIN_PROMPT_TRANSPORT_V1'
+# Use Contains (not -like): the marker includes '[' which is a wildcard metacharacter for -like.
+$RoutedArguments=if($Arguments.Contains($Marker)){$Arguments}elseif([string]::IsNullOrWhiteSpace($Arguments)){$Marker}else{"$Arguments`n`n$Marker"}
+# Exact stdin payload metrics (authoritative arguments_sha256 remains the pre-marker hash).
+$script:PromptUtf8Bytes=[Text.Encoding]::UTF8.GetByteCount($RoutedArguments)
+$script:PromptTransportSha256=Get-TextHash $RoutedArguments
+$script:PromptMaxBytes=67108864L
+$envMax=$env:OPENCODE_GOVERNANCE_PROMPT_MAX_BYTES
+if(-not [string]::IsNullOrWhiteSpace($envMax)){
+  $parsed=0L
+  if([long]::TryParse($envMax,[ref]$parsed) -and $parsed -ge 1048576L){ $script:PromptMaxBytes=$parsed }
+}
+if($script:PromptUtf8Bytes -gt $script:PromptMaxBytes){
+  throw "ARCHITECT_PROMPT_SIZE_LIMIT_EXCEEDED: prompt_bytes=$($script:PromptUtf8Bytes) max_bytes=$($script:PromptMaxBytes) sha256=$($script:PromptTransportSha256) contract=$($script:PromptTransportContract)"
+}
 
 if($Command -eq 'ai-resume') {
   if([string]::IsNullOrWhiteSpace($TaskId)) {
@@ -370,6 +384,10 @@ function Open-Transaction([string]$Tx,[string]$Ai,[string]$AiHash,[bool]$Existed
     command=$Command
     task_id=$TaskId
     arguments_sha256=$ArgumentsHash
+    prompt_transport='stdin'
+    prompt_transport_contract=$script:PromptTransportContract
+    arguments_utf8_bytes=$script:PromptUtf8Bytes
+    argv_prompt_bytes=0
     checkpoint_sha256=$checkpointHash
     project_dir=$ProjectDir
     pid=$PID
@@ -408,6 +426,9 @@ function Candidate-Allowed([object]$Route,[string]$Failure,[string]$Family,[hash
   if($Failure -eq 'MODEL_RETIRED' -and [string]$Route.candidate.model_family -eq $Family){ return $false }
   $true
 }
+function New-PromptTransportError([string]$Detail,[string]$Route,[int]$Attempt,[string]$Logs){
+  "ARCHITECT_PROMPT_TRANSPORT_FAILED: contract=$($script:PromptTransportContract) mode=stdin host=$($Launch.host) launcher_type=$($Launch.launcher_type) route=$Route attempt=$Attempt bytes=$($script:PromptUtf8Bytes) sha256=$($script:PromptTransportSha256) argv_prompt_bytes=0 logs=$Logs detail=$Detail"
+}
 function Invoke-Route([object]$Route,[int]$Attempt,[string]$Logs){
   $stdout = Join-Path $Logs "attempt-$Attempt.stdout.log"
   $stderr = Join-Path $Logs "attempt-$Attempt.stderr.log"
@@ -420,16 +441,24 @@ function Invoke-Route([object]$Route,[int]$Attempt,[string]$Logs){
   $script:HeadlessConfigContent = $overlay.json
   $script:HeadlessPolicyHash = $overlay.sha256
   Write-Host "HEADLESS_PERMISSION_CONTRACT version=$($overlay.version) runtime_policy_sha256=$($overlay.sha256) auto=disabled"
+  # ARCHITECT_STDIN_PROMPT_TRANSPORT_V1: control argv only; complete handoff on redirected stdin (UTF-8 no BOM).
+  Write-Host "ARCHITECT_PROMPT_TRANSPORT contract=$($script:PromptTransportContract) mode=stdin bytes=$($script:PromptUtf8Bytes) sha256=$($script:PromptTransportSha256) argv_prompt_bytes=0"
+  $utf8NoBom = [Text.UTF8Encoding]::new($false)
   $info = [Diagnostics.ProcessStartInfo]::new()
   $info.FileName = [string]$Launch.command
   $info.WorkingDirectory = $ProjectDir
   $info.UseShellExecute = $false
+  $info.RedirectStandardInput = $true
   $info.RedirectStandardOutput = $true
   $info.RedirectStandardError = $true
+  $info.StandardInputEncoding = $utf8NoBom
+  $info.StandardOutputEncoding = $utf8NoBom
+  $info.StandardErrorEncoding = $utf8NoBom
   $info.CreateNoWindow = $true
   $info.Environment['OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE'] = '1'
   $info.Environment['OPENCODE_GOVERNANCE_HEADLESS_CONTRACT'] = $script:HeadlessContractVersion
   $info.Environment['OPENCODE_CONFIG_CONTENT'] = $overlay.json
+  # Never place the governed prompt on argv, in environment variables, or via shell interpolation.
   # Never pass blanket --auto. Deny-by-default bash eliminates ask; residual asks fail closed.
   foreach($v in @($Launch.prefix)){ $null = $info.ArgumentList.Add([string]$v) }
   foreach($v in @('run','--dir',$ProjectDir,'--agent','architect','--model',[string]$Route.candidate.model)){ $null = $info.ArgumentList.Add([string]$v) }
@@ -437,18 +466,42 @@ function Invoke-Route([object]$Route,[int]$Attempt,[string]$Logs){
     $null = $info.ArgumentList.Add('--variant')
     $null = $info.ArgumentList.Add([string]$Route.candidate.variant)
   }
-  foreach($v in @('--command',$Command,'--format','json',$RoutedArguments)){ $null = $info.ArgumentList.Add([string]$v) }
+  foreach($v in @('--command',$Command,'--format','json')){ $null = $info.ArgumentList.Add([string]$v) }
+  # Fail closed if the governed handoff ever reappears on argv (no silent CLI transport).
+  foreach($arg in $info.ArgumentList){
+    if([string]$arg -ceq $RoutedArguments){
+      throw (New-PromptTransportError 'argv contained complete prompt payload (refusing silent CLI transport)' $Route.route $Attempt $Logs)
+    }
+  }
   $process = [Diagnostics.Process]::new()
   $process.StartInfo = $info
-  if(-not $process.Start()){ throw 'Unable to start OpenCode.' }
+  try{
+    if(-not $process.Start()){ throw (New-PromptTransportError 'Process.Start returned false' $Route.route $Attempt $Logs) }
+  }catch{
+    $msg = [string]$_.Exception.Message
+    if($msg -match '(?i)filename or extension is too long|command line.*too long|E2BIG|argument list too long'){
+      throw (New-PromptTransportError "process start failed (command-line limit): $msg" $Route.route $Attempt $Logs)
+    }
+    if($_.Exception.Message -like 'ARCHITECT_PROMPT_TRANSPORT*'){ throw }
+    throw (New-PromptTransportError "process start failed: $msg" $Route.route $Attempt $Logs)
+  }
+  # Start async stream readers before writing stdin to avoid stdout/stderr pipe deadlocks.
   $outTask = $process.StandardOutput.ReadToEndAsync()
   $errTask = $process.StandardError.ReadToEndAsync()
+  try{
+    $process.StandardInput.Write($RoutedArguments)
+    $process.StandardInput.Close()
+  }catch{
+    try{ if(-not $process.HasExited){ $process.Kill($true) } }catch{}
+    try{ $process.WaitForExit(5000) }catch{}
+    throw (New-PromptTransportError "stdin write/close failed: $([string]$_.Exception.Message)" $Route.route $Attempt $Logs)
+  }
   $timedOut = -not $process.WaitForExit($TimeoutSeconds * 1000)
   if($timedOut){ try{$process.Kill($true)}catch{}; $process.WaitForExit() }
   $out = $outTask.GetAwaiter().GetResult()
   $err = $errTask.GetAwaiter().GetResult()
-  [IO.File]::WriteAllText($stdout,$out)
-  [IO.File]::WriteAllText($stderr,$err)
+  [IO.File]::WriteAllText($stdout,$out,$utf8NoBom)
+  [IO.File]::WriteAllText($stderr,$err,$utf8NoBom)
   [pscustomobject]@{exit=$process.ExitCode;timed_out=$timedOut;text=($out+"`n"+$err);stdout=$out;stderr=$err;policy_sha256=$overlay.sha256}
 }
 function Validate-ResumePostcondition([object]$Before,[string]$BeforeAi,[object]$Result){

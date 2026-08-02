@@ -5,6 +5,16 @@ Dates use `YYYY-MM-DD`. Older micro-releases are summarized; see git history for
 ## Unreleased
 
 
+## 3.7.4 - 2026-08-02
+
+- Reliability patch: `ARCHITECT_STDIN_PROMPT_TRANSPORT_V1` streams the complete governed Architect handoff over redirected stdin instead of the process command line.
+- PowerShell and Unix Architect runners keep control arguments on argv (`run`, `--dir`, `--agent`, `--model`, optional `--variant`, `--command`, `--format json`) and write the full prompt as exact UTF-8 (no BOM) to child stdin, then close stdin.
+- Prevents Windows `Process.Start` failures of the form “The filename or extension is too long” when owner handoffs exceed the command-line length limit; also avoids Unix `ARG_MAX` / argv-size exposure of the handoff.
+- Transaction journal (`ARCHITECT_TRANSACTION_V2`) binds `prompt_transport=stdin`, `prompt_transport_contract=ARCHITECT_STDIN_PROMPT_TRANSPORT_V1`, `arguments_utf8_bytes`, `argv_prompt_bytes=0` without changing the authoritative `arguments_sha256`.
+- New fail-closed transport errors: `ARCHITECT_PROMPT_TRANSPORT_FAILED` and `ARCHITECT_PROMPT_SIZE_LIMIT_EXCEEDED` (ineligible for model fallback; restore `.ai/**` when safe; log size and SHA-256 only, never prompt contents).
+- Optional safety ceiling via `OPENCODE_GOVERNANCE_PROMPT_MAX_BYTES` (default 64 MiB, minimum configurable floor 1 MiB); fails before child execution and never truncates.
+- Windows and Unix large-handoff regressions (1 KiB–1 MiB), Unicode, empty optional arguments, early stdin close, and size-limit paths.
+
 ## 3.7.3 - 2026-08-02
 
 - Headless Architect permission contract `ARCHITECT_HEADLESS_PERMISSION_CONTRACT_V1` for external transactional runners.
