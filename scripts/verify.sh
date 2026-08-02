@@ -43,8 +43,10 @@ for name in "${readonly_review_agents[@]}"; do
   file="$CONFIG_DIR/agents/$name.md"
   grep -Fqx '    "*": deny' "$file" || fail "$name missing technical read-only edit deny"
   grep -Eq '^  bash:[[:space:]]*$' "$file" || fail "$name missing bash permission block"
-  # Effect-enforced reviewers must not retain open bash ask defaults.
-  ! grep -Fq '    "*": ask' "$file" || fail "$name must not use bash ask default under 4.0.0"
+  # Effect-enforced reviewers must not retain open bash ask defaults (skill may still ask).
+  if awk '/^  bash:/{f=1;next} f && /^  [a-zA-Z]/{exit} f && /"\*": ask/{found=1} END{exit found?0:1}' "$file"; then
+    fail "$name must not use bash ask default under 4.0.0"
+  fi
 done
 for name in "${required_commands[@]}"; do [[ -s "$CONFIG_DIR/commands/$name.md" ]] || fail "Missing command: $name"; done
 for name in architect build plan; do for marker in "${v3_markers[@]}"; do grep -Fq "$marker" "$CONFIG_DIR/agents/$name.md" || fail "$name missing v3 marker $marker"; done; done

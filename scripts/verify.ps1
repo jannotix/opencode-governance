@@ -117,7 +117,9 @@ foreach ($Name in $ReadonlyReviewAgents) {
     if ($Lines -cnotcontains '    "*": deny') { throw "$Name missing technical read-only edit deny" }
     $Text = Get-Content $Path -Raw
     if ($Text -notmatch '(?m)^  bash:\s*$') { throw "$Name missing bash permission block" }
-    if ($Text -match '(?m)^    "\*": ask\s*$') { throw "$Name must not use bash ask default under 4.0.0" }
+    if ($Text -match '(?ms)^  bash:\s*\r?\n(?:    .*\r?\n)*?    "\*": ask\s*$') {
+        throw "$Name must not use bash ask default under 4.0.0"
+    }
 }
 
 foreach ($Value in @(
