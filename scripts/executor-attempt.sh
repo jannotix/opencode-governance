@@ -441,6 +441,42 @@ def finalize_attempt(routing):
         if str(report.get(key, '')).lower() != str(value).lower():
             fail(f'Executor report mismatch: {key}')
 
+    # S-004: finalize must require and revalidate the role-process receipt and
+    # the exact prepared launch hash. The Executor child must have been launched
+    # via governed-role-attempt.py consuming THIS attempt's prepared launch; a
+    # missing or mismatched receipt makes finalization impossible.
+    prepared_launch_sha = str(data.get('governed_role_launch_sha256') or '')
+    role_receipt_path = report.get('GOVERNED_ROLE_PROCESS_RECEIPT_PATH') or ''
+    role_receipt_sha = str(report.get('GOVERNED_ROLE_PROCESS_RECEIPT_SHA256') or '')
+    if not prepared_launch_sha:
+        fail('EXECUTOR_FAILOVER_BLOCKED: prepared launch hash missing from attempt manifest')
+    if not role_receipt_path or not role_receipt_sha:
+        fail('EXECUTOR_FAILOVER_BLOCKED: report must reference GOVERNED_ROLE_PROCESS_RECEIPT_PATH/SHA256')
+    rr_path = pathlib.Path(role_receipt_path)
+    if not rr_path.is_absolute():
+        rr_path = project / rr_path
+    if not rr_path.is_file():
+        fail(f'EXECUTOR_FAILOVER_BLOCKED: role-process receipt missing: {rr_path}')
+    try:
+        rr = json.loads(rr_path.read_text(encoding='utf-8-sig'))
+    except Exception as exc:
+        fail(f'EXECUTOR_FAILOVER_BLOCKED: role-process receipt invalid JSON: {exc}')
+    if hashlib.sha256(rr_path.read_bytes()).hexdigest() != role_receipt_sha:
+        fail('EXECUTOR_FAILOVER_BLOCKED: role-process receipt hash mismatch')
+    if rr.get('status') != 'GOVERNED_ROLE_PROCESS_COMPLETE':
+        fail(f"EXECUTOR_FAILOVER_BLOCKED: role-process did not complete: {rr.get('status')}")
+    if not rr.get('exit_zero', rr.get('exit_code') == 0):
+        fail('EXECUTOR_FAILOVER_BLOCKED: role-process non-zero exit (S-013)')
+    if not rr.get('ready_validated_pre_side_effect'):
+        fail('EXECUTOR_FAILOVER_BLOCKED: role-process READY not validated pre-side-effect (S-001)')
+    # The consumed launch must equal the prepared launch hash.
+    if str(rr.get('launch_sha256') or '') != prepared_launch_sha:
+        fail('EXECUTOR_FAILOVER_BLOCKED: role-process consumed a different launch than the prepared one (S-004)')
+    if not rr.get('launch_consumed_prepared'):
+        fail('EXECUTOR_FAILOVER_BLOCKED: role-process did not consume the prepared launch (S-004)')
+    if rr.get('executor_cwd_is_execution_root') is False:
+        fail('EXECUTOR_FAILOVER_BLOCKED: executor cwd was not the isolated execution root (S-006)')
+
     worktree = pathlib.Path(data['execution_root'])
     records = status_records(worktree, False)
     for path in record_paths(records):

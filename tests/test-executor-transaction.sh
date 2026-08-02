@@ -71,19 +71,45 @@ packet="$(printf packet | sha256sum | awk '{print $1}')"
 
 prepare="$(bash "$helper" prepare --project-dir "$project" --config-dir "$config" --task-id TASK --attempt-id locked --frozen-target "$frozen" --work-class PATCH --route-agent executor --packet-sha256 "$packet")"
 worktree="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["execution_root"])' <<<"$prepare")"
+prepared_launch_sha="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["governed_role_launch_sha256"])' <<<"$prepare")"
 printf 'promoted\n' > "$worktree/app.txt"
 report="$project/.ai/tasks/TASK/evidence/executor-attempts/report.json"
+receipt="$project/.ai/tasks/TASK/evidence/executor-attempts/role-process-receipt-executor.json"
 mkdir -p "$(dirname "$report")"
-python3 - "$report" "$packet" "$frozen" <<'PY'
+# 4.0.3 S-004: finalize requires a valid GOVERNED_ROLE_PROCESS_CONTRACT_V2
+# receipt proving the child consumed THIS prepared launch under governance.
+python3 - "$report" "$receipt" "$packet" "$frozen" "$prepared_launch_sha" "$worktree" <<'PY'
+import hashlib
 import json
 import sys
-with open(sys.argv[1], "w", encoding="utf-8") as handle:
+report_path, receipt_path, packet, frozen, launch_sha, worktree = sys.argv[1:7]
+receipt = {
+    "status": "GOVERNED_ROLE_PROCESS_COMPLETE",
+    "contract": "GOVERNED_ROLE_PROCESS_CONTRACT_V2",
+    "role": "executor",
+    "agent": "executor",
+    "exit_code": 0,
+    "exit_zero": True,
+    "launch_sha256": launch_sha,
+    "launch_consumed_prepared": True,
+    "ready_validated_pre_side_effect": True,
+    "executor_cwd_is_execution_root": True,
+    "role_working_directory": worktree,
+    "handshake_schema": "EFFECT_PLUGIN_RUNTIME_READY_GATE_V2",
+}
+receipt_bytes = (json.dumps(receipt, indent=2, sort_keys=True) + "\n").encode("utf-8")
+with open(receipt_path, "wb") as handle:
+    handle.write(receipt_bytes)
+receipt_sha = hashlib.sha256(receipt_bytes).hexdigest()
+with open(report_path, "w", encoding="utf-8") as handle:
     json.dump(
         {
             "EXECUTOR_ATTEMPT_ID": "locked",
-            "PACKET_SHA256": sys.argv[2],
-            "FROZEN_TARGET_SHA": sys.argv[3],
+            "PACKET_SHA256": packet,
+            "FROZEN_TARGET_SHA": frozen,
             "REPORT_COMPLETE": "YES",
+            "GOVERNED_ROLE_PROCESS_RECEIPT_PATH": receipt_path,
+            "GOVERNED_ROLE_PROCESS_RECEIPT_SHA256": receipt_sha,
         },
         handle,
     )

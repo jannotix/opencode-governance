@@ -959,7 +959,33 @@ function enforce(policy, input, output, ctx) {
 
   // S-003: launch single-use is session-scoped; do NOT mark per-tool consumed here.
   // The session claim file is the single-use marker; it is written once at claim.
-  return { status: "ALLOW", role, tool, effects: classified.effects, paths: allPaths };
+  const allowResult = { status: "ALLOW", role, tool, effects: classified.effects, paths: allPaths };
+  logDecision("ALLOW", role, tool, classified.effects, allPaths, "");
+  return allowResult;
+}
+
+/**
+ * S-010: append a hook-generated decision receipt to the decision log so the
+ * self-test (and the Review Chain V4) can require positive hook evidence for
+ * BOTH allow and deny, rather than treating stdout presence/absence as proof.
+ */
+function logDecision(decision, role, tool, effects, paths, error) {
+  const logPath = process.env.OPENCODE_GOVERNANCE_DECISION_LOG || "";
+  if (!logPath) return;
+  try {
+    const entry = {
+      schema: "EFFECT_PLUGIN_DECISION_RECEIPT_V1",
+      decision,
+      role,
+      tool,
+      effects: effects || [],
+      paths: paths || [],
+      error: error || "",
+      process_id: process.pid,
+      at_utc: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+    };
+    fs.appendFileSync(logPath, JSON.stringify(entry) + "\n", "utf8");
+  } catch { /* best-effort; never block a decision on logging */ }
 }
 
 /**
@@ -1041,7 +1067,15 @@ export async function OpenCodeGovernanceEffectEnforcement(ctx) {
   }
   return {
     [HOOK]: async (input, output) => {
-      enforce(policy || loadPolicy(), input || {}, output || {}, ctx);
+      try {
+        enforce(policy || loadPolicy(), input || {}, output || {}, ctx);
+      } catch (e) {
+        // S-010: log deny decisions before propagating, so the self-test and
+        // Review Chain V4 have positive hook evidence for deny too.
+        const tool = String((input && (input.tool || input.name)) || "");
+        logDecision("DENY", resolveRole(), tool, [], [], String(e.message || e));
+        throw e;
+      }
     },
   };
 }
