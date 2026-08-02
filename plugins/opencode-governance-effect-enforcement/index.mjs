@@ -451,8 +451,6 @@ function extractPatchPaths(args, { tool } = {}) {
         if (v) out.paths.push(_stripGitPathQuoting(v));
       } else if (line.startsWith("new file mode") || line.startsWith("deleted file mode")) {
         // path follows on next +++/--- line; captured above
-      } else if (/^\+\+\+ /) {
-        // already handled
       }
     }
   }
