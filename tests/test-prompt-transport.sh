@@ -39,6 +39,11 @@ make_success_mock() {
   cat > "$path" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ -n "${OPENCODE_GOVERNANCE_HANDSHAKE_PATH:-}" ]]; then
+  mkdir -p "$(dirname "$OPENCODE_GOVERNANCE_HANDSHAKE_PATH")"
+  role="${OPENCODE_GOVERNANCE_ROLE:-architect}"
+  printf '%s\n' "{\"schema\":\"EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1\",\"role\":\"$role\",\"plugin_sha256\":\"mock\",\"policy_sha256\":\"mock\",\"process_id\":$$,\"nonce\":\"mock-test\"}" > "$OPENCODE_GOVERNANCE_HANDSHAKE_PATH"
+fi
 project=''; command=''; has_format=0
 argv_dump=()
 while [[ $# -gt 0 ]]; do
@@ -97,6 +102,11 @@ MOCK
 make_early_close_mock() {
   local path="$1"
   cat > "$path" <<'MOCK'
+if [[ -n "${OPENCODE_GOVERNANCE_HANDSHAKE_PATH:-}" ]]; then
+  mkdir -p "$(dirname "$OPENCODE_GOVERNANCE_HANDSHAKE_PATH")"
+  role="${OPENCODE_GOVERNANCE_ROLE:-architect}"
+  printf '%s\n' "{\"schema\":\"EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1\",\"role\":\"$role\",\"plugin_sha256\":\"mock\",\"policy_sha256\":\"mock\",\"process_id\":$$,\"nonce\":\"mock-test\"}" > "$OPENCODE_GOVERNANCE_HANDSHAKE_PATH"
+fi
 #!/usr/bin/env bash
 # Close immediately without reading stdin.
 exit 0

@@ -74,6 +74,11 @@ PY
 cat > "$TMP/mock-progress" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ -n "${OPENCODE_GOVERNANCE_HANDSHAKE_PATH:-}" ]]; then
+  mkdir -p "$(dirname "$OPENCODE_GOVERNANCE_HANDSHAKE_PATH")"
+  role="${OPENCODE_GOVERNANCE_ROLE:-architect}"
+  printf '%s\n' "{\"schema\":\"EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1\",\"role\":\"$role\",\"plugin_sha256\":\"mock\",\"policy_sha256\":\"mock\",\"process_id\":$$,\"nonce\":\"mock-test\"}" > "$OPENCODE_GOVERNANCE_HANDSHAKE_PATH"
+fi
 project=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -102,6 +107,11 @@ chmod +x "$TMP/mock-progress"
 cat > "$TMP/mock-permission" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ -n "${OPENCODE_GOVERNANCE_HANDSHAKE_PATH:-}" ]]; then
+  mkdir -p "$(dirname "$OPENCODE_GOVERNANCE_HANDSHAKE_PATH")"
+  role="${OPENCODE_GOVERNANCE_ROLE:-architect}"
+  printf '%s\n' "{\"schema\":\"EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1\",\"role\":\"$role\",\"plugin_sha256\":\"mock\",\"policy_sha256\":\"mock\",\"process_id\":$$,\"nonce\":\"mock-test\"}" > "$OPENCODE_GOVERNANCE_HANDSHAKE_PATH"
+fi
 echo 'Architect started and created internal task list.'
 echo 'permission requested: bash (ls -la); auto-rejecting' >&2
 echo 'The user rejected permission to use this specific tool call.' >&2

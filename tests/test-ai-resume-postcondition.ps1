@@ -25,6 +25,7 @@ $ExpectedHash=(Get-FileHash -LiteralPath $PromptPath -Algorithm SHA256).Hash.ToL
 $Mock=Join-Path $TempRoot 'mock.ps1'
 @'
 param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+if($env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH){$d=Split-Path -Parent $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH; if($d){New-Item -ItemType Directory -Force -Path $d|Out-Null}; $r=if($env:OPENCODE_GOVERNANCE_ROLE){$env:OPENCODE_GOVERNANCE_ROLE}else{'architect'}; (@{schema='EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1';role=$r;plugin_sha256='mock';policy_sha256='mock';process_id=$PID;nonce='mock-test'}|ConvertTo-Json -Compress)|Set-Content -LiteralPath $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH -Encoding utf8}
 $project=''
 for($i=0;$i-lt$Args.Count;$i++){if($Args[$i]-eq'--dir'){$project=$Args[++$i]}}
 # ARCHITECT_STDIN_PROMPT_TRANSPORT_V1: complete handoff arrives on stdin, never argv.

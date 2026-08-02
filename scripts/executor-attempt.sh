@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export OPENCODE_GOVERNANCE_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 python3 - "$@" <<'PY'
 import argparse
 import datetime
@@ -342,7 +343,15 @@ def prepare_attempt(routing):
     tools_dir = config_dir / 'opencode-governance-tools'
     launch_helper = tools_dir / 'governed-role-launch.py'
     if not launch_helper.is_file():
-        launch_helper = pathlib.Path(__file__).resolve().parent / 'governed-role-launch.py'
+        scripts_dir = pathlib.Path(os.environ.get('OPENCODE_GOVERNANCE_SCRIPTS_DIR') or '')
+        if scripts_dir.is_dir():
+            launch_helper = scripts_dir / 'governed-role-launch.py'
+    if not launch_helper.is_file():
+        # Non-stdin hosts may still resolve via real __file__.
+        try:
+            launch_helper = pathlib.Path(__file__).resolve().parent / 'governed-role-launch.py'
+        except Exception:
+            pass
     if not launch_helper.is_file():
         fail('EFFECT_PLUGIN_NOT_ACTIVE: governed-role-launch.py missing')
     launch_path = manifest_path.parent / 'governed-role-launch-executor.json'

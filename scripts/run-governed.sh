@@ -790,6 +790,10 @@ try:
             tools_dir=pathlib.Path(os.environ.get('OPENCODE_GOVERNANCE_TOOLS_DIR') or (config/'opencode-governance-tools'))
             launch_helper=tools_dir/'governed-role-launch.py'
             if not launch_helper.is_file():
+                scripts_dir=pathlib.Path(os.environ.get('OPENCODE_GOVERNANCE_SCRIPTS_DIR') or '')
+                if scripts_dir.is_dir():
+                    launch_helper=scripts_dir/'governed-role-launch.py'
+            if not launch_helper.is_file():
                 raise RuntimeError('EFFECT_PLUGIN_NOT_ACTIVE: governed-role-launch.py missing')
             pre=subprocess.run([sys.executable,str(launch_helper),'preflight-plugin','--config-dir',str(config)],capture_output=True,text=True)
             if pre.returncode!=0:

@@ -51,6 +51,7 @@ function Invoke-TransportRunner([string]$Project, [string]$Arguments, [string]$M
 function New-SuccessMock([string]$Path, [string]$ExpectedSha, [int]$ExpectedBytes, [string]$ProbeDir) {
     @'
 param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+if($env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH){$d=Split-Path -Parent $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH; if($d){New-Item -ItemType Directory -Force -Path $d|Out-Null}; $r=if($env:OPENCODE_GOVERNANCE_ROLE){$env:OPENCODE_GOVERNANCE_ROLE}else{'architect'}; (@{schema='EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1';role=$r;plugin_sha256='mock';policy_sha256='mock';process_id=$PID;nonce='mock-test'}|ConvertTo-Json -Compress)|Set-Content -LiteralPath $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH -Encoding utf8}
 $project=''; $command=''; $hasFormat=$false
 $argvJoined = ($Args -join ([char]1))
 for($i=0;$i-lt$Args.Count;$i++){
@@ -94,6 +95,7 @@ exit 0
 function New-EarlyCloseMock([string]$Path) {
     @'
 param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+if($env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH){$d=Split-Path -Parent $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH; if($d){New-Item -ItemType Directory -Force -Path $d|Out-Null}; $r=if($env:OPENCODE_GOVERNANCE_ROLE){$env:OPENCODE_GOVERNANCE_ROLE}else{'architect'}; (@{schema='EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1';role=$r;plugin_sha256='mock';policy_sha256='mock';process_id=$PID;nonce='mock-test'}|ConvertTo-Json -Compress)|Set-Content -LiteralPath $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH -Encoding utf8}
 # Exit immediately without reading stdin so the parent hits a broken pipe on large writes.
 exit 0
 '@ | Set-Content -LiteralPath $Path -Encoding utf8
