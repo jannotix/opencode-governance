@@ -111,12 +111,13 @@ if [[ -n "$JSONC_BACKUP" && -f "$JSONC_BACKUP" ]]; then cp -p "$JSONC_BACKUP" "$
 
 if [[ -n "$ROUTING_CONFIG" ]]; then
   tools="$CONFIG_DIR/opencode-governance-tools"
-  for name in architect-attempt.ps1 architect-attempt.sh architect-headless-contract.py context-intelligence.ps1 context-intelligence.sh context-intelligence.py workflow-continuation.ps1 workflow-continuation.py; do [[ ! -f "$tools/$name" ]] || cp -p "$tools/$name" "$backup_dir/$name";done
+  for name in architect-attempt.ps1 architect-attempt.sh architect-headless-contract.py legacy-architect-orphan-recovery.py context-intelligence.ps1 context-intelligence.sh context-intelligence.py workflow-continuation.ps1 workflow-continuation.py; do [[ ! -f "$tools/$name" ]] || cp -p "$tools/$name" "$backup_dir/$name";done
   cp "$SCRIPT_DIR/run-governed.ps1" "$tools/architect-attempt.ps1";cp "$SCRIPT_DIR/run-governed.sh" "$tools/architect-attempt.sh"
   cp "$SCRIPT_DIR/architect-headless-contract.py" "$tools/architect-headless-contract.py"
+  cp "$SCRIPT_DIR/legacy-architect-orphan-recovery.py" "$tools/legacy-architect-orphan-recovery.py"
   cp "$SCRIPT_DIR/context-intelligence.ps1" "$tools/context-intelligence.ps1";cp "$SCRIPT_DIR/context-intelligence.sh" "$tools/context-intelligence.sh";cp "$SCRIPT_DIR/context-intelligence.py" "$tools/context-intelligence.py"
   cp "$SCRIPT_DIR/workflow-continuation.ps1" "$tools/workflow-continuation.ps1";cp "$SCRIPT_DIR/workflow-continuation.py" "$tools/workflow-continuation.py"
-  chmod +x "$tools/architect-attempt.sh" "$tools/architect-headless-contract.py" "$tools/context-intelligence.sh" "$tools/context-intelligence.py" "$tools/workflow-continuation.py"
+  chmod +x "$tools/architect-attempt.sh" "$tools/architect-headless-contract.py" "$tools/legacy-architect-orphan-recovery.py" "$tools/context-intelligence.sh" "$tools/context-intelligence.py" "$tools/workflow-continuation.py"
 
   python3 - "$CONFIG_DIR" <<'PY'
 import json,pathlib,re,sys

@@ -22,9 +22,17 @@ p.add_argument('--opencode-prefix-argument',action='append',default=[])
 p.add_argument('--timeout-seconds',type=int,default=3600)
 p.add_argument('--keep-attempt-logs',action='store_true')
 p.add_argument('--recover-transaction',action='store_true')
-p.add_argument('--recovery-decision',choices=['adopt-governance-only','rollback'])
+p.add_argument('--recovery-decision',choices=['validate-governance-only','adopt-governance-only','rollback'])
 p.add_argument('--expected-transaction-hash')
+p.add_argument('--evidence-bundle-path')
 p.add_argument('--expected-evidence-bundle-hash')
+p.add_argument('--expected-repository-head')
+p.add_argument('--expected-plan-hash')
+p.add_argument('--expected-execution-packet-hash')
+p.add_argument('--expected-checkpoint-hash')
+p.add_argument('--expected-arguments-hash')
+p.add_argument('--expected-stdout-hash')
+p.add_argument('--expected-stderr-hash')
 a=p.parse_args(sys.argv[1:])
 
 WORKSPACE_ROOT_CONTRACT='WORKSPACE_REPOSITORY_ROOT_CONTRACT_V1'
@@ -640,61 +648,47 @@ def open_tx(tx,project_state,before):
     (tx/'meta.json').write_text(json.dumps(meta,separators=(',',':')),encoding='utf-8'); return backup
 def close_tx(tx):
     if tx.exists(): shutil.rmtree(tx)
+def resolve_legacy_recovery_module():
+    # LEGACY_ARCHITECT_ORPHAN_RECOVERY_CONTRACT_V1 + EVIDENCE_BOUND_RECOVERY_RECEIPT_V2
+    # validate-governance-only | adopt-governance-only | rollback via evidence-bundle-path binding.
+    candidates=[]
+    tools_dir=os.environ.get('OPENCODE_GOVERNANCE_TOOLS_DIR')
+    if tools_dir:
+        candidates.append(pathlib.Path(tools_dir)/'legacy-architect-orphan-recovery.py')
+    candidates.append(config/'opencode-governance-tools'/'legacy-architect-orphan-recovery.py')
+    candidates.append(pathlib.Path(tools_dir or '.')/'legacy-architect-orphan-recovery.py')
+    for path in candidates:
+        if path and path.is_file():
+            return path
+    raise RuntimeError('LEGACY_RECOVERY_MODULE_MISSING: legacy-architect-orphan-recovery.py is not installed next to the Architect runner.')
+
 def explicit_recovery():
     if not a.recover_transaction: return False
     if not a.recovery_decision: raise SystemExit('RECOVERY_DECISION_REQUIRED')
     if not a.task_id: raise SystemExit('RECOVERY_TASK_ID_REQUIRED')
-    tx=tx_dir(); meta_path=tx/'meta.json'
-    if not meta_path.is_file(): raise SystemExit(f'RECOVERY_TRANSACTION_NOT_FOUND: {tx}')
-    meta_text=meta_path.read_text(encoding='utf-8-sig')
-    meta=json.loads(meta_text)
-    if pid_alive(meta.get('pid')): raise SystemExit('ARCHITECT_TRANSACTION_ACTIVE')
-    tx_hash=hashlib.sha256(meta_text.encode()).hexdigest()
-    if a.recovery_decision=='adopt-governance-only' and not a.expected_transaction_hash:
-        raise SystemExit('RECOVERY_TRANSACTION_HASH_REQUIRED: adopt-governance-only requires --expected-transaction-hash')
-    if a.expected_transaction_hash and tx_hash!=a.expected_transaction_hash.lower():
-        raise SystemExit(f'RECOVERY_TRANSACTION_HASH_MISMATCH: expected={a.expected_transaction_hash} actual={tx_hash}')
-    if str(meta.get('task_id'))!=a.task_id: raise SystemExit('RECOVERY_TASK_MISMATCH')
-    meta_ws=str(meta.get('workspace_root') or '')
-    meta_repo=str(meta.get('repository_root') or '')
-    if meta_ws and os.path.normcase(meta_ws)!=os.path.normcase(str(project)):
-        raise SystemExit('RECOVERY_WORKSPACE_MISMATCH')
-    if meta_repo and repository is not None and os.path.normcase(meta_repo)!=os.path.normcase(str(repository)):
-        raise SystemExit('RECOVERY_REPOSITORY_MISMATCH')
-    before_fp=str(meta.get('project_state_fingerprint'))
-    after_fp=project_state_fingerprint()
-    if a.recovery_decision=='rollback':
-        if meta.get('managed_governance_roots'): restore_managed_roots(meta['managed_governance_roots'])
-        else: restore_ai(project/'.ai',tx/'ai-snapshot',bool(meta.get('ai_existed')),str(meta.get('ai_hash')))
-        close_tx(tx)
-        print(f'ARCHITECT_RECOVERY_COMPLETE decision=rollback task={a.task_id} transaction_hash={tx_hash}', flush=True)
-        return True
-    if after_fp!=before_fp:
-        raise SystemExit('ARCHITECT_RECOVERY_BLOCKED: PROJECT_STATE_CHANGED (application or non-managed paths). HUMAN_RECOVERY_REQUIRED')
-    a.command='ai-resume'
-    snap=task_snapshot()
-    state=snap['state'] or snap['phase']
-    receipt={
-        'schema':'ARCHITECT_RECOVERY_RECEIPT_V1','decision':'adopt-governance-only','task_id':a.task_id,
-        'workspace_root':str(project),'repository_root':str(repository),'transaction_hash':tx_hash,
-        'project_state_fingerprint':after_fp,'checkpoint_sha256':snap['hash'],'state':snap['state'],
-        'phase':snap['phase'],'next_required_phase':snap['next'],
-        'recovered_at_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'owner_authorized':True,
-    }
-    receipt_dir=project/'.ai'/'recovery'; receipt_dir.mkdir(parents=True, exist_ok=True)
-    receipt_path=receipt_dir/f"ARCHITECT_RECOVERY_{a.task_id}_{time.strftime('%Y%m%d%H%M%S')}.json"
-    receipt_path.write_text(json.dumps(receipt,indent=2),encoding='utf-8')
-    archive=config/'opencode-governance-architect-tx-archive'/hashlib.sha256(str(project).lower().encode()).hexdigest()/tx_hash
-    archive.parent.mkdir(parents=True, exist_ok=True)
-    if archive.exists(): shutil.rmtree(archive)
-    shutil.copytree(tx, archive); close_tx(tx)
-    print(
-        f'ARCHITECT_RECOVERY_COMPLETE decision=adopt-governance-only task={a.task_id} '
-        f'transaction_hash={tx_hash} receipt={receipt_path} state={state} next_required_phase={snap["next"]}',
-        flush=True,
-    )
-    if state=='READY_FOR_EXECUTION' or snap.get('next')=='IMPLEMENTING':
-        print(f'ARCHITECT_PHASE_ADVANCED STATE={state} NEXT_COMMAND=/ai-execute ATTEMPT_CONSUMED=false', flush=True)
+    tx=tx_dir()
+    if not tx.is_dir(): raise SystemExit(f'RECOVERY_TRANSACTION_NOT_FOUND: {tx}')
+    module=resolve_legacy_recovery_module()
+    repo=repository or project
+    cmd=[sys.executable,str(module),'--decision',a.recovery_decision,'--workspace',str(project),'--repository',str(repo),
+         '--task-id',a.task_id,'--transaction-dir',str(tx),'--config-dir',str(config)]
+    def add(flag,value):
+        if value: cmd.extend([flag,str(value)])
+    add('--evidence-bundle',a.evidence_bundle_path)
+    add('--expected-transaction-hash',a.expected_transaction_hash)
+    add('--expected-evidence-bundle-hash',a.expected_evidence_bundle_hash)
+    add('--expected-repository-head',a.expected_repository_head)
+    add('--expected-plan-hash',a.expected_plan_hash)
+    add('--expected-execution-packet-hash',a.expected_execution_packet_hash)
+    add('--expected-checkpoint-hash',a.expected_checkpoint_hash)
+    add('--expected-arguments-hash',a.expected_arguments_hash)
+    add('--expected-stdout-hash',a.expected_stdout_hash)
+    add('--expected-stderr-hash',a.expected_stderr_hash)
+    result=subprocess.run(cmd,capture_output=True,text=True)
+    if result.stdout: print(result.stdout,end='' if result.stdout.endswith('\n') else '\n',flush=True)
+    if result.returncode!=0:
+        raise SystemExit((result.stderr or result.stdout or f'recovery failed: {result.returncode}').strip())
+    if result.stderr: print(result.stderr,end='' if result.stderr.endswith('\n') else '\n',file=sys.stderr,flush=True)
     return True
 def classify(text,timed,code):
     if timed:return 'BOUNDED_TIMEOUT'

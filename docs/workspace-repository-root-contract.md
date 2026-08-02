@@ -1,4 +1,4 @@
-# Workspace / repository root contract (3.7.5)
+# Workspace / repository root contract (3.7.6)
 
 Contract names:
 

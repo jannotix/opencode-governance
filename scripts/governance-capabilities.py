@@ -14,7 +14,7 @@ import stat
 import sys
 from typing import Any
 
-VERSION = "3.7.5"
+VERSION = "3.7.6"
 BASE_VERSION = "3.4.4"
 CAPABILITY_TOOL_NAMES = (
     "governance-authority.py",
@@ -35,6 +35,8 @@ BASE_TOOL_NAMES = (
     "workflow-continuation.ps1",
     "workflow-continuation.py",
 )
+# Product 3.7.6+ managed recovery helper (inserted after headless contract in expected_tools).
+RECOVERY_TOOL_NAME = "legacy-architect-orphan-recovery.py"
 AGENT_NAMES = (
     "architect",
     "build",
@@ -150,7 +152,19 @@ def capability_tools(config: pathlib.Path) -> list[pathlib.Path]:
 
 
 def expected_tools(config: pathlib.Path) -> list[pathlib.Path]:
-    return [*base_tools(config), *capability_tools(config)]
+    tools = config_paths(config)["tools"]
+    base = base_tools(config)
+    # Insert recovery module after architect-headless-contract.py for 3.7.6+.
+    out: list[pathlib.Path] = []
+    inserted = False
+    for path in base:
+        out.append(path)
+        if path.name == "architect-headless-contract.py":
+            out.append(tools / RECOVERY_TOOL_NAME)
+            inserted = True
+    if not inserted:
+        out.append(tools / RECOVERY_TOOL_NAME)
+    return [*out, *capability_tools(config)]
 
 
 def section_key(path: pathlib.Path, config: pathlib.Path, heading: str) -> str:
@@ -316,18 +330,27 @@ def install(source: pathlib.Path, config: pathlib.Path) -> None:
     resolved = config_paths(config)
     resolved["tools"].mkdir(parents=True, exist_ok=True)
     source_tools = [source / name for name in CAPABILITY_TOOL_NAMES]
+    recovery_source = source / RECOVERY_TOOL_NAME
+    if not recovery_source.is_file():
+        # Fallback: same directory as capabilities script (repo scripts/).
+        recovery_source = pathlib.Path(__file__).resolve().parent / RECOVERY_TOOL_NAME
     for path in source_tools:
         if not path.is_file():
             fail("CAPABILITY_SOURCE_MISSING", str(path))
+    if not recovery_source.is_file():
+        fail("CAPABILITY_SOURCE_MISSING", RECOVERY_TOOL_NAME)
     destinations = capability_tools(config)
+    recovery_dest = resolved["tools"] / RECOVERY_TOOL_NAME
     section_files = [config / "agents" / f"{name}.md" for name in AGENT_NAMES]
     section_files += [config / "commands" / f"{name}.md" for name in ("ai-review", "ai-workflow", "ai-resume", "ai-release", "ai-status", "ai-metrics")]
-    affected = [*destinations, *section_files, resolved["manifest"], resolved["legacy_manifest"]]
+    affected = [*destinations, recovery_dest, *section_files, resolved["manifest"], resolved["legacy_manifest"]]
     backup_dir, existed = backup(config, affected)
     try:
         for source_tool, destination in zip(source_tools, destinations):
             shutil.copy2(source_tool, destination)
             destination.chmod(destination.stat().st_mode | stat.S_IXUSR)
+        shutil.copy2(recovery_source, recovery_dest)
+        recovery_dest.chmod(recovery_dest.stat().st_mode | stat.S_IXUSR)
         tool_map = {
             "authority": destinations[0],
             "memory": destinations[1],
