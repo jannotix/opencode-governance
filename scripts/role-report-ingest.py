@@ -210,7 +210,10 @@ def ingest(
 
     envelope = json.loads(envelope_path.read_text(encoding="utf-8-sig"))
     schema = envelope.get("schema")
-    allow_legacy = bool(envelope.get("allow_legacy_schema")) or os.environ.get("OPENCODE_GOVERNANCE_ALLOW_LEGACY_REPORT_SCHEMA") == "1"
+    # S-014: legacy-schema acceptance is gated SOLELY on a trusted operator env
+    # var, never on caller-supplied envelope input. A caller must not be able to
+    # downgrade the production schema by setting a flag inside the ingest payload.
+    allow_legacy = os.environ.get("OPENCODE_GOVERNANCE_ALLOW_LEGACY_REPORT_SCHEMA") == "1"
     if schema == SCHEMA:
         pass
     elif schema in LEGACY_SCHEMAS and allow_legacy:
@@ -278,10 +281,12 @@ def ingest(
                 emit_error("ROLE_REPORT_ROUTE_RECEIPT_PACKET_MISMATCH", str(receipt.get("packet_sha256")))
             route_id = str(receipt.get("route_id"))
             model_family = str(receipt.get("model_family"))
-        elif schema == SCHEMA and not envelope.get("accept_legacy_route_receipt"):
+        elif schema == SCHEMA and os.environ.get("OPENCODE_GOVERNANCE_ALLOW_LEGACY_ROUTE_RECEIPT") != "1":
+            # S-014: legacy loose receipts are gated SOLELY on a trusted operator
+            # env var, never on caller-supplied envelope input.
             emit_error("ROLE_REPORT_ROUTE_RECEIPT_INVALID", "production requires AUTHORITATIVE_ROUTE_RECEIPT_V1")
         else:
-            # Legacy loose path (opt-in only): tolerate route_id/model_family strings.
+            # Legacy loose path (operator opt-in via env only): tolerate route_id/model_family strings.
             route_id = str(receipt.get("route_id") or receipt.get("route") or "")
             model_family = str(receipt.get("model_family") or receipt.get("family") or "")
             if not route_id or not model_family:
@@ -335,6 +340,11 @@ def ingest(
             handle.write(json.dumps(entry, sort_keys=True) + "\n")
 
     _journal("PREPARED")
+    # S-016: snapshot prior committed artifacts so a mid-transaction crash can
+    # restore them. Without this, overwriting `dest` before meta/commit are
+    # written would leave an uncommitted body and lose the prior committed state.
+    prior_dest_bytes = dest.read_bytes() if dest.exists() and not is_symlink_or_reparse(dest) else None
+    prior_meta_bytes = meta_path.read_bytes() if meta_path.exists() and not is_symlink_or_reparse(meta_path) else None
     # Stage the body into the transaction dir first.
     staged_body = tx_dir / out_name
     staged_body.write_bytes(body_bytes)
@@ -347,7 +357,7 @@ def ingest(
     written_body_hash = atomic_write_no_clobber(dest, body_bytes, allow_identical=allow_identical_idempotent)
     if written_body_hash != staged_body_hash:
         # Roll back to prior committed artifact if any; remove the partial new.
-        _rollback_transaction(tx_dir, dest, meta_path)
+        _rollback_transaction(tx_dir, dest, meta_path, prior_dest_bytes, prior_meta_bytes)
         emit_error("ROLE_REPORT_TX_BODY_PERSIST_MISMATCH", f"{written_body_hash}!={staged_body_hash}")
 
     completed = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -377,7 +387,7 @@ def ingest(
     meta_hash = atomic_write_no_clobber(meta_path, meta_bytes, allow_identical=allow_identical_idempotent)
     # Re-hash persisted metadata.
     if sha256_file(meta_path) != meta_hash:
-        _rollback_transaction(tx_dir, dest, meta_path)
+        _rollback_transaction(tx_dir, dest, meta_path, prior_dest_bytes, prior_meta_bytes)
         emit_error("ROLE_REPORT_TX_META_PERSIST_MISMATCH")
     _journal("COMMITTING", {"metadata_sha256": meta_hash})
     # Content-bound receipt
@@ -399,7 +409,7 @@ def ingest(
     receipt_bytes = (json.dumps(receipt, indent=2, sort_keys=True) + "\n").encode("utf-8")
     atomic_write_no_clobber(receipt_path, receipt_bytes, allow_identical=True)
     if sha256_file(receipt_path) != hashlib.sha256(receipt_bytes).hexdigest():
-        _rollback_transaction(tx_dir, dest, meta_path)
+        _rollback_transaction(tx_dir, dest, meta_path, prior_dest_bytes, prior_meta_bytes)
         emit_error("ROLE_REPORT_TX_RECEIPT_PERSIST_MISMATCH")
     # S-016: publish a single COMMIT marker only after every destination is
     # persisted and re-hashed.
@@ -418,8 +428,28 @@ def ingest(
     return receipt
 
 
-def _rollback_transaction(tx_dir: pathlib.Path, dest: pathlib.Path, meta_path: pathlib.Path) -> None:
-    """S-016 recovery: remove partial new artifacts; preserve prior committed state."""
+def _rollback_transaction(tx_dir: pathlib.Path, dest: pathlib.Path, meta_path: pathlib.Path,
+                          prior_dest: bytes | None = None, prior_meta: bytes | None = None) -> None:
+    """S-016 recovery: remove partial new artifacts and RESTORE the prior
+    committed body/metadata so a mid-transaction crash does not leave an
+    uncommitted body without metadata, or lose the previous committed state."""
+    try:
+        # Restore prior committed artifacts if they were snapshotted.
+        if prior_dest is not None:
+            tmp = dest.with_name(dest.name + f".restore.{os.getpid()}")
+            tmp.write_bytes(prior_dest)
+            os.replace(tmp, dest)
+        elif dest.exists():
+            # No prior artifact existed; this transaction created dest — remove it.
+            dest.unlink(missing_ok=True)
+        if prior_meta is not None:
+            tmp = meta_path.with_name(meta_path.name + f".restore.{os.getpid()}")
+            tmp.write_bytes(prior_meta)
+            os.replace(tmp, meta_path)
+        elif meta_path.exists():
+            meta_path.unlink(missing_ok=True)
+    except Exception:
+        pass
     try:
         if tx_dir.exists():
             shutil.rmtree(tx_dir, ignore_errors=True)

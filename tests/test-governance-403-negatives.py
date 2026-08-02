@@ -106,6 +106,32 @@ class PatchPathTests(unittest.TestCase):
         # Traversal in an apply_patch target is rejected as outside the execution root.
         self.assertIn("OUTSIDE_EXECUTION_ROOT", r.stdout)
 
+    def test_combined_diff_paths_extracted(self) -> None:
+        """diff --cc / --combined headers are parsed, not silently skipped."""
+        out = self._extract({"patch": "diff --combined src/merged.js\nindex ..\n@@@ \n@@@ \n-old\n+new\n+++ b/src/merged.js\n"})
+        self.assertIn("src/merged.js", out["paths"])
+
+    def test_git_quoted_path_unquoted(self) -> None:
+        """Paths git quotes (spaces/special) are unquoted before containment."""
+        out = self._extract({"patch": '+++ "b/weird path.js"\n@@\n+x\n'})
+        self.assertIn("weird path.js", out["paths"])
+
+    def test_unextracted_patch_payload_fails_closed(self) -> None:
+        """An edit tool carrying a patch-like payload from which NO path can be
+        extracted must fail closed (S-008), not silently skip path checks."""
+        out = self._extract({"patch": "this is a patch but has no recognizable headers"}, )
+        # without tool context extractPatchPaths returns ok=True; the fail-closed
+        # flag is set only when tool is provided. Verify the tool-aware path:
+        script = (
+            f"import P from {json.dumps(self.plugin_url)}; "
+            "console.log(JSON.stringify(P._extractPatchPaths({patch:'no headers here'}, {tool:'apply_patch'})));"
+        )
+        r = subprocess.run([self.node, "--input-type=module", "-e", script],
+                           capture_output=True, text=True, check=True)
+        result = json.loads(r.stdout)
+        self.assertFalse(result["ok"], result)
+        self.assertEqual(result["reason"], "PATCH_PATHS_UNEXTRACTED")
+
 
 @unittest.skipUnless(node_available(), "node not available")
 class ExecutorBrokerTests(unittest.TestCase):
@@ -374,6 +400,142 @@ class LaunchV3Tests(unittest.TestCase):
             self.assertTrue(body["nonce"])
             self.assertIn("tool_capability_manifest_sha256", body)
             self.assertIn("route", body)
+
+
+@unittest.skipUnless(node_available(), "node not available")
+class HostAckBindingTests(unittest.TestCase):
+    """S-001 blocker fix: the host-ack nonce must be cryptographically bound to
+    the emitted READY. A forged ack with a wrong nonce must be rejected."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.node = node_available()
+        cls.plugin_url = PLUGIN_MJS.resolve().as_uri()
+
+    def _run_enforce_with_ack(self, ack_nonce: str) -> str:
+        """Drive the plugin through writeReady -> readHostAck -> enforce, with a
+        caller-controlled ack nonce, and return stdout (ALLOWED or DENIED:...)."""
+        # A launch with a real nonce so ready_nonce is derived (production path).
+        launch = {"schema": "GOVERNED_ROLE_LAUNCH_CONTRACT_V3", "launch_id": "L1",
+                  "nonce": "abc123", "_launch_sha256": "deadbeef"}
+        script = (
+            f"import P from {json.dumps(self.plugin_url)}; "
+            "import fs from 'node:fs'; import path from 'node:path'; import os from 'node:os'; "
+            "const td = fs.mkdtempSync(path.join(os.tmpdir(), 'ack-')); "
+            "const hs = path.join(td, 'ready.json'); const ack = path.join(td, 'ack.json'); "
+            "process.env.OPENCODE_GOVERNANCE_EFFECT_ENFORCEMENT_ACTIVE='1'; "
+            "process.env.OPENCODE_GOVERNANCE_ROLE='executor'; "
+            "process.env.OPENCODE_GOVERNANCE_EFFECT_POLICY=" + json.dumps(str(POLICY)) + "; "
+            "process.env.OPENCODE_GOVERNANCE_HANDSHAKE_PATH=hs; "
+            "process.env.OPENCODE_GOVERNANCE_REQUIRE_HOST_ACK='1'; "
+            "process.env.OPENCODE_GOVERNANCE_HOST_ACK_PATH=ack; "
+            "process.env.OPENCODE_GOVERNANCE_EXECUTION_ROOT=td; "
+            "process.env.OPENCODE_GOVERNANCE_SESSION_ID='s1'; "
+            "const ready = P._writeReady({}, " + json.dumps(launch) + ", P._loadPolicy()); "
+            "fs.writeFileSync(ack, JSON.stringify({schema:'GOVERNED_ROLE_HOST_ACK_V1',ready_nonce:" + json.dumps(ack_nonce) + ",process_id:process.pid,session_id:'s1'})); "
+            "try { P._enforce(P._loadPolicy(), {tool:'read', args:{path:'x'}}, {args:{path:'x'}}, {}); console.log('ALLOWED'); } "
+            "catch(e){ console.log('DENIED:'+String(e.message||e)); }"
+        )
+        r = subprocess.run([self.node, "--input-type=module", "-e", script],
+                           capture_output=True, text=True, check=True)
+        return r.stdout.strip()
+
+    def test_forged_ack_nonce_rejected(self) -> None:
+        """A wrong-nonce ack must NOT open the gate (S-001 binding)."""
+        out = self._run_enforce_with_ack("forged-wrong-nonce")
+        self.assertIn("DENIED", out, out)
+        self.assertIn("NONCE_MISMATCH", out)
+
+
+class EnvelopeDowngradeTests(unittest.TestCase):
+    """S-014 blocker fix: caller-supplied envelope flags must NOT downgrade the
+    production route-receipt / schema requirements."""
+
+    def _route_receipt(self, td: pathlib.Path, role: str) -> pathlib.Path:
+        out = td / f"route-{role}.json"
+        subprocess.run([sys.executable, str(ROUTE_RECEIPT), "emit", "--out", str(out),
+                        "--role", role, "--task-id", "T1", "--route-id", "r1", "--model", "m",
+                        "--variant", "minimal", "--model-family", "f", "--provider-route-identity", "p1",
+                        "--packet-sha256", "ab" * 32, "--candidate-identity", "cand1",
+                        "--selection-policy-sha256", "0" * 64, "--launch-sha256", "1" * 64,
+                        "--role-process-receipt-sha256", "2" * 64, "--process-id", "1", "--session-id", "s1",
+                        "--started-at-utc", "2026-08-02T10:00:00Z",
+                        "--completed-at-utc", "2026-08-02T10:05:00Z"],
+                       check=True, capture_output=True)
+        return out
+
+    def test_accept_legacy_route_receipt_in_envelope_ignored(self) -> None:
+        """A caller setting accept_legacy_route_receipt=true in the envelope must
+        NOT bypass AUTHORITATIVE_ROUTE_RECEIPT_V1 on the production path."""
+        with tempfile.TemporaryDirectory() as td:
+            td = pathlib.Path(td)
+            project = td / "proj"
+            (project / ".ai" / "tasks" / "T1" / "reports").mkdir(parents=True)
+            # A loose/legacy route receipt (NOT authoritative schema).
+            loose_rr = td / "loose-route.json"
+            loose_rr.write_text(json.dumps({"route_id": "r1", "model_family": "f", "role": "implementation-reviewer"}), encoding="utf-8")
+            body = "# impl\n"
+            env_obj = {
+                "schema": "opencode-governance.role-report/v3", "role": "implementation-reviewer",
+                "task_id": "T1", "packet_sha256": "ab" * 32, "candidate_identity": "cand1",
+                "evidence_manifest_sha256": "cd" * 32, "report_body_sha256": sha256_text(body),
+                "permission_policy_sha256": "ef" * 32, "verdict": "PASS", "secret_scan": "PASS",
+                "model_family": "f", "accept_legacy_route_receipt": True,
+            }
+            ep = td / "env.json"; bp = td / "body.md"
+            ep.write_text(json.dumps(env_obj), encoding="utf-8"); bp.write_text(body, encoding="utf-8")
+            r = subprocess.run([sys.executable, str(INGEST), "ingest", "--project-dir", str(project),
+                                "--envelope", str(ep), "--body", str(bp), "--route-receipt", str(loose_rr)],
+                               capture_output=True, text=True)
+            self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("AUTHORITATIVE_ROUTE_RECEIPT_V1", r.stderr)
+
+
+class TransactionRollbackTests(unittest.TestCase):
+    """S-016 blocker fix: rollback must restore prior committed artifacts."""
+
+    def test_rollback_restores_prior_body(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            td = pathlib.Path(td)
+            project = td / "proj"
+            reports = project / ".ai" / "tasks" / "T1" / "reports"
+            reports.mkdir(parents=True)
+            dest = reports / "REVIEW_IMPLEMENTATION.md"
+            meta = reports / "REVIEW_IMPLEMENTATION.ingest.json"
+            prior_body = b"# prior committed\n"
+            prior_meta = b'{"prior": true}\n'
+            dest.write_bytes(prior_body)
+            meta.write_bytes(prior_meta)
+            from importlib import util as _util
+            spec = _util.spec_from_file_location("_ing", INGEST)
+            mod = _util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            tx_dir = reports / ".transactions" / "tx-test"
+            tx_dir.mkdir(parents=True)
+            # Simulate a partial new body written to dest before failure.
+            dest.write_bytes(b"# uncommitted new\n")
+            mod._rollback_transaction(tx_dir, dest, meta, prior_dest=prior_body, prior_meta=prior_meta)
+            self.assertEqual(dest.read_bytes(), prior_body, "prior body not restored on rollback")
+            self.assertEqual(meta.read_bytes(), prior_meta, "prior meta not restored on rollback")
+            self.assertFalse(tx_dir.exists(), "tx dir not cleaned up")
+
+    def test_rollback_removes_created_dest_when_no_prior(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            td = pathlib.Path(td)
+            project = td / "proj"
+            reports = project / ".ai" / "tasks" / "T1" / "reports"
+            reports.mkdir(parents=True)
+            dest = reports / "REVIEW_IMPLEMENTATION.md"
+            meta = reports / "REVIEW_IMPLEMENTATION.ingest.json"
+            dest.write_bytes(b"# uncommitted\n")
+            from importlib import util as _util
+            spec = _util.spec_from_file_location("_ing", INGEST)
+            mod = _util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            tx_dir = reports / ".transactions" / "tx-test"
+            tx_dir.mkdir(parents=True)
+            mod._rollback_transaction(tx_dir, dest, meta, prior_dest=None, prior_meta=None)
+            self.assertFalse(dest.exists(), "newly-created dest should be removed when no prior existed")
 
 
 if __name__ == "__main__":

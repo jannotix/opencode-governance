@@ -402,29 +402,44 @@ function classifyExecutorBroker(head, tokens, roots) {
  * extract every file path so containment can be enforced for all targets.
  * Returns { paths: [...], ok: bool, reason }. Fails closed on unknown shapes.
  */
-function extractPatchPaths(args) {
+function _stripGitPathQuoting(s) {
+  // Git quotes paths containing spaces/special chars: +++ "b/weird path.js"
+  let v = String(s);
+  if (v.startsWith('"') && v.endsWith('"') && v.length >= 2) {
+    v = v.slice(1, -1);
+    // unescape \" and \\ (best-effort, sufficient for path containment)
+    v = v.replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+  }
+  return v;
+}
+
+function extractPatchPaths(args, { tool } = {}) {
   const out = { paths: [], ok: true, reason: "" };
   if (!args || typeof args !== "object") return out;
   // Direct path keys (write/edit-like invocation)
   for (const k of ["filePath", "path", "file", "target"]) {
     if (typeof args[k] === "string" && args[k]) out.paths.push(args[k]);
   }
-  // apply_patch with a unified-diff payload in patch/diff
+  // apply_patch with a unified-diff payload in patch/diff/content/input.
+  let sawPatchPayload = false;
   for (const key of ["patch", "diff", "content", "input"]) {
     let raw = args[key];
     if (typeof raw !== "string" || !raw) continue;
-    // Unified diff file headers: ^+++ b/path , ^--- a/path , and git "diff --git a/x b/x"
+    sawPatchPayload = true;
     const lines = raw.split(/\r?\n/);
     for (const line of lines) {
       if (line.startsWith("diff --git a/") && line.includes(" b/")) {
-        // diff --git a/PATH b/PATH
         const m = line.match(/^diff --git a\/(.*) b\/(.*)$/);
         if (m) {
-          out.paths.push(m[1]);
-          out.paths.push(m[2]);
+          out.paths.push(_stripGitPathQuoting(m[1]));
+          out.paths.push(_stripGitPathQuoting(m[2]));
         }
+      } else if (/^diff --cc /.test(line) || /^diff --combined /.test(line)) {
+        // Combined/merge diff header: "diff --cc <path>"
+        const m = line.match(/^diff --(?:cc|combined) (\S.*)$/);
+        if (m) out.paths.push(_stripGitPathQuoting(m[1]));
       } else if (line.startsWith("+++ ") || line.startsWith("--- ")) {
-        const rest = line.slice(4).trimEnd();
+        const rest = _stripGitPathQuoting(line.slice(4).trimEnd());
         if (rest === "/dev/null") continue;
         // strip optional "b/" or "a/" prefix
         const stripped = rest.replace(/^[ab]\//, "");
@@ -433,9 +448,11 @@ function extractPatchPaths(args) {
         }
       } else if (/^rename from |^rename to |^copy from |^copy to /.test(line)) {
         const v = line.split(" ", 3)[2];
-        if (v) out.paths.push(v);
+        if (v) out.paths.push(_stripGitPathQuoting(v));
       } else if (line.startsWith("new file mode") || line.startsWith("deleted file mode")) {
         // path follows on next +++/--- line; captured above
+      } else if (/^\+\+\+ /) {
+        // already handled
       }
     }
   }
@@ -448,10 +465,18 @@ function extractPatchPaths(args) {
         for (const k of ["filePath", "path", "file", "target"]) {
           if (typeof item[k] === "string" && item[k]) out.paths.push(item[k]);
         }
-        // {find, replace} edits sometimes carry path via nested target
         if (typeof item.target === "string") out.paths.push(item.target);
       }
     }
+  }
+  // S-008 fail-closed: an edit/apply_patch/multiedit tool carrying a string
+  // patch-like payload from which NO path could be extracted is ambiguous; we
+  // must not silently skip path/secret/containment checks while the write
+  // proceeds. Mark ok=false so callers can reject.
+  const editLike = ["apply_patch", "multiedit", "edit", "write"];
+  if (tool && editLike.includes(String(tool).toLowerCase()) && sawPatchPayload && out.paths.length === 0) {
+    out.ok = false;
+    out.reason = "PATCH_PATHS_UNEXTRACTED";
   }
   // Dedupe while preserving order
   const seen = new Set();
@@ -474,16 +499,16 @@ function classifyTool(tool, args) {
         const man = JSON.parse(fs.readFileSync(manifestRaw, "utf8"));
         const entry = (man.tools || []).find((x) => String(x.name || "").toLowerCase() === t);
         if (entry && Array.isArray(entry.effects) && entry.effects.length) {
-          const pe = extractPatchPaths(args);
+          const pe = extractPatchPaths(args, { tool: t });
           const filePath = pe.paths[0] || args.filePath || args.path || args.file || args.target || null;
-          return { effects: entry.effects, path: filePath, paths: pe.paths, registered: true, custom: true };
+          return { effects: entry.effects, path: filePath, paths: pe.paths, patchOk: pe.ok, patchReason: pe.reason, registered: true, custom: true };
         }
       } catch { /* fall through */ }
     }
-    return { effects: null, path: null, paths: [], unknown: true };
+    return { effects: null, path: null, paths: [], patchOk: true, unknown: true };
   }
   // Registry entry may carry patch diff keys (apply_patch).
-  const pe = extractPatchPaths(args);
+  const pe = extractPatchPaths(args, { tool: t });
   let filePath = null;
   for (const k of reg.pathKeys) {
     if (args && args[k] != null) {
@@ -493,7 +518,7 @@ function classifyTool(tool, args) {
   }
   // For apply_patch/multiedit, prefer the extracted path list as authoritative.
   const paths = pe.paths.length ? pe.paths : filePath ? [filePath] : [];
-  return { effects: reg.effects, path: paths[0] || filePath, paths, registered: true };
+  return { effects: reg.effects, path: paths[0] || filePath, paths, patchOk: pe.ok, patchReason: pe.reason, registered: true };
 }
 
 function buildRoots() {
@@ -647,26 +672,50 @@ function claimSession(launch, ctx) {
   };
   if (claimPath) {
     try {
-      if (fs.existsSync(claimPath) && !fs.lstatSync(claimPath).isSymbolicLink()) {
-        const existing = JSON.parse(fs.readFileSync(claimPath, "utf8"));
-        // Same launch claimed by a DIFFERENT live process/session => replay attack.
-        const sameProc = Number(existing.process_id) === myPid;
-        const sameSession = !sid || !existing.session_id || existing.session_id === sid;
-        if (!sameProc || !sameSession) {
-          const err = new Error(
-            `ROLE_SESSION_CLAIM_REJECTED: launch ${launch.launch_id} already claimed by pid=${existing.process_id} session=${existing.session_id}; this pid=${myPid} session=${sid}`
-          );
-          err.code = "ROLE_SESSION_CLAIM_REJECTED";
-          throw err;
+      if (fs.lstatSync(claimPath || "").isSymbolicLink()) {
+        const err = new Error(`ROLE_SESSION_CLAIM_REJECTED: claim path is symlink: ${claimPath}`);
+        err.code = "ROLE_SESSION_CLAIM_REJECTED";
+        throw err;
+      }
+    } catch (e) {
+      if (e && e.code === "ROLE_SESSION_CLAIM_REJECTED") throw e;
+      // non-existent path is fine; other stat errors fall through to the atomic claim.
+    }
+    // S-012: atomic exclusive claim. O_EXCL ("wx") ensures two processes cannot
+    // both observe "no claim" and both write — the second openSync fails with
+    // EEXIST, which we treat as a replay rejection. This closes the TOCTOU race
+    // that a check-then-write rename window left open.
+    let fd = -1;
+    try {
+      try {
+        fd = fs.openSync(claimPath, "wx", 0o600);
+      } catch (e) {
+        if (e && (e.code === "EEXIST" || e.code === "EPERM")) {
+          // Claim file exists — another process/session already claimed this launch.
+          let existing = null;
+          try { existing = JSON.parse(fs.readFileSync(claimPath, "utf8")); } catch { /* unreadable */ }
+          const sameProc = existing && Number(existing.process_id) === myPid;
+          const sameSession = !sid || !existing || !existing.session_id || existing.session_id === sid;
+          if (!sameProc || !sameSession) {
+            const err = new Error(
+              `ROLE_SESSION_CLAIM_REJECTED: launch ${launch.launch_id} already claimed by pid=${existing && existing.process_id} session=${existing && existing.session_id}; this pid=${myPid} session=${sid}`
+            );
+            err.code = "ROLE_SESSION_CLAIM_REJECTED";
+            throw err;
+          }
+          // Same process/session re-claiming is allowed (idempotent within the session).
+        } else {
+          throw e;
         }
       }
-      const tmp = claimPath + ".tmp";
-      fs.writeFileSync(tmp, JSON.stringify(claimBody, null, 2) + "\n", "utf8");
-      fs.renameSync(tmp, claimPath);
-      try { fs.chmodSync(claimPath, 0o600); } catch { /* best-effort */ }
+      if (fd >= 0) {
+        fs.writeFileSync(fd, JSON.stringify(claimBody, null, 2) + "\n", "utf8");
+        fs.closeSync(fd);
+      }
     } catch (e) {
       if (e && e.code === "ROLE_SESSION_CLAIM_REJECTED") throw e;
       // claim write failure is non-fatal for same-process reuse; proceed.
+      try { if (fd >= 0) fs.closeSync(fd); } catch { /* ignore */ }
     }
   }
   claimedLaunch = { body: launch, claimedAt: claimBody.claimed_utc || claimBody.claimed_at_utc, pid: myPid, ppid: process.ppid, sessionId: sid };
@@ -738,6 +787,9 @@ function writeReady(ctx, launch, policy) {
   const tmp = out + ".tmp";
   fs.writeFileSync(tmp, JSON.stringify(body, null, 2) + "\n", "utf8");
   fs.renameSync(tmp, out);
+  // Cache the emitted READY so the host-ack gate can bind the acknowledgement
+  // back to THIS process's READY nonce (S-001).
+  emittedReady = body;
   return body;
 }
 
@@ -767,6 +819,10 @@ function writeNotReady(reason, detail) {
 }
 
 /** Read & validate the host acknowledgement bound to READY (S-001 gate). */
+// The emitted READY body, cached so the host-ack gate can cryptographically
+// bind the acknowledgement to THIS process's READY (S-001). Set by writeReady.
+let emittedReady = null;
+
 function readHostAck() {
   const ackPath = process.env.OPENCODE_GOVERNANCE_HOST_ACK_PATH || "";
   if (!ackPath) return { ok: false, reason: "HOST_ACK_PATH_UNSET" };
@@ -787,6 +843,12 @@ function readHostAck() {
   // Bind to the READY nonce we emitted.
   const readySecret = ack.ready_nonce || "";
   if (!readySecret) return { ok: false, reason: "HOST_ACK_MISSING_NONCE" };
+  // S-001: cryptographically verify the host saw THIS process's READY by
+  // comparing the ack's ready_nonce to the one we derived from the launch nonce.
+  if (!emittedReady) return { ok: false, reason: "HOST_ACK_READY_NOT_EMITTED" };
+  if (!verifyHostAckAgainstReady(emittedReady, ack)) {
+    return { ok: false, reason: "HOST_ACK_NONCE_MISMATCH", detail: "ack ready_nonce does not bind to emitted READY" };
+  }
   return { ok: true, ack };
 }
 
@@ -867,6 +929,11 @@ function enforce(policy, input, output, ctx) {
   const classified = classifyTool(tool, args);
   if (classified.unknown || !classified.effects) {
     throw new Error(`TOOL_EFFECT_CLASSIFICATION_UNKNOWN: tool=${tool}`);
+  }
+  // S-008 fail-closed: an edit-like tool with a patch payload from which no
+  // path could be extracted must not bypass path/secret/containment checks.
+  if (classified.patchOk === false) {
+    throw new Error(`EFFECT_ENFORCEMENT_PATCH_PATHS_UNEXTRACTED: tool=${tool} reason=${classified.patchReason || ""}`);
   }
   // Enforce allowed_effects as allowlist when present
   const allowed = rolePolicy.allowed_effects || [];
@@ -1098,6 +1165,7 @@ OpenCodeGovernanceEffectEnforcement._classifyTool = classifyTool;
 OpenCodeGovernanceEffectEnforcement._isContainedPath = isContainedPath;
 OpenCodeGovernanceEffectEnforcement._writeReady = writeReady;
 OpenCodeGovernanceEffectEnforcement._writeNotReady = writeNotReady;
+OpenCodeGovernanceEffectEnforcement._readHostAck = readHostAck;
 OpenCodeGovernanceEffectEnforcement._extractPatchPaths = extractPatchPaths;
 OpenCodeGovernanceEffectEnforcement._deriveOpencodeVersion = deriveOpencodeVersion;
 OpenCodeGovernanceEffectEnforcement._resetClaimedLaunch = function () { claimedLaunch = null; };
