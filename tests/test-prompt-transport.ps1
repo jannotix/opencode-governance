@@ -9,7 +9,7 @@ $Config = Join-Path $TempRoot 'config'
 $Runner = Join-Path $Config 'opencode-governance-tools/architect-attempt.ps1'
 $Manifest = Join-Path $Config 'opencode-governance-routing.json'
 $RoutingRaw = Get-Content -LiteralPath $Manifest -Raw
-if ($RoutingRaw -notmatch '3\.7\.4') { throw "Installed governance_version is not 3.7.4: $RoutingRaw" }
+if ($RoutingRaw -notmatch '3\.7\.5') { throw "Installed governance_version is not 3.7.5: $RoutingRaw" }
 
 function Get-TextHash([string]$Text) {
     $bytes = [Text.Encoding]::UTF8.GetBytes($Text)

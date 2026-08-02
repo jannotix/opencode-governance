@@ -5,6 +5,20 @@ Dates use `YYYY-MM-DD`. Older micro-releases are summarized; see git history for
 ## Unreleased
 
 
+## 3.7.5 - 2026-08-02
+
+- Reliability and transaction-integrity patch for nested workspace / repository layouts: `WORKSPACE_REPOSITORY_ROOT_CONTRACT_V1` and `MULTI_GOVERNANCE_ROOT_TRANSACTION_V1`.
+- Distinguishes workspace root, application repository root, exact managed Governance roots (workspace `.ai` and repository `.ai`), executor worktree roots, and transaction evidence roots.
+- `-WorkspaceDir` / `-RepositoryDir` (Unix: `--workspace-dir` / `--repository-dir`); `-ProjectDir` remains a compatibility alias for the workspace root.
+- Repository resolution order: explicit repository dir → unique nested Git root → workspace when it is Git or a non-Git application root. Multiple nested Git repositories return `REPOSITORY_ROOT_AMBIGUOUS`; roots outside the workspace return `REPOSITORY_ROOT_OUTSIDE_WORKSPACE`.
+- Project fingerprint excludes only `.git/**` metadata and exact registered managed Governance roots (not arbitrary nested `.ai` directories).
+- Snapshots and restores every managed Governance root; partial multi-root restore fails closed as `MULTI_ROOT_RESTORE_INCOMPLETE` / orphan transaction.
+- `PROJECT_STATE_CHANGESET_DIAGNOSTIC_V1` classifies fingerprint deltas (`GOVERNANCE_ONLY_CHANGE`, `APPLICATION_SOURCE_CHANGE`, `GIT_METADATA_CHANGE`, `DEPENDENCY_CHANGE`, `GENERATED_ARTIFACT_CHANGE`, `UNKNOWN_CHANGE`) without printing file contents.
+- Explicit orphan recovery: `-RecoverTransaction` with `-RecoveryDecision adopt-governance-only|rollback`, content-bound recovery receipt, no auto-adoption.
+- Headless permission contract accepts path-bound read-only `git -C <repository> …` forms; write/mutating Git and broad shell/PowerShell remain denied.
+- `/ai-resume` that reaches `READY_FOR_EXECUTION` emits `ARCHITECT_PHASE_ADVANCED` with `NEXT_COMMAND=/ai-execute` and `ATTEMPT_CONSUMED=false`.
+- Windows, Unix, and Python nested-workspace regressions.
+
 ## 3.7.4 - 2026-08-02
 
 - Reliability patch: `ARCHITECT_STDIN_PROMPT_TRANSPORT_V1` streams the complete governed Architect handoff over redirected stdin instead of the process command line.

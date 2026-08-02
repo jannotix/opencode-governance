@@ -12,30 +12,35 @@ CONTRACT_VERSION = "ARCHITECT_HEADLESS_PERMISSION_CONTRACT_V1"
 # Deny-by-default bash: "*" deny first; explicit read-only allows; then hard denials.
 # Last matching rule wins in OpenCode.
 
-_GIT_ALLOWS = [
-    "git status",
-    "git status *",
-    "git diff",
-    "git diff *",
-    "git log",
-    "git log *",
-    "git show",
-    "git show *",
-    "git grep",
-    "git grep *",
-    "git rev-parse",
-    "git rev-parse *",
-    "git ls-files",
-    "git ls-files *",
-    "git submodule status",
-    "git submodule status *",
-    "git worktree list",
-    "git worktree list *",
-    "git branch --show-current",
-    "git branch --show-current *",
-    "git remote -v",
-    "git remote -v *",
+# Read-only git: direct forms and canonical `git -C <repository> <subcommand>` forms.
+# Patterns are evaluated by evaluate_bash_permission (wildcard match + progressive prefixes).
+_GIT_SUBCOMMANDS = [
+    "status",
+    "diff",
+    "log",
+    "show",
+    "grep",
+    "rev-parse",
+    "ls-files",
+    "rev-list",
+    "submodule status",
+    "worktree list",
+    "branch --show-current",
+    "remote -v",
 ]
+
+def _git_allow_patterns() -> list[str]:
+    patterns: list[str] = []
+    for sub in _GIT_SUBCOMMANDS:
+        patterns.append(f"git {sub}")
+        patterns.append(f"git {sub} *")
+        # Canonical path-bound form used by headless Architect against repository root.
+        patterns.append(f"git -C * {sub}")
+        patterns.append(f"git -C * {sub} *")
+    return patterns
+
+
+_GIT_ALLOWS = _git_allow_patterns()
 
 _UNIX_ALLOWS = [
     "pwd",
@@ -399,6 +404,43 @@ def _wildcard_match(pattern: str, text: str) -> bool:
     return re.fullmatch("".join(regex), text, flags=re.IGNORECASE | re.DOTALL) is not None
 
 
+_GIT_WRITE_SUBCOMMANDS = {
+    "push",
+    "fetch",
+    "pull",
+    "merge",
+    "rebase",
+    "cherry-pick",
+    "revert",
+    "reset",
+    "checkout",
+    "switch",
+    "clean",
+    "add",
+    "commit",
+}
+
+
+def _normalize_git_c_form(command: str) -> str:
+    """Normalize `git -C <path> <sub...>` for policy matching without granting path escape."""
+    tokens = command.split()
+    if len(tokens) >= 4 and tokens[0].lower() == "git" and tokens[1] == "-C":
+        # git -C <repo> <subcmd...>  →  git <subcmd...> for pattern matching after path binding check
+        return "git " + " ".join(tokens[3:])
+    return command
+
+
+def _git_c_path_bound(command: str) -> bool:
+    """True when command is git -C <absolute-or-relative-path> without shell metacharacters in path."""
+    tokens = command.split()
+    if len(tokens) < 4 or tokens[0].lower() != "git" or tokens[1] != "-C":
+        return True  # not a -C form; other rules apply
+    path = tokens[2]
+    if any(ch in path for ch in ("$", "`", ";", "|", "&", "\n", "\r")):
+        return False
+    return True
+
+
 def evaluate_bash_permission(command: str, rules: dict[str, str] | None = None) -> str:
     """Return allow|deny for a full shell command under headless rules (fail closed)."""
     rules = rules or build_bash_permission()
@@ -413,19 +455,32 @@ def evaluate_bash_permission(command: str, rules: dict[str, str] | None = None) 
     if not components:
         return "deny"
     for component in components:
+        if not _git_c_path_bound(component):
+            return "deny"
+        # Hard-deny write git subcommands even when expressed as git -C <repo> <write>
+        tokens = component.split()
+        if len(tokens) >= 1 and tokens[0].lower() == "git":
+            sub = None
+            if len(tokens) >= 4 and tokens[1] == "-C":
+                sub = tokens[3].lower() if len(tokens) > 3 else None
+            elif len(tokens) >= 2:
+                sub = tokens[1].lower()
+            if sub in _GIT_WRITE_SUBCOMMANDS:
+                return "deny"
         decision = "deny"
-        for pattern, action in rules.items():
-            if _wildcard_match(pattern, component) or _wildcard_match(pattern, component.strip()):
-                decision = action
-        # Also match against leading command token families OpenCode may present
-        if decision != "allow":
-            # try progressive prefixes for "git status -sb" style
-            tokens = component.split()
-            for n in range(len(tokens), 0, -1):
-                prefix = " ".join(tokens[:n])
-                for pattern, action in rules.items():
-                    if _wildcard_match(pattern, prefix):
-                        decision = action
+        candidates = [component, component.strip(), _normalize_git_c_form(component)]
+        for candidate in candidates:
+            for pattern, action in rules.items():
+                if _wildcard_match(pattern, candidate):
+                    decision = action
+            if decision != "allow":
+                # progressive prefixes for "git status -sb" and "git -C repo status -sb"
+                ctokens = candidate.split()
+                for n in range(len(ctokens), 0, -1):
+                    prefix = " ".join(ctokens[:n])
+                    for pattern, action in rules.items():
+                        if _wildcard_match(pattern, prefix):
+                            decision = action
         if decision != "allow":
             return "deny"
     return "allow"

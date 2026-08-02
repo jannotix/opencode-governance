@@ -61,7 +61,7 @@ Shell is reserved for operations that genuinely require a process (for example e
 
 Deny-by-default. Explicit allows cover only:
 
-**Git (read-only):** `status`, `diff`, `log`, `show`, `grep`, `rev-parse`, `ls-files`, `submodule status`, `worktree list`, `branch --show-current`, `remote -v` (metadata only).
+**Git (read-only):** `status`, `diff`, `log`, `show`, `grep`, `rev-parse`, `ls-files`, `rev-list`, `submodule status`, `worktree list`, `branch --show-current`, `remote -v` (metadata only). Direct forms and `git -C <path> <subcommand>` forms are allowed when the path token has no shell metacharacters. Mutating Git (`add`, `commit`, `push`, `reset`, …) is denied even with `-C`. This is **not** a broad shell grant; nested interpreters remain denied. The OpenCode permission matcher does not re-validate that `<path>` equals the resolved repository root—Governance runners still invoke Git only against the contract-resolved repository.
 
 **Windows (minimum forms):** `Test-Path`, `Get-ChildItem`, `Get-Content`, `Get-Item`, `Get-FileHash`, `Resolve-Path`, `Select-String`, `Get-Command`, `ConvertFrom-Json`, `Select-Object`, `Where-Object`, `ForEach-Object`, `Sort-Object`, `Measure-Object`, `Format-List`, `Format-Table`.
 

@@ -1,5 +1,7 @@
 param(
-    [Parameter(Mandatory=$true)][string]$ProjectDir,
+    [string]$ProjectDir,
+    [string]$WorkspaceDir,
+    [string]$RepositoryDir,
     [Parameter(Mandatory=$true)][ValidateSet('ai-init','ai-audit','ai-discover','ai-plan','ai-resume')][string]$Command,
     [string]$Arguments = '',
     [string]$ArgumentsFile,
@@ -9,7 +11,11 @@ param(
     [string]$OpenCodeCommand = 'opencode',
     [string[]]$OpenCodePrefixArguments = @(),
     [int]$TimeoutSeconds = 3600,
-    [switch]$KeepAttemptLogs
+    [switch]$KeepAttemptLogs,
+    [switch]$RecoverTransaction,
+    [ValidateSet('adopt-governance-only','rollback')]$RecoveryDecision,
+    [string]$ExpectedTransactionHash,
+    [string]$ExpectedEvidenceBundleHash
 )
 
 if ($PSVersionTable.PSVersion.Major -lt 7) {
@@ -18,12 +24,24 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 }
 
 $ErrorActionPreference='Stop'
-if(-not(Test-Path -LiteralPath $ProjectDir -PathType Container)){throw 'Project directory does not exist.'}
-$ProjectDir=(Resolve-Path -LiteralPath $ProjectDir).Path
+# WORKSPACE_REPOSITORY_ROOT_CONTRACT_V1: -ProjectDir remains a compatibility alias for workspace root.
+if([string]::IsNullOrWhiteSpace($WorkspaceDir)){$WorkspaceDir=$ProjectDir}
+if([string]::IsNullOrWhiteSpace($WorkspaceDir)){throw 'WORKSPACE_ROOT_REQUIRED: Provide -WorkspaceDir or -ProjectDir.'}
+if(-not(Test-Path -LiteralPath $WorkspaceDir -PathType Container)){throw 'Project directory does not exist.'}
+$WorkspaceDir=(Resolve-Path -LiteralPath $WorkspaceDir).Path
+$ProjectDir=$WorkspaceDir
 if(-not $ConfigDir){$ConfigDir=if($env:OPENCODE_CONFIG_DIR){$env:OPENCODE_CONFIG_DIR}else{Join-Path $HOME '.config/opencode'}}
 if(-not $RoutingConfigPath){$RoutingConfigPath=Join-Path $ConfigDir 'opencode-governance-routing.json'}
 if(-not(Test-Path -LiteralPath $RoutingConfigPath -PathType Leaf)){throw "Routing profile/manifest not found: $RoutingConfigPath"}
 if($TimeoutSeconds -lt 30){throw 'TimeoutSeconds must be at least 30.'}
+$script:WorkspaceRootContract='WORKSPACE_REPOSITORY_ROOT_CONTRACT_V1'
+$script:MultiGovernanceTx='MULTI_GOVERNANCE_ROOT_TRANSACTION_V1'
+$script:ChangesetDiagnostic='PROJECT_STATE_CHANGESET_DIAGNOSTIC_V1'
+# Capture explicit -RepositoryDir before any later script-scope assignment reuses the name.
+$script:ExplicitRepositoryDir = $RepositoryDir
+$script:ManagedGovernanceRoots=@()
+$script:ManagedRootRecords=@()
+$script:FingerprintManifestBefore=@()
 
 function Get-TextHash([string]$Text){
   $bytes=[Text.Encoding]::UTF8.GetBytes($Text);$sha=[Security.Cryptography.SHA256]::Create()
@@ -43,6 +61,134 @@ function Assert-SafeDirectory([string]$Path,[string]$Label){
   $item=Get-Item -LiteralPath $Path -Force
   if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint)-ne0){throw "$Label may not be a symlink, junction or reparse point: $Path"}
 }
+function Test-RecognizedGovernanceRoot([string]$AiPath){
+  if(-not(Test-Path -LiteralPath $AiPath -PathType Container)){return $false}
+  foreach($name in @('STATUS.md','PROJECT_HISTORY.md','RUN_STATE.json','tasks','product','CONTEXT_INDEX.md','INSTRUCTION_INDEX.md','GOVERNANCE_MEMORY.md')){
+    if(Test-Path -LiteralPath (Join-Path $AiPath $name)){return $true}
+  }
+  $false
+}
+function Test-IsGitWorktree([string]$Path){
+  $git=Get-Command git -ErrorAction SilentlyContinue
+  if(-not$git){return $false}
+  $output=& git -C $Path rev-parse --is-inside-work-tree 2>$null
+  $LASTEXITCODE-eq0 -and ([string]$output).Trim()-eq'true'
+}
+function Find-NestedGitRoots([string]$Workspace){
+  $found=[System.Collections.Generic.List[string]]::new()
+  $stack=[Collections.Generic.Stack[object]]::new();$stack.Push([pscustomobject]@{Path=$Workspace;Depth=0})
+  $skipNames=@('.git','.ai','node_modules','vendor','.venv','dist','build')
+  while($stack.Count){
+    $frame=$stack.Pop()
+    if($frame.Depth -gt 6){continue}
+    try{
+      foreach($item in Get-ChildItem -LiteralPath $frame.Path -Force -ErrorAction Stop){
+        if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){continue}
+        if($item.Name -ieq '.git'){
+          if($frame.Path -ne $Workspace -and (Test-IsGitWorktree $frame.Path)){
+            $resolved=(Resolve-Path -LiteralPath $frame.Path).Path
+            if($resolved -notin $found){$found.Add($resolved)}
+          }
+          continue
+        }
+        if(-not $item.PSIsContainer){continue}
+        if($item.Name -in $skipNames){continue}
+        $gitMarker=Join-Path $item.FullName '.git'
+        if(Test-Path -LiteralPath $gitMarker){
+          if(Test-IsGitWorktree $item.FullName){
+            $resolved=(Resolve-Path -LiteralPath $item.FullName).Path
+            if($resolved -notin $found){$found.Add($resolved)}
+          }
+          continue
+        }
+        $stack.Push([pscustomobject]@{Path=$item.FullName;Depth=($frame.Depth+1)})
+      }
+    }catch{}
+  }
+  @($found | Sort-Object)
+}
+function Resolve-WorkspaceRepositoryRoots(){
+  # WORKSPACE_REPOSITORY_ROOT_CONTRACT_V1
+  Assert-SafeDirectory $WorkspaceDir 'workspace_root'
+  $workspace=(Resolve-Path -LiteralPath $WorkspaceDir).Path
+  $repository=$null
+  $source=''
+  $explicitRepo = if(-not [string]::IsNullOrWhiteSpace($script:ExplicitRepositoryDir)){$script:ExplicitRepositoryDir}elseif(-not [string]::IsNullOrWhiteSpace($RepositoryDir)){$RepositoryDir}else{''}
+  if(-not [string]::IsNullOrWhiteSpace($explicitRepo)){
+    if(-not(Test-Path -LiteralPath $explicitRepo -PathType Container)){throw "REPOSITORY_ROOT_NOT_FOUND: $explicitRepo"}
+    Assert-SafeDirectory $explicitRepo 'repository_root'
+    $repository=(Resolve-Path -LiteralPath $explicitRepo).Path
+    $source='explicit_repository_dir'
+  }else{
+    if(Test-IsGitWorktree $workspace){
+      $top=& git -C $workspace rev-parse --show-toplevel 2>$null
+      if($LASTEXITCODE-eq0 -and -not [string]::IsNullOrWhiteSpace([string]$top)){$repository=(Resolve-Path -LiteralPath ([string]$top).Trim()).Path}
+      else{$repository=$workspace}
+      $source='workspace_is_git'
+    }else{
+      $nested=@(Find-NestedGitRoots $workspace)
+      if($nested.Count -gt 1){throw "REPOSITORY_ROOT_AMBIGUOUS: $($nested -join '; ')"}
+      if($nested.Count -eq 1){
+        $repository=$nested[0]
+        $source='unique_nested_git'
+      }else{
+        # NON_GIT_PROJECT_SUPPORTED: workspace is the application root when no Git repository exists.
+        $repository=$workspace
+        $source='workspace_non_git'
+      }
+    }
+  }
+  $workspaceFull=[IO.Path]::GetFullPath($workspace)
+  $repositoryFull=[IO.Path]::GetFullPath($repository)
+  if(-not ($repositoryFull.Equals($workspaceFull,[StringComparison]::OrdinalIgnoreCase) -or $repositoryFull.StartsWith($workspaceFull.TrimEnd('\','/')+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase))){
+    throw "REPOSITORY_ROOT_OUTSIDE_WORKSPACE: repository=$repositoryFull workspace=$workspaceFull"
+  }
+  # Bind exact canonical Governance roots the runner owns (even if not yet created).
+  # Unrelated nested .ai directories elsewhere remain inside the project fingerprint.
+  # Fail closed if an existing .ai is a symlink/junction/reparse or resolves outside the workspace.
+  function Bind-ManagedAiRoot([string]$AiPath,[string]$Role,[string]$WorkspaceFull){
+    $literal=[IO.Path]::GetFullPath($AiPath)
+    if(Test-Path -LiteralPath $AiPath){
+      $item=Get-Item -LiteralPath $AiPath -Force
+      if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint)-ne0){
+        throw "MANAGED_GOVERNANCE_ROOT_REPARSE_FORBIDDEN: $AiPath may not be a symlink, junction or reparse point."
+      }
+      if(-not $item.PSIsContainer){throw "MANAGED_GOVERNANCE_ROOT_NOT_DIRECTORY: $AiPath"}
+      # Identity for snapshot/restore is the literal path under the workspace, never a followed outside target.
+      $resolved=(Resolve-Path -LiteralPath $AiPath).Path
+      if(-not ($resolved.Equals($literal,[StringComparison]::OrdinalIgnoreCase))){
+        # Resolve-Path followed a reparse that Get-Item missed — still fail closed if target left workspace.
+        if(-not ($resolved.Equals($WorkspaceFull,[StringComparison]::OrdinalIgnoreCase) -or $resolved.StartsWith($WorkspaceFull.TrimEnd('\','/')+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase))){
+          throw "MANAGED_GOVERNANCE_ROOT_OUTSIDE_WORKSPACE: $AiPath -> $resolved"
+        }
+      }
+      if(-not ($literal.Equals($WorkspaceFull,[StringComparison]::OrdinalIgnoreCase) -or $literal.StartsWith($WorkspaceFull.TrimEnd('\','/')+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase))){
+        throw "MANAGED_GOVERNANCE_ROOT_OUTSIDE_WORKSPACE: $literal"
+      }
+    }else{
+      if(-not ($literal.Equals($WorkspaceFull,[StringComparison]::OrdinalIgnoreCase) -or $literal.StartsWith($WorkspaceFull.TrimEnd('\','/')+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase))){
+        throw "MANAGED_GOVERNANCE_ROOT_OUTSIDE_WORKSPACE: $literal"
+      }
+    }
+    [pscustomobject]@{canonical_path=$literal;role=$Role;recognized=(Test-RecognizedGovernanceRoot $AiPath)}
+  }
+  $managed=[System.Collections.Generic.List[object]]::new()
+  $wsAi=Join-Path $workspace '.ai'
+  $repoAi=Join-Path $repository '.ai'
+  $managed.Add((Bind-ManagedAiRoot $wsAi 'workspace_governance' $workspaceFull))
+  if(-not $repositoryFull.Equals($workspaceFull,[StringComparison]::OrdinalIgnoreCase)){
+    $managed.Add((Bind-ManagedAiRoot $repoAi 'repository_governance' $workspaceFull))
+  }
+  $script:RepositoryDir=$repository
+  $script:ManagedGovernanceRoots=@($managed)
+  $script:WorkspaceDir=$workspace
+  Write-Host "WORKSPACE_REPOSITORY_ROOT_CONTRACT contract=$($script:WorkspaceRootContract) workspace=$workspace repository=$repository source=$source managed_roots=$($managed.Count)"
+  [pscustomobject]@{workspace=$workspace;repository=$repository;source=$source;managed=@($managed)}
+}
+# Resolve roots before task discovery so nested repository .ai/** is visible.
+$null=Resolve-WorkspaceRepositoryRoots
+$ProjectDir=$script:WorkspaceDir
+$WorkspaceDir=$script:WorkspaceDir
 
 # JSONC normalization (in-memory only; never mutates the installed routing source).
 function Remove-JsoncComments([string]$Text){
@@ -121,23 +267,37 @@ if($script:PromptUtf8Bytes -gt $script:PromptMaxBytes){
   throw "ARCHITECT_PROMPT_SIZE_LIMIT_EXCEEDED: prompt_bytes=$($script:PromptUtf8Bytes) max_bytes=$($script:PromptMaxBytes) sha256=$($script:PromptTransportSha256) contract=$($script:PromptTransportContract)"
 }
 
+function Get-TaskStateSearchRoots(){
+  $roots=[System.Collections.Generic.List[string]]::new()
+  $roots.Add($ProjectDir)
+  if($script:RepositoryDir -and $script:RepositoryDir -ne $ProjectDir){$roots.Add($script:RepositoryDir)}
+  @($roots)
+}
+function Find-TaskStatePath([string]$Id){
+  foreach($root in Get-TaskStateSearchRoots){
+    $candidate=Join-Path $root ".ai/tasks/$Id/RUN_STATE.json"
+    if(Test-Path -LiteralPath $candidate -PathType Leaf){return $candidate}
+  }
+  $null
+}
 if($Command -eq 'ai-resume') {
   if([string]::IsNullOrWhiteSpace($TaskId)) {
     $match = [regex]::Match($Arguments, '(?m)^\s*([A-Za-z0-9][A-Za-z0-9._-]{2,})\b')
     if($match.Success) {
       $candidate = $match.Groups[1].Value
-      $candidateState = Join-Path $ProjectDir ".ai/tasks/$candidate/RUN_STATE.json"
-      if(Test-Path -LiteralPath $candidateState -PathType Leaf) { $TaskId = $candidate }
+      if(Find-TaskStatePath $candidate) { $TaskId = $candidate }
     }
   }
   if([string]::IsNullOrWhiteSpace($TaskId)) {
-    $taskRoot = Join-Path $ProjectDir '.ai/tasks'
-    $states = @()
-    if(Test-Path -LiteralPath $taskRoot -PathType Container) {
-      $states = @(Get-ChildItem -LiteralPath $taskRoot -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-        $statePath = Join-Path $_.FullName 'RUN_STATE.json'
-        if(Test-Path -LiteralPath $statePath -PathType Leaf) { $statePath }
-      })
+    $states = [System.Collections.Generic.List[string]]::new()
+    foreach($root in Get-TaskStateSearchRoots){
+      $taskRoot = Join-Path $root '.ai/tasks'
+      if(Test-Path -LiteralPath $taskRoot -PathType Container) {
+        Get-ChildItem -LiteralPath $taskRoot -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+          $statePath = Join-Path $_.FullName 'RUN_STATE.json'
+          if(Test-Path -LiteralPath $statePath -PathType Leaf) { $states.Add($statePath) }
+        }
+      }
     }
     if($states.Count -eq 1) { $TaskId = Split-Path -Leaf (Split-Path -Parent $states[0]) }
   }
@@ -333,24 +493,183 @@ function Get-FileTreeHash([string]$Path){
   $rows=@();foreach($item in Get-ChildItem -LiteralPath $Path -Force -Recurse|Sort-Object FullName){$relative=[IO.Path]::GetRelativePath($Path,$item.FullName).Replace('\','/');if($item.Attributes-band[IO.FileAttributes]::ReparsePoint){$rows+="$relative`tSYMLINK:$($item.Target -join ';')";continue};if(-not$item.PSIsContainer){$rows+="$relative`t$((Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant())"}};Get-TextHash($rows-join"`n")
 }
 function Encode-StateField([string]$Value){[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Value))}
-function Get-ProjectTreeHash([string]$Root){
-  $rows=[Collections.Generic.List[string]]::new();$stack=[Collections.Generic.Stack[string]]::new();$stack.Push($Root)
-  while($stack.Count){$directory=$stack.Pop();foreach($item in Get-ChildItem -LiteralPath $directory -Force){$relative=[IO.Path]::GetRelativePath($Root,$item.FullName).Replace('\','/');if($item.Name-ieq'.git'){continue};if($relative-ieq'.ai'-or$relative.StartsWith('.ai/',[StringComparison]::OrdinalIgnoreCase)){continue};$p=Encode-StateField $relative;$a=[int]$item.Attributes;if($item.Attributes-band[IO.FileAttributes]::ReparsePoint){$rows.Add("L|$p|$a|$(Encode-StateField ([string]$item.LinkTarget))");continue};if($item.PSIsContainer){$rows.Add("D|$p|$a");$stack.Push($item.FullName);continue};$rows.Add("F|$p|$a|$($item.Length)|$((Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant())")}}
-  Get-TextHash(($rows|Sort-Object)-join"`n")
+function Get-ManagedRelativePrefixes([string]$Root){
+  # Exact managed Governance roots only (workspace .ai + repository .ai when nested).
+  $set=[System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+  [void]$set.Add('.ai')
+  if($script:RepositoryDir -and -not [string]::Equals($script:RepositoryDir,$Root,[StringComparison]::OrdinalIgnoreCase)){
+    try{
+      $repoRel=[IO.Path]::GetRelativePath($Root,$script:RepositoryDir).Replace('\','/').TrimEnd('/')
+      if($repoRel -and $repoRel -ne '.' -and -not $repoRel.StartsWith('..')){
+        [void]$set.Add("$repoRel/.ai")
+      }
+    }catch{}
+  }
+  foreach($m in @($script:ManagedGovernanceRoots)){
+    $path=[string]$m.canonical_path
+    if([string]::IsNullOrWhiteSpace($path)){continue}
+    try{
+      $full=[IO.Path]::GetFullPath($path)
+      $rootFull=[IO.Path]::GetFullPath($Root)
+      $rel=[IO.Path]::GetRelativePath($rootFull,$full).Replace('\','/').TrimEnd('/')
+      if(-not $rel -or $rel -eq '.' -or $rel.StartsWith('..')){continue}
+      [void]$set.Add($rel)
+    }catch{}
+  }
+  @($set)
 }
-function Invoke-GitProbe([string[]]$GitArguments){$output=& git -C $ProjectDir @GitArguments 2>$null;[pscustomobject]@{code=$LASTEXITCODE;text=(($output|ForEach-Object{[string]$_})-join"`n")}}
-function Get-ProjectStateFingerprint(){
+function Normalize-RelativePath([string]$Relative){
+  # Do not use TrimStart('./') — .NET TrimStart treats the argument as a char set and would turn ".ai" into "ai".
+  $norm=$Relative.Replace('\','/')
+  while($norm.StartsWith('./')){ $norm=$norm.Substring(2) }
+  $norm.TrimStart('/')
+}
+function Test-IsManagedRelative([string]$Relative,[string[]]$Prefixes){
+  $norm=Normalize-RelativePath $Relative
+  if($norm -eq '.git' -or $norm.StartsWith('.git/',[StringComparison]::OrdinalIgnoreCase) -or $norm.Contains('/.git/')){return $true}
+  foreach($p in @($Prefixes)){
+    if([string]::IsNullOrWhiteSpace($p)){continue}
+    $pref=Normalize-RelativePath $p
+    if($norm.Equals($pref,[StringComparison]::OrdinalIgnoreCase)){return $true}
+    if($norm.StartsWith("$pref/",[StringComparison]::OrdinalIgnoreCase)){return $true}
+  }
+  $false
+}
+function Get-ProjectTreeManifest([string]$Root){
+  # Root-aware fingerprint rows; excludes .git/** and exact managed Governance roots only.
+  $rows=[Collections.Generic.List[string]]::new();$stack=[Collections.Generic.Stack[string]]::new();$stack.Push($Root)
+  $prefixes=@(Get-ManagedRelativePrefixes $Root)
+  while($stack.Count){
+    $directory=$stack.Pop()
+    foreach($item in Get-ChildItem -LiteralPath $directory -Force -ErrorAction SilentlyContinue){
+      $relative=[IO.Path]::GetRelativePath($Root,$item.FullName).Replace('\','/')
+      if($item.Name-ieq'.git'){continue}
+      if(Test-IsManagedRelative $relative $prefixes){continue}
+      $p=Encode-StateField $relative;$a=[int]$item.Attributes
+      if($item.Attributes-band[IO.FileAttributes]::ReparsePoint){$rows.Add("L|$p|$a|$(Encode-StateField ([string]$item.LinkTarget))");continue}
+      if($item.PSIsContainer){$rows.Add("D|$p|$a");$stack.Push($item.FullName);continue}
+      $rows.Add("F|$p|$a|$($item.Length)|$((Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant())")
+    }
+  }
+  @($rows|Sort-Object)
+}
+function Get-ProjectTreeHash([string]$Root){
+  Get-TextHash((Get-ProjectTreeManifest $Root)-join"`n")
+}
+function Invoke-GitProbe([string[]]$GitArguments){
+  $repo=if($script:RepositoryDir){$script:RepositoryDir}else{$ProjectDir}
+  $output=& git -C $repo @GitArguments 2>$null
+  [pscustomobject]@{code=$LASTEXITCODE;text=(($output|ForEach-Object{[string]$_})-join"`n")}
+}
+function Get-ProjectStateFingerprintCore(){
+  # Core PROJECT_STATE_FINGERPRINT_V1 fields (compatible with 3.7.4 journals for orphan recovery).
   $tree=Get-ProjectTreeHash $ProjectDir;$mode='NON_GIT';$head='N/A';$index='N/A';$subs='N/A';$git=Get-Command git -ErrorAction SilentlyContinue
-  if($git){$inside=Invoke-GitProbe @('rev-parse','--is-inside-work-tree');if($inside.code-eq0-and$inside.text.Trim()-eq'true'){$mode='GIT';$h=Invoke-GitProbe @('rev-parse','--verify','HEAD');$head=if($h.code-eq0){$h.text.Trim()}else{'UNBORN'};$i=Invoke-GitProbe @('rev-parse','--git-path','index');if($i.code-ne0){throw 'Unable to resolve Git index.'};$ip=$i.text.Trim();if(-not[IO.Path]::IsPathRooted($ip)){$ip=[IO.Path]::GetFullPath((Join-Path $ProjectDir $ip))};$index=if(Test-Path $ip){Get-FileHashHex $ip}else{'ABSENT'};$s=Invoke-GitProbe @('submodule','status','--recursive');if($s.code-ne0){throw 'Unable to read submodule state.'};$subs=Get-TextHash $s.text}}
-  Get-TextHash "PROJECT_STATE_FINGERPRINT_V1`nMODE=$mode`nTREE=$tree`nHEAD=$head`nINDEX=$index`nSUBMODULES=$subs"
+  $repo=if($script:RepositoryDir){$script:RepositoryDir}else{$ProjectDir}
+  if($git -and (Test-IsGitWorktree $repo)){
+    $mode='GIT'
+    $h=Invoke-GitProbe @('rev-parse','--verify','HEAD');$head=if($h.code-eq0){$h.text.Trim()}else{'UNBORN'}
+    $i=Invoke-GitProbe @('rev-parse','--git-path','index');if($i.code-ne0){throw 'Unable to resolve Git index.'}
+    $ip=$i.text.Trim();if(-not[IO.Path]::IsPathRooted($ip)){$ip=[IO.Path]::GetFullPath((Join-Path $repo $ip))}
+    $index=if(Test-Path $ip){Get-FileHashHex $ip}else{'ABSENT'}
+    $s=Invoke-GitProbe @('submodule','status','--recursive');if($s.code-ne0){throw 'Unable to read submodule state.'};$subs=Get-TextHash $s.text
+  }
+  [pscustomobject]@{tree=$tree;mode=$mode;head=$head;index=$index;subs=$subs;repo=$repo}
+}
+function Get-ProjectStateFingerprint([switch]$Legacy){
+  # NON_GIT_PROJECT_SUPPORTED + PROJECT_STATE_FINGERPRINT_V1 with multi-root exclusions
+  $core=Get-ProjectStateFingerprintCore
+  $base="PROJECT_STATE_FINGERPRINT_V1`nMODE=$($core.mode)`nTREE=$($core.tree)`nHEAD=$($core.head)`nINDEX=$($core.index)`nSUBMODULES=$($core.subs)"
+  if($Legacy){ return (Get-TextHash $base) }
+  $managedKeys=((@($script:ManagedGovernanceRoots)|ForEach-Object{[string]$_.canonical_path.ToLowerInvariant()})|Sort-Object)-join','
+  Get-TextHash "$base`nWORKSPACE=$($ProjectDir.ToLowerInvariant())`nREPOSITORY=$($core.repo.ToLowerInvariant())`nMANAGED=$managedKeys"
+}
+function Get-PathClass([string]$Relative,[string[]]$Prefixes){
+  $norm=Normalize-RelativePath $Relative
+  if(Test-IsManagedRelative $norm $Prefixes){
+    return 'GOVERNANCE_ONLY_CHANGE'
+  }
+  if($norm -eq '.git' -or $norm.StartsWith('.git/') -or $norm.Contains('/.git/')){return 'GIT_METADATA_CHANGE'}
+  $base=[IO.Path]::GetFileName($norm)
+  if($base -in @('package.json','package-lock.json','pnpm-lock.yaml','yarn.lock','composer.json','composer.lock','requirements.txt','pyproject.toml','go.mod','Cargo.toml','Gemfile','pom.xml')){return 'DEPENDENCY_CHANGE'}
+  foreach($hint in @('node_modules/','vendor/','dist/','build/','__pycache__/')){if($norm.StartsWith($hint) -or $norm.Contains("/$hint")){return 'GENERATED_ARTIFACT_CHANGE'}}
+  if($norm -match '\.(php|py|ts|tsx|js|jsx|go|rs|java|cs|c|cpp|h|rb)$'){return 'APPLICATION_SOURCE_CHANGE'}
+  foreach($seg in @('src','app','lib','Source_Code','source')){if($norm -eq $seg -or $norm.StartsWith("$seg/") -or $norm.Contains("/$seg/")){return 'APPLICATION_SOURCE_CHANGE'}}
+  'UNKNOWN_CHANGE'
+}
+function Get-ProjectStateChangesetDiagnostic([string[]]$BeforeRows,[string[]]$AfterRows){
+  # PROJECT_STATE_CHANGESET_DIAGNOSTIC_V1
+  $prefixes=@(Get-ManagedRelativePrefixes $ProjectDir)
+  function Parse-Rows([string[]]$Rows){
+    $map=@{}
+    foreach($row in $Rows){
+      $parts=$row -split '\|',3
+      if($parts.Count -lt 2){continue}
+      try{$rel=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($parts[1]))}catch{continue}
+      $map[$rel]=$row
+    }
+    $map
+  }
+  $before=Parse-Rows $BeforeRows;$after=Parse-Rows $AfterRows
+  $keys=@($before.Keys+$after.Keys|Select-Object -Unique|Sort-Object)
+  $changes=[System.Collections.Generic.List[object]]::new();$classes=[System.Collections.Generic.HashSet[string]]::new()
+  foreach($key in $keys){
+    if($before[$key] -eq $after[$key]){continue}
+    $cls=Get-PathClass $key $prefixes
+    [void]$classes.Add($cls)
+    $inside=$false;foreach($p in $prefixes){if($key -eq $p -or $key.StartsWith("$p/")){$inside=$true;break}}
+    $changes.Add([pscustomobject]@{relative_path=$key;path_class=$cls;inside_managed_root=$inside})
+  }
+  $overall='NO_CHANGE'
+  if($changes.Count -gt 0){
+    if(($classes|Where-Object{$_ -ne 'GOVERNANCE_ONLY_CHANGE'}).Count -eq 0){$overall='GOVERNANCE_ONLY_CHANGE'}
+    elseif($classes.Contains('APPLICATION_SOURCE_CHANGE')){$overall='APPLICATION_SOURCE_CHANGE'}
+    elseif($classes.Contains('GIT_METADATA_CHANGE')){$overall='GIT_METADATA_CHANGE'}
+    elseif($classes.Contains('DEPENDENCY_CHANGE')){$overall='DEPENDENCY_CHANGE'}
+    elseif($classes.Contains('GENERATED_ARTIFACT_CHANGE')){$overall='GENERATED_ARTIFACT_CHANGE'}
+    else{$overall='UNKNOWN_CHANGE'}
+  }
+  [pscustomobject]@{diagnostic=$script:ChangesetDiagnostic;overall_class=$overall;change_count=$changes.Count;classes=@($classes);changes=@($changes|Select-Object -First 200)}
+}
+function Assert-ProjectStateUnchanged([string]$Expected,[string[]]$BeforeRows){
+  $actual=Get-ProjectStateFingerprint
+  if($actual -eq $Expected){return}
+  $afterRows=@(Get-ProjectTreeManifest $ProjectDir)
+  $diag=Get-ProjectStateChangesetDiagnostic $BeforeRows $afterRows
+  $summary=($diag.changes|ForEach-Object{"$($_.path_class):$($_.relative_path)"}) -join '; '
+  if($diag.overall_class -eq 'GOVERNANCE_ONLY_CHANGE'){
+    # Should not happen when managed roots are registered; treat as fingerprint contract defect but do not mislabel.
+    throw "ARCHITECT_FAILOVER_BLOCKED: PROJECT_STATE_CHANGED. diagnostic=$($script:ChangesetDiagnostic) overall=$($diag.overall_class) changes=$($diag.change_count) detail=$summary HUMAN_RECOVERY_REQUIRED"
+  }
+  throw "ARCHITECT_FAILOVER_BLOCKED: PROJECT_STATE_CHANGED. diagnostic=$($script:ChangesetDiagnostic) overall=$($diag.overall_class) changes=$($diag.change_count) detail=$summary HUMAN_RECOVERY_REQUIRED"
 }
 function Restore-Ai([string]$AiPath,[string]$Backup,[bool]$Existed,[string]$ExpectedHash){if(Test-Path $AiPath){Remove-Item $AiPath -Recurse -Force};if($Existed){Copy-Item $Backup $AiPath -Recurse -Force};$actual=Get-FileTreeHash $AiPath;if($actual-ne$ExpectedHash){throw "ARCHITECT_FAILOVER_BLOCKED: .ai restore hash mismatch ($actual != $ExpectedHash). HUMAN_RECOVERY_REQUIRED"}}
+function Restore-ManagedGovernanceRoots([object[]]$Records){
+  # MULTI_GOVERNANCE_ROOT_TRANSACTION_V1 atomic multi-root restore
+  $errors=[System.Collections.Generic.List[string]]::new()
+  foreach($rec in @($Records)){
+    $path=[string]$rec.canonical_path
+    $snap=[string]$rec.snapshot_path
+    $expected=[string]$rec.tree_hash_before
+    $existed=[bool]$rec.existed_before
+    try{
+      if(Test-Path -LiteralPath $path){Remove-Item -LiteralPath $path -Recurse -Force}
+      if($existed){
+        if(-not(Test-Path -LiteralPath $snap)){throw "SNAPSHOT_MISSING: $snap"}
+        Copy-Item -LiteralPath $snap -Destination $path -Recurse -Force
+      }
+      $actual=if(Test-Path -LiteralPath $path){Get-FileTreeHash $path}else{'ABSENT'}
+      if($actual -ne $expected){throw "hash mismatch $actual != $expected"}
+    }catch{$errors.Add("$path :: $($_.Exception.Message)")}
+  }
+  if($errors.Count){throw "MULTI_ROOT_RESTORE_INCOMPLETE: $($errors -join ' | '). HUMAN_RECOVERY_REQUIRED"}
+}
 function Get-TransactionDir([string]$Path){ Join-Path $ConfigDir ("opencode-governance-architect-tx/" + (Get-TextHash $Path.ToLowerInvariant())) }
 function Test-PidAlive([int]$Id){try{$null=Get-Process -Id $Id -ErrorAction Stop;$true}catch{$false}}
 function Get-TaskSnapshot(){
-  if($Command-ne'ai-resume'){return $null}
-  $path=Join-Path $ProjectDir ".ai/tasks/$TaskId/RUN_STATE.json"
-  if(-not(Test-Path -LiteralPath $path -PathType Leaf)){throw "RESUME_TASK_NOT_FOUND: $TaskId"}
+  if($Command-ne'ai-resume' -and -not $RecoverTransaction){return $null}
+  if([string]::IsNullOrWhiteSpace($TaskId)){return $null}
+  $path=Find-TaskStatePath $TaskId
+  if(-not$path){throw "RESUME_TASK_NOT_FOUND: $TaskId"}
   try{$state=Get-Content -LiteralPath $path -Raw|ConvertFrom-Json}catch{throw "INVALID_RUN_STATE: $path"}
   if($state.PSObject.Properties['task_id']-and[string]$state.task_id-ne$TaskId){throw 'RESUME_TASK_ID_MISMATCH'}
   $phase = if ($state.current_phase) { [string]$state.current_phase } else { [string]$state.phase }
@@ -361,26 +680,70 @@ function Get-ResumeMode(){
   $snap=Get-TaskSnapshot;$state=Get-Content -LiteralPath $snap.path -Raw|ConvertFrom-Json;$phases=@();foreach($field in @('current_phase','state','last_safe_transition')){$v=[string]$state.$field;if(-not[string]::IsNullOrWhiteSpace($v)){$phases+=$v.Trim()}}
   if(-not$phases){return 'PRE_SIDE_EFFECT'};foreach($phase in $phases){if($phase-in$PostSideEffectPhases){return 'POST_SIDE_EFFECT'}};'PRE_SIDE_EFFECT'
 }
-function Recover-Orphan([string]$Tx,[string]$Ai){
+function Recover-Orphan([string]$Tx){
   $metaPath = Join-Path $Tx 'meta.json'
   if(-not(Test-Path -LiteralPath $metaPath -PathType Leaf)){return}
   $meta = Get-Content -LiteralPath $metaPath -Raw | ConvertFrom-Json
   if(Test-PidAlive ([int]$meta.pid)){throw 'ARCHITECT_TRANSACTION_ACTIVE'}
-  if((Get-ProjectStateFingerprint) -ne [string]$meta.project_state_fingerprint){throw 'ARCHITECT_ORPHAN_RECOVERY_BLOCKED: PROJECT_STATE_CHANGED. HUMAN_RECOVERY_REQUIRED'}
-  $backup = Join-Path $Tx 'ai-snapshot'
-  Restore-Ai $Ai $backup ([bool]$meta.ai_existed) ([string]$meta.ai_hash)
+  $expected=[string]$meta.project_state_fingerprint
+  $hasMulti = $null -ne $meta.PSObject.Properties['managed_governance_roots'] -and $meta.managed_governance_roots
+  $current = if($hasMulti){ Get-ProjectStateFingerprint } else { Get-ProjectStateFingerprint -Legacy }
+  if($current -ne $expected){
+    # Retry alternate formula for transitional journals
+    $alt = if($hasMulti){ Get-ProjectStateFingerprint -Legacy } else { Get-ProjectStateFingerprint }
+    if($alt -ne $expected){throw 'ARCHITECT_ORPHAN_RECOVERY_BLOCKED: PROJECT_STATE_CHANGED. HUMAN_RECOVERY_REQUIRED'}
+  }
+  if($hasMulti){
+    Restore-ManagedGovernanceRoots @($meta.managed_governance_roots)
+  }else{
+    $ai=Join-Path $ProjectDir '.ai'
+    $backup=Join-Path $Tx 'ai-snapshot'
+    Restore-Ai $ai $backup ([bool]$meta.ai_existed) ([string]$meta.ai_hash)
+  }
   Remove-Item -LiteralPath $Tx -Recurse -Force
   Write-Warning 'ARCHITECT_ORPHAN_RECOVERED'
 }
-function Open-Transaction([string]$Tx,[string]$Ai,[string]$AiHash,[bool]$Existed,[string]$ProjectState,[object]$Task){
+function Open-Transaction([string]$Tx,[string]$ProjectState,[object]$Task){
+  # MULTI_GOVERNANCE_ROOT_TRANSACTION_V1 (compatible with ARCHITECT_TRANSACTION_V2)
   if(Test-Path -LiteralPath $Tx){Remove-Item -LiteralPath $Tx -Recurse -Force}
   New-Item -ItemType Directory -Force -Path $Tx | Out-Null
-  $backup = Join-Path $Tx 'ai-snapshot'
-  if($Existed){Copy-Item -LiteralPath $Ai -Destination $backup -Recurse -Force}
+  $records=[System.Collections.Generic.List[object]]::new()
+  $snapRoot=Join-Path $Tx 'managed-governance-roots'
+  New-Item -ItemType Directory -Force -Path $snapRoot | Out-Null
+  foreach($m in @($script:ManagedGovernanceRoots)){
+    $path=[string]$m.canonical_path
+    $key=(Get-TextHash $path.ToLowerInvariant()).Substring(0,16)
+    $dest=Join-Path $snapRoot $key
+    $existed=Test-Path -LiteralPath $path
+    $hash=if($existed){Get-FileTreeHash $path}else{'ABSENT'}
+    if($existed){Copy-Item -LiteralPath $path -Destination $dest -Recurse -Force}
+    $records.Add([pscustomobject]@{
+      canonical_path=$path
+      existed_before=$existed
+      tree_hash_before=$hash
+      snapshot_path=$dest
+      snapshot_key=$key
+      role=[string]$m.role
+    })
+  }
+  # Compatibility single-root snapshot: prefer repository_governance else first managed root else workspace .ai
+  $primary= @($records | Where-Object { $_.role -eq 'repository_governance' } | Select-Object -First 1)
+  if(-not $primary){$primary=@($records | Select-Object -First 1)}
+  $legacyBackup=Join-Path $Tx 'ai-snapshot'
+  if($primary -and $primary.existed_before -and (Test-Path -LiteralPath $primary.snapshot_path)){
+    Copy-Item -LiteralPath $primary.snapshot_path -Destination $legacyBackup -Recurse -Force
+  }
+  $script:ManagedRootRecords=@($records)
   $checkpointHash = if($Task){[string]$Task.hash}else{$null}
+  $hashMap=[ordered]@{}
+  foreach($r in $records){$hashMap[[string]$r.canonical_path]=[string]$r.tree_hash_before}
   $meta=[ordered]@{
     schema='ARCHITECT_TRANSACTION_V2'
     compatibility='ARCHITECT_TRANSACTION_V1'
+    extensions=[ordered]@{
+      workspace_repository_root_contract=$script:WorkspaceRootContract
+      multi_governance_root_transaction=$script:MultiGovernanceTx
+    }
     command=$Command
     task_id=$TaskId
     arguments_sha256=$ArgumentsHash
@@ -390,18 +753,93 @@ function Open-Transaction([string]$Tx,[string]$Ai,[string]$AiHash,[bool]$Existed
     argv_prompt_bytes=0
     checkpoint_sha256=$checkpointHash
     project_dir=$ProjectDir
+    workspace_root=$ProjectDir
+    repository_root=$script:RepositoryDir
     pid=$PID
     started_at_utc=[DateTime]::UtcNow.ToString('o')
-    ai_existed=$Existed
-    ai_hash=$AiHash
+    ai_existed=if($primary){[bool]$primary.existed_before}else{$false}
+    ai_hash=if($primary){[string]$primary.tree_hash_before}else{'ABSENT'}
+    managed_governance_roots=@($records)
+    managed_governance_root_hashes_before=$hashMap
+    executor_worktree_roots=@()
     project_state_fingerprint=$ProjectState
     permission_contract=$script:HeadlessContractVersion
     runtime_policy_sha256=$script:HeadlessPolicyHash
   }
-  $meta | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $Tx 'meta.json') -Encoding utf8
-  $backup
+  $meta | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $Tx 'meta.json') -Encoding utf8
+  $legacyBackup
 }
 function Close-Transaction([string]$Tx){if(Test-Path $Tx){Remove-Item $Tx -Recurse -Force}}
+function Invoke-ExplicitTransactionRecovery(){
+  if(-not $RecoverTransaction){return $false}
+  if([string]::IsNullOrWhiteSpace($RecoveryDecision)){throw 'RECOVERY_DECISION_REQUIRED: use -RecoveryDecision adopt-governance-only|rollback'}
+  if([string]::IsNullOrWhiteSpace($TaskId)){throw 'RECOVERY_TASK_ID_REQUIRED'}
+  $tx=Get-TransactionDir $ProjectDir
+  $metaPath=Join-Path $tx 'meta.json'
+  if(-not(Test-Path -LiteralPath $metaPath -PathType Leaf)){throw "RECOVERY_TRANSACTION_NOT_FOUND: $tx"}
+  $meta=Get-Content -LiteralPath $metaPath -Raw|ConvertFrom-Json
+  if(Test-PidAlive ([int]$meta.pid)){throw 'ARCHITECT_TRANSACTION_ACTIVE'}
+  $metaText=Get-Content -LiteralPath $metaPath -Raw
+  $txHash=Get-TextHash $metaText
+  if($RecoveryDecision -eq 'adopt-governance-only' -and [string]::IsNullOrWhiteSpace($ExpectedTransactionHash)){
+    throw 'RECOVERY_TRANSACTION_HASH_REQUIRED: adopt-governance-only requires -ExpectedTransactionHash'
+  }
+  if(-not [string]::IsNullOrWhiteSpace($ExpectedTransactionHash) -and $txHash -ne $ExpectedTransactionHash.ToLowerInvariant()){
+    throw "RECOVERY_TRANSACTION_HASH_MISMATCH: expected=$ExpectedTransactionHash actual=$txHash"
+  }
+  if([string]$meta.task_id -ne $TaskId){throw "RECOVERY_TASK_MISMATCH: meta=$($meta.task_id) requested=$TaskId"}
+  if([string]$meta.workspace_root -and -not [string]::Equals([string]$meta.workspace_root,$ProjectDir,[StringComparison]::OrdinalIgnoreCase)){throw 'RECOVERY_WORKSPACE_MISMATCH'}
+  if($script:RepositoryDir -and $meta.repository_root -and -not [string]::Equals([string]$meta.repository_root,$script:RepositoryDir,[StringComparison]::OrdinalIgnoreCase)){throw 'RECOVERY_REPOSITORY_MISMATCH'}
+  $beforeFp=[string]$meta.project_state_fingerprint
+  $afterFp=Get-ProjectStateFingerprint
+  if($RecoveryDecision -eq 'rollback'){
+    if($meta.managed_governance_roots){Restore-ManagedGovernanceRoots @($meta.managed_governance_roots)}
+    else{
+      $ai=Join-Path $ProjectDir '.ai'
+      Restore-Ai $ai (Join-Path $tx 'ai-snapshot') ([bool]$meta.ai_existed) ([string]$meta.ai_hash)
+    }
+    Close-Transaction $tx
+    Write-Host "ARCHITECT_RECOVERY_COMPLETE decision=rollback task=$TaskId transaction_hash=$txHash"
+    return $true
+  }
+  # adopt-governance-only: require fingerprint match against transaction baseline (app source unchanged)
+  if($afterFp -ne $beforeFp){
+    throw 'ARCHITECT_RECOVERY_BLOCKED: PROJECT_STATE_CHANGED (application or non-managed paths). HUMAN_RECOVERY_REQUIRED'
+  }
+  $snap=Get-TaskSnapshot
+  if(-not $snap){throw 'RECOVERY_CHECKPOINT_MISSING'}
+  $state=[string]$snap.state; if([string]::IsNullOrWhiteSpace($state)){$state=[string]$snap.phase}
+  $receipt=[ordered]@{
+    schema='ARCHITECT_RECOVERY_RECEIPT_V1'
+    decision='adopt-governance-only'
+    task_id=$TaskId
+    workspace_root=$ProjectDir
+    repository_root=$script:RepositoryDir
+    transaction_hash=$txHash
+    project_state_fingerprint=$afterFp
+    checkpoint_sha256=$snap.hash
+    state=$snap.state
+    phase=$snap.phase
+    next_required_phase=$snap.next
+    recovered_at_utc=[DateTime]::UtcNow.ToString('o')
+    owner_authorized=$true
+  }
+  $receiptPath=Join-Path $ProjectDir ".ai/recovery/ARCHITECT_RECOVERY_$($TaskId)_$(Get-Date -Format 'yyyyMMddHHmmss').json"
+  $receiptDir=Split-Path -Parent $receiptPath
+  if(-not(Test-Path $receiptDir)){New-Item -ItemType Directory -Force -Path $receiptDir|Out-Null}
+  ($receipt|ConvertTo-Json -Depth 8)|Set-Content -LiteralPath $receiptPath -Encoding utf8
+  $archive=Join-Path $ConfigDir ("opencode-governance-architect-tx-archive/"+(Get-TextHash $ProjectDir.ToLowerInvariant())+"/$txHash")
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $archive)|Out-Null
+  if(Test-Path $archive){Remove-Item $archive -Recurse -Force}
+  Copy-Item -LiteralPath $tx -Destination $archive -Recurse -Force
+  Close-Transaction $tx
+  Write-Host "ARCHITECT_RECOVERY_COMPLETE decision=adopt-governance-only task=$TaskId transaction_hash=$txHash receipt=$receiptPath state=$state next_required_phase=$($snap.next)"
+  # Only advertise /ai-execute when the adopted checkpoint is actually READY_FOR_EXECUTION.
+  if($state -eq 'READY_FOR_EXECUTION' -or [string]$snap.next -eq 'IMPLEMENTING'){
+    Write-Host "ARCHITECT_PHASE_ADVANCED STATE=$state NEXT_COMMAND=/ai-execute ATTEMPT_CONSUMED=false"
+  }
+  return $true
+}
 function Classify-Failure([string]$Text,[bool]$TimedOut,[int]$ExitCode=1){
   if($TimedOut){ return 'BOUNDED_TIMEOUT' }
   if(Test-PermissionBlocked $Text){ return 'ARCHITECT_PERMISSION_BLOCKED' }
@@ -504,18 +942,41 @@ function Invoke-Route([object]$Route,[int]$Attempt,[string]$Logs){
   [IO.File]::WriteAllText($stderr,$err,$utf8NoBom)
   [pscustomobject]@{exit=$process.ExitCode;timed_out=$timedOut;text=($out+"`n"+$err);stdout=$out;stderr=$err;policy_sha256=$overlay.sha256}
 }
+function Get-CombinedGovernanceTreeHash(){
+  $parts=[System.Collections.Generic.List[string]]::new()
+  foreach($m in @($script:ManagedGovernanceRoots)){
+    $path=[string]$m.canonical_path
+    $hash=if(Test-Path -LiteralPath $path){Get-FileTreeHash $path}else{'ABSENT'}
+    $parts.Add("$path=$hash")
+  }
+  if($parts.Count -eq 0){
+    $ai=Join-Path $ProjectDir '.ai'
+    return (Get-FileTreeHash $ai)
+  }
+  Get-TextHash (($parts|Sort-Object)-join"`n")
+}
 function Validate-ResumePostcondition([object]$Before,[string]$BeforeAi,[object]$Result){
   $After=Get-TaskSnapshot
-  $AfterAi=Get-FileTreeHash (Join-Path $ProjectDir '.ai')
+  $AfterAi=Get-CombinedGovernanceTreeHash
   if($After.hash -eq $Before.hash -and $AfterAi -eq $BeforeAi){ throw 'ARCHITECT_NO_PROGRESS: child exited zero but task checkpoint and .ai/** are byte-identical.' }
   if($Result.text -notmatch 'GOVERNANCE_RESULT'){ throw 'ARCHITECT_CHILD_RESULT_MISSING: child exited zero without GOVERNANCE_RESULT.' }
   if([string]::IsNullOrWhiteSpace($After.state) -and [string]::IsNullOrWhiteSpace($After.phase)){ throw 'ARCHITECT_CHILD_RESULT_MISMATCH: resulting checkpoint has no state/phase.' }
   [pscustomobject]@{after=$After;ai_hash=$AfterAi}
 }
+function Write-PhaseContinuation([object]$After){
+  if(-not $After){return}
+  $state=[string]$After.state; if([string]::IsNullOrWhiteSpace($state)){$state=[string]$After.phase}
+  if($state -eq 'READY_FOR_EXECUTION' -or [string]$After.next -eq 'IMPLEMENTING'){
+    Write-Host "ARCHITECT_PHASE_ADVANCED STATE=$state NEXT_COMMAND=/ai-execute ATTEMPT_CONSUMED=false"
+  }
+}
 
-$AiPath=Join-Path $ProjectDir '.ai'
 $TxDir=Get-TransactionDir $ProjectDir
-Recover-Orphan $TxDir $AiPath
+if($RecoverTransaction){
+  if(Invoke-ExplicitTransactionRecovery){exit 0}
+  throw 'RECOVERY_FAILED'
+}
+Recover-Orphan $TxDir
 $BeforeTask=Get-TaskSnapshot
 if($Command-eq'ai-resume'){
   $mode=Get-ResumeMode
@@ -530,11 +991,15 @@ $ExternalRoots.Add($ConfigDir)
 $ToolsRoot=Join-Path $ConfigDir 'opencode-governance-tools'
 if(Test-Path -LiteralPath $ToolsRoot -PathType Container){$ExternalRoots.Add($ToolsRoot)}
 if($ArgumentsFile){$ExternalRoots.Add([IO.Path]::GetDirectoryName($ArgumentsFile))}
+if($script:RepositoryDir -and $script:RepositoryDir -ne $ProjectDir){$ExternalRoots.Add($script:RepositoryDir)}
 $BaseOverlay=New-HeadlessPermissionOverlay ([string]$Architect.primary.model) ([string]$Architect.primary.variant) @($ExternalRoots)
 $script:HeadlessConfigContent=$BaseOverlay.json
 $script:HeadlessPolicyHash=$BaseOverlay.sha256
 Write-Host "HEADLESS_PERMISSION_CONTRACT version=$($BaseOverlay.version) runtime_policy_sha256=$($BaseOverlay.sha256) auto=disabled"
-$AiExisted=Test-Path $AiPath;$AiHash=Get-FileTreeHash $AiPath;$ProjectState=Get-ProjectStateFingerprint;$Backup=Open-Transaction $TxDir $AiPath $AiHash $AiExisted $ProjectState $BeforeTask
+$script:FingerprintManifestBefore=@(Get-ProjectTreeManifest $ProjectDir)
+$ProjectState=Get-ProjectStateFingerprint
+$BeforeCombined=Get-CombinedGovernanceTreeHash
+$Backup=Open-Transaction $TxDir $ProjectState $BeforeTask
 $Attempted=@{};$Failure=$null;$FailedFamily='';$attempt=0
 try{
   while($true){
@@ -543,16 +1008,18 @@ try{
     if(-not$ordered){throw "ARCHITECT_FAILOVER_BLOCKED: no eligible Architect route remains after $Failure"}
     $route=$ordered[0];$Attempted[$route.route]=$true;$attempt++;Write-Host "ARCHITECT_ROUTE_ATTEMPT $attempt $($route.route) $($route.candidate.model)"
     $result=Invoke-Route $route $attempt $Logs
-    if((Get-ProjectStateFingerprint) -ne $ProjectState){ throw 'ARCHITECT_FAILOVER_BLOCKED: PROJECT_STATE_CHANGED. HUMAN_RECOVERY_REQUIRED' }
+    Assert-ProjectStateUnchanged $ProjectState $script:FingerprintManifestBefore
     # Permission blocks are ineligible for model fallback and never consume implementation/review cycles.
     if(Test-PermissionBlocked $result.text){
       throw (New-PermissionBlockedError $result.text $route.route $attempt $Logs)
     }
     if($result.exit -eq 0 -and -not $result.timed_out){
       $post=$null
-      if($Command -eq 'ai-resume'){ $post=Validate-ResumePostcondition $BeforeTask $AiHash $result }
+      if($Command -eq 'ai-resume'){ $post=Validate-ResumePostcondition $BeforeTask $BeforeCombined $result }
       $Cooldowns.Remove([string]$route.candidate.model);Save-Cooldowns $Cooldowns
-      Write-Host "ARCHITECT_FAILOVER_COMPLETE route=$($route.route) attempts=$attempt task=$TaskId ai_tree=$(Get-FileTreeHash $AiPath) postcondition=PASS permission_contract=$($script:HeadlessContractVersion) runtime_policy_sha256=$($script:HeadlessPolicyHash)"
+      Write-Host "ARCHITECT_FAILOVER_COMPLETE route=$($route.route) attempts=$attempt task=$TaskId ai_tree=$(Get-CombinedGovernanceTreeHash) postcondition=PASS permission_contract=$($script:HeadlessContractVersion) runtime_policy_sha256=$($script:HeadlessPolicyHash)"
+      if($post){ Write-PhaseContinuation $post.after }
+      elseif($Command -eq 'ai-resume'){ Write-PhaseContinuation (Get-TaskSnapshot) }
       if($result.stdout){ Write-Output $result.stdout.TrimEnd() }
       if($result.stderr){ Write-Warning $result.stderr.TrimEnd() }
       Close-Transaction $TxDir
@@ -562,10 +1029,17 @@ try{
     $Failure=Classify-Failure $result.text $result.timed_out ([int]$result.exit);$FailedFamily=[string]$route.candidate.model_family;Write-Warning "Architect route failed: $Failure ($($route.route))"
     if($Failure -eq 'ARCHITECT_PERMISSION_BLOCKED'){ throw (New-PermissionBlockedError $result.text $route.route $attempt $Logs) }
     if($Failure-notin$Eligible){throw "ARCHITECT_FAILOVER_BLOCKED: ineligible failure $Failure. Logs: $Logs"}
-    $Cooldowns[[string]$route.candidate.model]=(Get-Epoch)+$DefaultCooldown;Save-Cooldowns $Cooldowns;Restore-Ai $AiPath $Backup $AiExisted $AiHash
+    $Cooldowns[[string]$route.candidate.model]=(Get-Epoch)+$DefaultCooldown;Save-Cooldowns $Cooldowns
+    Restore-ManagedGovernanceRoots $script:ManagedRootRecords
   }
 }catch{
-  $restored=$false;try{if((Get-ProjectStateFingerprint)-eq$ProjectState){Restore-Ai $AiPath $Backup $AiExisted $AiHash;$restored=$true}}catch{}
+  # MULTI_GOVERNANCE_ROOT_TRANSACTION_V1: always restore managed Governance roots on failure when possible.
+  # Never rewrite application source. If multi-root restore is incomplete, retain the orphan journal.
+  $restored=$false
+  try{
+    Restore-ManagedGovernanceRoots $script:ManagedRootRecords
+    $restored=$true
+  }catch{Write-Warning $_.Exception.Message}
   if($restored){Close-Transaction $TxDir}else{Write-Warning "ARCHITECT_TRANSACTION_ORPHANED: $TxDir"}
   $script:HeadlessConfigContent=$null
   Write-Host "ATTEMPT_LOGS $Logs";Write-Error $_;exit 1
