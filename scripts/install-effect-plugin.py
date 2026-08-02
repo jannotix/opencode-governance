@@ -641,7 +641,7 @@ def real_opencode_hook_self_test(config_dir: pathlib.Path, policy_path: pathlib.
     """EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1 + real tool.execute.before under OpenCode binary."""
     opencode = find_opencode_binary()
     if not opencode:
-        # CI without binary may skip only if OPENCODE_HOOK_SELF_TEST_OPTIONAL=1
+        # Node enforce matrix remains required; real binary optional when unavailable in CI.
         if os.environ.get("OPENCODE_HOOK_SELF_TEST_OPTIONAL") == "1" or os.environ.get("GITHUB_ACTIONS") == "true":
             return {"status": "OPENCODE_HOOK_SELF_TEST_SKIPPED", "reason": "opencode binary missing"}
         return {"status": "OPENCODE_HOOK_SELF_TEST_FAIL", "reason": "opencode binary missing"}

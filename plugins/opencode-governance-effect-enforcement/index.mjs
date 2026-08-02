@@ -136,8 +136,11 @@ function isContainedPath(root, target, roleRootForRelative) {
   } catch {
     return { ok: false, reason: "ROOT_RESOLVE_FAILED" };
   }
+  // Walk from target up to root (inclusive). Do not fail on reparse points *above* the
+  // registered root (Windows runner TEMP often is a junction).
   let cur = abs;
   const seen = new Set();
+  const rootCmp = process.platform === "win32" ? normalizeSep(rootAbs).toLowerCase() : normalizeSep(rootAbs);
   while (true) {
     if (seen.has(cur)) return { ok: false, reason: "PATH_LOOP" };
     seen.add(cur);
@@ -153,8 +156,13 @@ function isContainedPath(root, target, roleRootForRelative) {
     } catch {
       return { ok: false, reason: "PATH_STAT_FAILED" };
     }
+    const curCmp = process.platform === "win32" ? normalizeSep(cur).toLowerCase() : normalizeSep(cur);
+    if (curCmp === rootCmp) break;
     const parent = path.dirname(cur);
     if (parent === cur) break;
+    // Stop if we walked above root without matching (outside).
+    const relProbe = path.relative(rootAbs, cur);
+    if (relProbe.startsWith("..") || path.isAbsolute(relProbe)) break;
     cur = parent;
   }
   const rel = path.relative(rootAbs, abs);
