@@ -147,11 +147,10 @@ function isContainedPath(root, target, roleRootForRelative) {
     try {
       if (fs.existsSync(cur)) {
         const st = fs.lstatSync(cur);
+        // isSymbolicLink covers POSIX symlinks and Windows reparse points that Node reports as symlinks.
+        // Do not compare realpath() vs input path on Windows: TEMP often has short/long path aliases
+        // (RUNNER~1) that differ without being a traversal escape.
         if (st.isSymbolicLink()) return { ok: false, reason: "PATH_SYMLINK_OR_REPARSE" };
-        try {
-          const real = fs.realpathSync.native ? fs.realpathSync.native(cur) : fs.realpathSync(cur);
-          if (path.resolve(real) !== path.resolve(cur)) return { ok: false, reason: "PATH_SYMLINK_OR_REPARSE" };
-        } catch { /* ignore */ }
       }
     } catch {
       return { ok: false, reason: "PATH_STAT_FAILED" };
