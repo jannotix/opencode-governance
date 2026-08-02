@@ -39,6 +39,7 @@ jobs:
             tests/test-nested-governance-roots.py \
             tests/test-legacy-orphan-recovery.py \
             tests/test-semantic-transition-matrix.py \
+            tests/test-role-effect-enforcement.py \
             scripts/context-intelligence.py \
             scripts/legacy-architect-orphan-recovery.py \
             scripts/normalize-jsonc.py \
@@ -104,6 +105,7 @@ jobs:
           python3 tests/test-governance-simulation-fixture.py
           python3 tests/test-governance-simulation-run.py
           python3 tests/test-all-commands-simulation.py
+          python3 -m unittest tests.test-role-effect-enforcement
 
   windows-hardening:
     runs-on: windows-latest
@@ -121,7 +123,7 @@ jobs:
             [Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path),[ref]$null,[ref]$errors)|Out-Null
             if($errors.Count){throw "$path`n$($errors|Out-String)"}
           }
-          python -m py_compile tests/test-governance-authority-memory.py tests/test-governance-pre-commit.py tests/test-governance-capabilities.py tests/test-governance-simulation-fixture.py tests/test-governance-simulation-run.py tests/test-context-intelligence.py tests/test-architect-headless-contract.py tests/test-nested-governance-roots.py tests/test-legacy-orphan-recovery.py tests/test-semantic-transition-matrix.py scripts/architect-headless-contract.py scripts/workspace-repository-root-contract.py scripts/legacy-architect-orphan-recovery.py scripts/workflow-continuation.py scripts/governance-semantic.py scripts/opencode-compatibility.py scripts/governance-metrics.py scripts/generate-governance-contract.py scripts/generated/governance_contract_data.py scripts/governance-authority.py scripts/governance-memory.py scripts/governance-evidence.py scripts/governance-pre-commit.py scripts/governance-simulation.py scripts/governance-capabilities.py scripts/governance-install-transaction.py
+          python -m py_compile tests/test-governance-authority-memory.py tests/test-governance-pre-commit.py tests/test-governance-capabilities.py tests/test-governance-simulation-fixture.py tests/test-governance-simulation-run.py tests/test-context-intelligence.py tests/test-architect-headless-contract.py tests/test-nested-governance-roots.py tests/test-legacy-orphan-recovery.py tests/test-semantic-transition-matrix.py tests/test-role-effect-enforcement.py scripts/architect-headless-contract.py scripts/workspace-repository-root-contract.py scripts/legacy-architect-orphan-recovery.py scripts/workflow-continuation.py scripts/governance-semantic.py scripts/opencode-compatibility.py scripts/governance-metrics.py scripts/role-report-ingest.py scripts/generate-governance-contract.py scripts/generated/governance_contract_data.py scripts/governance-authority.py scripts/governance-memory.py scripts/governance-evidence.py scripts/governance-pre-commit.py scripts/governance-simulation.py scripts/governance-capabilities.py scripts/governance-install-transaction.py
       - name: Run Windows hardening regressions
         shell: pwsh
         run: |
@@ -151,3 +153,4 @@ jobs:
           python -m unittest tests.test-semantic-transition-matrix
           python scripts/generate-governance-contract.py --root . --check
           python tests/test-all-commands-simulation.py
+          python tests/test-role-effect-enforcement.py

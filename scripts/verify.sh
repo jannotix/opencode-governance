@@ -3,7 +3,8 @@ set -euo pipefail
 CONFIG_DIR="${1:-${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}}"
 required_agents=(architect build plan executor reviewer reviewer-architecture final-reviewer)
 required_commands=(ai-init ai-audit ai-docs ai-discover ai-plan ai-execute ai-review ai-workflow ai-status ai-resume ai-metrics ai-release)
-ai_edit_agents=(architect build plan reviewer reviewer-architecture final-reviewer)
+ai_edit_agents=(architect build plan)
+readonly_review_agents=(reviewer reviewer-architecture final-reviewer)
 portable_ai_edit_patterns=(
   '    "*": deny'
   '    ".ai": allow'
@@ -37,6 +38,15 @@ for name in "${ai_edit_agents[@]}"; do
   for pattern in "${portable_ai_edit_patterns[@]}"; do
     grep -Fqx "$pattern" "$file" || fail "$name missing portable .ai edit rule: $pattern"
   done
+done
+for name in "${readonly_review_agents[@]}"; do
+  file="$CONFIG_DIR/agents/$name.md"
+  grep -Fqx '    "*": deny' "$file" || fail "$name missing technical read-only edit deny"
+  grep -Eq '^  bash:[[:space:]]*$' "$file" || fail "$name missing bash permission block"
+  # Effect-enforced reviewers must not retain open bash ask defaults (skill may still ask).
+  if awk '/^  bash:/{f=1;next} f && /^  [a-zA-Z]/{exit} f && /"\*": ask/{found=1} END{exit found?0:1}' "$file"; then
+    fail "$name must not use bash ask default under 4.0.0"
+  fi
 done
 for name in "${required_commands[@]}"; do [[ -s "$CONFIG_DIR/commands/$name.md" ]] || fail "Missing command: $name"; done
 for name in architect build plan; do for marker in "${v3_markers[@]}"; do grep -Fq "$marker" "$CONFIG_DIR/agents/$name.md" || fail "$name missing v3 marker $marker"; done; done

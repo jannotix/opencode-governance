@@ -5,6 +5,15 @@ Dates use `YYYY-MM-DD`. Older micro-releases are summarized; see git history for
 ## Unreleased
 
 
+## 4.0.0 - 2026-08-02
+
+- Breaking security architecture: `ROLE_EFFECT_ENFORCEMENT_V1` OpenCode plugin using documented `tool.execute.before` fail-closed hook.
+- Per-role effect policy (`governance-spec/effects/role-effect-policy.json`) for Architect, Executor and all Reviewer roles.
+- Reviewer/Final Reviewer templates are technically read-only (`edit`/`bash` deny); reports enter only via `DETERMINISTIC_ROLE_REPORT_INGESTION_V1`.
+- Review-chain attestation binds role → route → model family → packet → candidate → report hash → permission policy.
+- Shell/path containment negatives and sibling-report isolation tests.
+- Managed tool: `role-report-ingest.py`.
+
 ## 3.8.0 - 2026-08-02
 
 - Semantic governance core: canonical `governance-spec/governance-contract.json` and deterministic generator (`scripts/generate-governance-contract.py`).

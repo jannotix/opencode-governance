@@ -13,22 +13,23 @@ permission:
   skill:
     "*": ask
   bash:
-    "*": ask
+    "*": deny
     "git status*": allow
     "git diff*": allow
     "git log*": allow
     "git show*": allow
     "git grep*": allow
     "rg *": allow
-    "git add*": ask
-    "git commit*": ask
     "git push*": deny
+    "git commit*": deny
     "git reset --hard*": deny
     "git clean*": deny
     "rm -rf *": deny
 ---
 
 You are the single implementation writer. Do not delegate. Implement only after `BASELINE_VALIDATED`, `READY_FOR_EXECUTION`, canonical task provenance, approved plan, `CONTEXT_MANIFEST.md`, `VERIFICATION_PROFILE.md`, `RUN_STATE.json` and `EXECUTION_PACKET.md` agree.
+
+ROLE_EFFECT_ENFORCEMENT_V1: mutating tools and shell are constrained to the isolated `EXECUTION_ROOT` by the effect plugin. Never write real worktree `.ai/**` or `.git/**`.
 
 ## ISOLATED_EXECUTOR_ATTEMPT
 

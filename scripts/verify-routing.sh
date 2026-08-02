@@ -8,7 +8,7 @@ MANIFEST="$CONFIG_DIR/opencode-governance-routing.json"
 [[ -f "$MANIFEST" ]] || { echo 'PASS: model failover routing is not configured.'; exit 0; }
 version="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1],encoding="utf-8-sig")).get("governance_version",""))' "$MANIFEST")"
 [[ "$version" != '3.3.0' ]] || exec "$SCRIPT_DIR/verify-routing-core.sh" "$CONFIG_DIR"
-case "$version" in 3.3.2|3.3.3|3.3.4|3.4.0|3.4.1|3.4.2|3.4.3|3.4.4|3.6.0|3.7.0|3.7.1|3.7.2|3.7.3|3.7.4|3.7.5|3.7.6|3.7.7|3.8.0);;*) echo "Unsupported routing manifest governance_version: $version" >&2; exit 1;; esac
+case "$version" in 3.3.2|3.3.3|3.3.4|3.4.0|3.4.1|3.4.2|3.4.3|3.4.4|3.6.0|3.7.0|3.7.1|3.7.2|3.7.3|3.7.4|3.7.5|3.7.6|3.7.7|3.8.0|4.0.0);;*) echo "Unsupported routing manifest governance_version: $version" >&2; exit 1;; esac
 
 python3 - "$CONFIG_DIR" "$SCRIPT_DIR/verify-routing-core.sh" "$SCRIPT_DIR/governance-capabilities.py" "$version" <<'PY'
 import json,os,pathlib,shutil,subprocess,sys,tempfile
@@ -16,16 +16,16 @@ root=pathlib.Path(sys.argv[1]);core=pathlib.Path(sys.argv[2]);capabilities=pathl
 data=json.loads((root/'opencode-governance-routing.json').read_text(encoding='utf-8-sig'));tools=root/'opencode-governance-tools'
 base=[tools/name for name in ['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh']]
 expected=list(base)
-if version in {'3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0'}:
+if version in {'3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0'}:
     expected=[tools/'architect-attempt.ps1',tools/'architect-attempt.sh',tools/'architect-headless-contract.py',tools/'executor-attempt.ps1',tools/'executor-attempt.sh']
-    if version in {'3.7.6','3.7.7','3.8.0'}:
+    if version in {'3.7.6','3.7.7','3.8.0','4.0.0'}:
         expected=[tools/'architect-attempt.ps1',tools/'architect-attempt.sh',tools/'architect-headless-contract.py',tools/'legacy-architect-orphan-recovery.py',tools/'executor-attempt.ps1',tools/'executor-attempt.sh']
-context_versions={'3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0'}
-hardened_versions={'3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0'}
-fingerprint_versions={'3.3.4','3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0'}
-powershell7_versions={'3.3.3','3.3.4','3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0'}
-workflow_versions={'3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0'}
-capability_versions={'3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0'}
+context_versions={'3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0'}
+hardened_versions={'3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0'}
+fingerprint_versions={'3.3.4','3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0'}
+powershell7_versions={'3.3.3','3.3.4','3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0'}
+workflow_versions={'3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0'}
+capability_versions={'3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0'}
 context_ps=tools/'context-intelligence.ps1';context_sh=tools/'context-intelligence.sh';context_py=tools/'context-intelligence.py'
 workflow_ps=tools/'workflow-continuation.ps1';workflow_py=tools/'workflow-continuation.py'
 headless_contract=tools/'architect-headless-contract.py'
@@ -37,8 +37,8 @@ if version in context_versions:
     if version in workflow_versions:
         if data.get('workflow_continuation_version')!=version: raise SystemExit(f'workflow_continuation_version must be {version}.')
         expected += [workflow_ps,workflow_py]
-    if version == '3.8.0':
-        expected += [tools/name for name in ['governance-semantic.py','opencode-compatibility.py','governance-metrics.py']]
+    if version in {'3.8.0','4.0.0'}:
+        expected += [tools/name for name in ['governance-semantic.py','opencode-compatibility.py','governance-metrics.py','role-report-ingest.py']]
     if version in capability_versions:
         expected += [tools/name for name in ['governance-authority.py','governance-memory.py','governance-evidence.py','governance-simulation.py','governance-pre-commit.py']]
 else:
@@ -66,7 +66,7 @@ for command in ['ai-init','ai-audit','ai-discover','ai-plan']:
     text=(root/'commands'/f'{command}.md').read_text(encoding='utf-8')
     for value in gate:
         if value not in text: raise SystemExit(f'{command} missing Architect entry gate marker: {value}')
-if version in {'3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0'}:
+if version in {'3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0'}:
     resume_markers=gate+['RESUME_MODE_V1','PRE_SIDE_EFFECT','POST_SIDE_EFFECT','TOOL_EXECUTION_ABORTED']
     text=(root/'commands'/'ai-resume.md').read_text(encoding='utf-8')
     for value in resume_markers:
@@ -82,33 +82,33 @@ if version in fingerprint_versions:
         if value not in ps_runner: raise SystemExit(f'PowerShell Architect runner missing project-state marker: {value}')
     for value in ['PROJECT_STATE_FINGERPRINT_V1','PROJECT_STATE_CHANGED','project_state_fingerprint']:
         if value not in sh_runner: raise SystemExit(f'Unix Architect runner missing project-state marker: {value}')
-    if version in {'3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0'}:
+    if version in {'3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0'}:
         for value in ['ai-resume','TOOL_EXECUTION_ABORTED','ARCHITECT_ORPHAN_RECOVERED','RESUME_POST_SIDE_EFFECT','ARCHITECT_TRANSACTION_V1','PRE_SIDE_EFFECT','POST_SIDE_EFFECT']:
             if value not in ps_runner or value not in sh_runner: raise SystemExit(f'Architect runner missing 3.7.2 reliability marker: {value}')
-    if version in {'3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0'}:
+    if version in {'3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0'}:
         for value in ['ARCHITECT_HEADLESS_PERMISSION_CONTRACT_V1','OPENCODE_CONFIG_CONTENT','ARCHITECT_PERMISSION_BLOCKED','HEADLESS_PERMISSION_CONTRACT','auto=disabled','ROUTING_MANIFEST_HASHES']:
             if value not in ps_runner or value not in sh_runner: raise SystemExit(f'Architect runner missing 3.7.3 headless permission marker: {value}')
         if not headless_contract.is_file(): raise SystemExit(f'Managed headless contract tool missing: {headless_contract}')
-    if version in {'3.7.4','3.7.5','3.7.6','3.7.7','3.8.0'}:
+    if version in {'3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0'}:
         for value in ['ARCHITECT_STDIN_PROMPT_TRANSPORT_V1','ARCHITECT_PROMPT_TRANSPORT','ARCHITECT_PROMPT_TRANSPORT_FAILED','argv_prompt_bytes','prompt_transport']:
             if value not in ps_runner or value not in sh_runner: raise SystemExit(f'Architect runner missing 3.7.4 stdin transport marker: {value}')
         if 'RedirectStandardInput' not in ps_runner: raise SystemExit('PowerShell Architect runner missing RedirectStandardInput')
         if 'input=prompt_utf8' not in sh_runner: raise SystemExit('Unix Architect runner missing input=prompt_utf8 stdin transport')
-    if version in {'3.7.5','3.7.6','3.7.7','3.8.0'}:
+    if version in {'3.7.5','3.7.6','3.7.7','3.8.0','4.0.0'}:
         for value in ['WORKSPACE_REPOSITORY_ROOT_CONTRACT_V1','MULTI_GOVERNANCE_ROOT_TRANSACTION_V1','PROJECT_STATE_CHANGESET_DIAGNOSTIC_V1','REPOSITORY_ROOT_AMBIGUOUS','managed_governance_roots','ARCHITECT_PHASE_ADVANCED']:
             if value not in ps_runner or value not in sh_runner: raise SystemExit(f'Architect runner missing 3.7.5 nested-root marker: {value}')
-    if version in {'3.7.6','3.7.7','3.8.0'}:
+    if version in {'3.7.6','3.7.7','3.8.0','4.0.0'}:
         for value in ['LEGACY_ARCHITECT_ORPHAN_RECOVERY_CONTRACT_V1','EVIDENCE_BOUND_RECOVERY_RECEIPT_V2','validate-governance-only','legacy-architect-orphan-recovery']:
             if value not in ps_runner or value not in sh_runner: raise SystemExit(f'Architect runner missing 3.7.6 legacy recovery marker: {value}')
         if not (tools/'legacy-architect-orphan-recovery.py').is_file():
             raise SystemExit('Managed legacy recovery tool missing')
-        if version in {'3.7.7','3.8.0'}:
+        if version in {'3.7.7','3.8.0','4.0.0'}:
             recovery_raw = (tools/'legacy-architect-orphan-recovery.py').read_text(encoding='utf-8')
             for value in ['LEGACY_FORENSIC_BUNDLE_V1_ADAPTER','LEGACY_PROJECT_STATE_FORENSICS_V1','CANONICAL_RECOVERY_EVIDENCE_V2']:
                 if value not in recovery_raw:
                     raise SystemExit(f'legacy recovery module missing 3.7.7 adapter marker: {value}')
 
-        if version == '3.8.0':
+        if version in {'3.8.0','4.0.0'}:
             sem = tools/'governance-semantic.py'
             if not sem.is_file():
                 raise SystemExit('Managed semantic tool missing')
