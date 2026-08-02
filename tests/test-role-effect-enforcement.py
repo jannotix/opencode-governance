@@ -363,11 +363,34 @@ class ReportIngestV2Tests(unittest.TestCase):
         return env
 
     def _write_route_receipt(self, root: pathlib.Path, role: str, family: str) -> pathlib.Path:
+        # 4.0.3: ingestion requires AUTHORITATIVE_ROUTE_RECEIPT_V1 (S-014).
         path = root / f"route-{role}.json"
-        path.write_text(
-            json.dumps({"route_id": f"route-{role}", "model_family": family, "role": role}, sort_keys=True),
-            encoding="utf-8",
+        route_receipt = ROOT / "scripts" / "route-receipt.py"
+        r = subprocess.run(
+            [
+                sys.executable, str(route_receipt), "emit",
+                "--out", str(path),
+                "--role", role,
+                "--task-id", "T1",
+                "--route-id", f"route-{role}",
+                "--model", f"model-{family}",
+                "--variant", "minimal",
+                "--model-family", family,
+                "--provider-route-identity", f"provider-{family}",
+                "--packet-sha256", "ab" * 32,
+                "--candidate-identity", "cand1",
+                "--selection-policy-sha256", "0" * 64,
+                "--launch-sha256", "1" * 64,
+                "--role-process-receipt-sha256", "2" * 64,
+                "--process-id", "123",
+                "--session-id", "sess-test",
+                "--started-at-utc", "2026-08-02T10:00:00Z",
+                "--completed-at-utc", "2026-08-02T10:05:00Z",
+            ],
+            capture_output=True,
+            text=True,
         )
+        assert r.returncode == 0, r.stdout + r.stderr
         return path
 
     def test_ingest_and_chain(self) -> None:
@@ -411,7 +434,7 @@ class ReportIngestV2Tests(unittest.TestCase):
             self.assertEqual(att.returncode, 0, att.stdout + att.stderr)
             payload = json.loads(att.stdout)
             self.assertEqual(payload["status"], "REVIEW_CHAIN_ATTESTED")
-            self.assertEqual(payload["attestation"]["schema"], "REVIEW_CHAIN_ATTESTATION_V3")
+            self.assertEqual(payload["attestation"]["schema"], "REVIEW_CHAIN_ATTESTATION_V4")
 
     def test_task_id_traversal_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as td:

@@ -319,35 +319,82 @@ function classifyShell(command, rolePolicy, roots) {
   }
 
   if (rolePolicy.bash_mode === "execution_root_only") {
-    const execRoot = roots.execution_root;
-    if (!execRoot) return { allow: false, reason: "EXECUTION_ROOT_REQUIRED" };
-    if (head === "git") {
-      if (tokens.includes("-c") || tokens[1] === "config" || tokens[1] === "alias") {
-        return { allow: false, reason: "SHELL_EFFECT_CLASSIFICATION_UNSUPPORTED", detail: "git_alias_or_config" };
-      }
-      for (const t of tokens) {
-        const tl = t.toLowerCase();
-        for (const bad of GIT_DENIED_OPTS) {
-          if (tl === bad || tl.startsWith(bad + "=")) {
-            return { allow: false, reason: "SHELL_EFFECT_CLASSIFICATION_UNSUPPORTED", detail: `git_opt_${bad}` };
-          }
+    // EXECUTOR_COMMAND_BROKER_V1 — deterministic command classification.
+    // Unknown commands and explicitly denied destructive ops fail closed.
+    return classifyExecutorBroker(head, tokens, roots);
+  }
+  return { allow: false, reason: "SHELL_EFFECT_CLASSIFICATION_UNSUPPORTED", detail: "unknown_bash_mode" };
+}
+
+/** EXECUTOR_COMMAND_BROKER_V1 — explicit command classes for the Executor role. */
+const EXECUTOR_DENY_HEADS = new Set([
+  // destructive filesystem
+  "rm", "rmdir", "del", "erase", "rd", "remove-item", "shred", "unlink",
+  // shell interpreters (also caught earlier, but defensive)
+  "sh", "bash", "zsh", "dash", "pwsh", "powershell", "powershell_ise",
+  "cmd", "csh", "tcsh", "fish",
+  // package publication / deployment
+  "npm", "npx", "yarn", "pnpm", "publish", "deploy", "docker", "kubectl",
+  "helm", "terraform", "ansible-playbook", "cap", "mvn", "gradle", "cargo",
+  "twine", "gem", "push", "upload",
+  // misc dangerous
+  "curl", "wget", "nc", "netcat", "ssh", "scp", "rsync", "chmod", "chown",
+  "mkfs", "dd", "shutdown", "reboot", "kill", "killall", "pkill", "systemctl",
+  "launchctl",
+]);
+const EXECUTOR_GIT_DENY_SUBCMDS = new Set([
+  "commit", "push", "reset", "clean", "checkout", "switch", "merge", "rebase",
+  "cherry-pick", "revert", "stash", "tag", "fetch", "pull", "clone", "init",
+  "mv", "rm", "update-ref", "notes", "worktree", "submodule", "bundle",
+  "am", "apply", "filter-branch", "reflog", "gc", "prune",
+]);
+const EXECUTOR_GIT_ALLOW_SUBCMDS = new Set([
+  "status", "diff", "log", "show", "grep", "ls-files", "rev-parse", "branch",
+  "blame", "shortlog", "describe", "name-rev", "range-diff", "fsck", "cat-file",
+]);
+
+function classifyExecutorBroker(head, tokens, roots) {
+  const execRoot = roots.execution_root;
+  if (!execRoot) return { allow: false, reason: "EXECUTION_ROOT_REQUIRED" };
+  // Explicit deny list.
+  if (EXECUTOR_DENY_HEADS.has(head)) {
+    return { allow: false, reason: "EXECUTOR_BROKER_DENIED_COMMAND", detail: head };
+  }
+  // Git: only an explicit read-only allowlist subcommand set.
+  if (head === "git") {
+    if (tokens.includes("-c") || tokens[1] === "config" || tokens[1] === "alias") {
+      return { allow: false, reason: "SHELL_EFFECT_CLASSIFICATION_UNSUPPORTED", detail: "git_alias_or_config" };
+    }
+    for (const t of tokens) {
+      const tl = t.toLowerCase();
+      for (const bad of GIT_DENIED_OPTS) {
+        if (tl === bad || tl.startsWith(bad + "=")) {
+          return { allow: false, reason: "SHELL_EFFECT_CLASSIFICATION_UNSUPPORTED", detail: `git_opt_${bad}` };
         }
       }
     }
-    for (const t of tokens.slice(1)) {
-      if (t.startsWith("-")) continue;
-      if (!(path.isAbsolute(t) || t.includes("/") || t.includes("\\") || t.includes(".."))) continue;
-      const c = isContainedPath(execRoot, t, execRoot);
-      if (!c.ok) return { allow: false, reason: "BASH_PATH_OUTSIDE_EXECUTION_ROOT", detail: c.reason };
-      const n = normalizeSep(c.abs);
-      const nl = process.platform === "win32" ? n.toLowerCase() : n;
-      if (nl.includes("/.ai/") || nl.endsWith("/.ai") || nl.includes("/.git/") || nl.endsWith("/.git")) {
-        return { allow: false, reason: "BASH_FORBIDDEN_ROOT" };
-      }
+    const sub = tokens[1] ? tokens[1].toLowerCase() : "";
+    if (sub && EXECUTOR_GIT_DENY_SUBCMDS.has(sub)) {
+      return { allow: false, reason: "EXECUTOR_BROKER_DENIED_GIT", detail: sub };
     }
-    return { allow: true, class: "executor_execution_root" };
+    if (sub && !EXECUTOR_GIT_ALLOW_SUBCMDS.has(sub)) {
+      return { allow: false, reason: "EXECUTOR_BROKER_UNKNOWN_GIT_SUBCMD", detail: sub };
+    }
+    return { allow: true, class: "executor_readonly_git" };
   }
-  return { allow: false, reason: "SHELL_EFFECT_CLASSIFICATION_UNSUPPORTED", detail: "unknown_bash_mode" };
+  // Containment for every path-like argument.
+  for (const t of tokens.slice(1)) {
+    if (t.startsWith("-")) continue;
+    if (!(path.isAbsolute(t) || t.includes("/") || t.includes("\\") || t.includes(".."))) continue;
+    const c = isContainedPath(execRoot, t, execRoot);
+    if (!c.ok) return { allow: false, reason: "BASH_PATH_OUTSIDE_EXECUTION_ROOT", detail: c.reason };
+    const n = normalizeSep(c.abs);
+    const nl = process.platform === "win32" ? n.toLowerCase() : n;
+    if (nl.includes("/.ai/") || nl.endsWith("/.ai") || nl.includes("/.git/") || nl.endsWith("/.git")) {
+      return { allow: false, reason: "BASH_FORBIDDEN_ROOT" };
+    }
+  }
+  return { allow: true, class: "executor_execution_root" };
 }
 
 /**

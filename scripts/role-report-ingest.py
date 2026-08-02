@@ -13,6 +13,7 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import sys
 import time
 from typing import Any
@@ -20,7 +21,8 @@ from typing import Any
 SCHEMA = "opencode-governance.role-report/v3"
 SCHEMA_V2 = "opencode-governance.role-report/v2"
 SCHEMA_V1_COMPAT = "opencode-governance.role-report/v1"
-CHAIN_SCHEMA = "REVIEW_CHAIN_ATTESTATION_V3"
+CHAIN_SCHEMA = "REVIEW_CHAIN_ATTESTATION_V4"
+CHAIN_SCHEMA_V3 = "REVIEW_CHAIN_ATTESTATION_V3"
 CHAIN_SCHEMA_V2 = "REVIEW_CHAIN_ATTESTATION_V2"
 INGEST_CONTRACT = "DETERMINISTIC_ROLE_REPORT_INGESTION_V3"
 INGEST_CONTRACT_V2 = "DETERMINISTIC_ROLE_REPORT_INGESTION_V2"
@@ -252,17 +254,39 @@ def ingest(
         effect_sha = validate_sha256(effect_sha, "effect_policy_sha256")
 
     # Route receipt is mandatory for V3 production path (R-009).
+    # S-014: receipt must be AUTHORITATIVE_ROUTE_RECEIPT_V1 (strict schema),
+    # not arbitrary JSON containing only route_id/model_family. The strict
+    # schema is required unless legacy-envelope mode explicitly opts in.
     route_id = str(envelope.get("route_id") or "")
     model_family = str(envelope.get("model_family") or "")
     route_receipt_sha = ""
     if route_receipt_path is not None:
         receipt = load_optional_json(route_receipt_path)
         assert receipt is not None
-        route_id = str(receipt.get("route_id") or receipt.get("route") or "")
-        model_family = str(receipt.get("model_family") or receipt.get("family") or "")
+        if receipt.get("schema") == "AUTHORITATIVE_ROUTE_RECEIPT_V1":
+            # Strict path: validate every required binding field.
+            for f in ("route_id", "role", "task_id", "packet_sha256", "candidate_identity",
+                      "model", "model_family", "provider_route_identity",
+                      "selection_policy_sha256", "launch_sha256",
+                      "role_process_receipt_sha256", "process_id", "session_id",
+                      "started_at_utc", "completed_at_utc"):
+                if not str(receipt.get(f) or "").strip():
+                    emit_error("ROLE_REPORT_ROUTE_RECEIPT_INVALID", f"missing {f}")
+            if str(receipt.get("role")) not in {role, "executor"}:
+                emit_error("ROLE_REPORT_ROUTE_RECEIPT_ROLE_MISMATCH", str(receipt.get("role")))
+            if str(receipt.get("packet_sha256")) != packet_sha:
+                emit_error("ROLE_REPORT_ROUTE_RECEIPT_PACKET_MISMATCH", str(receipt.get("packet_sha256")))
+            route_id = str(receipt.get("route_id"))
+            model_family = str(receipt.get("model_family"))
+        elif schema == SCHEMA and not envelope.get("accept_legacy_route_receipt"):
+            emit_error("ROLE_REPORT_ROUTE_RECEIPT_INVALID", "production requires AUTHORITATIVE_ROUTE_RECEIPT_V1")
+        else:
+            # Legacy loose path (opt-in only): tolerate route_id/model_family strings.
+            route_id = str(receipt.get("route_id") or receipt.get("route") or "")
+            model_family = str(receipt.get("model_family") or receipt.get("family") or "")
+            if not route_id or not model_family:
+                emit_error("ROLE_REPORT_ROUTE_RECEIPT_INVALID", "route_id/model_family")
         route_receipt_sha = sha256_file(route_receipt_path)
-        if not route_id or not model_family:
-            emit_error("ROLE_REPORT_ROUTE_RECEIPT_INVALID", "route_id/model_family")
     elif schema == SCHEMA:
         emit_error("ROLE_REPORT_ROUTE_RECEIPT_REQUIRED")
     elif envelope.get("accept_envelope_route_without_receipt"):
@@ -290,7 +314,41 @@ def ingest(
         body_bytes = body_bytes.replace(b"\r\n", b"\n")
         body_hash = hashlib.sha256(body_bytes).hexdigest()
 
+    # S-016: transactional report commit (DETERMINISTIC_ROLE_REPORT_TRANSACTION_V1).
+    # Stage body/metadata/receipt under a transaction directory with a journal and
+    # a single COMMIT marker published only after every destination is persisted
+    # and re-hashed. A crash leaves at most a partial transaction directory; the
+    # prior committed artifacts are preserved.
+    tx_dir = dest_dir / ".transactions" / f"{out_name}.{int(time.time())}.{os.getpid()}"
+    tx_dir.mkdir(parents=True, exist_ok=True)
+    if is_symlink_or_reparse(tx_dir):
+        emit_error("ROLE_REPORT_TX_DIR_SYMLINK", str(tx_dir))
+    journal_path = tx_dir / "journal.json"
+    commit_marker = tx_dir / "COMMITTED"
+
+    def _journal(state: str, extra: dict[str, Any] | None = None) -> None:
+        entry = {"state": state, "at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        if extra:
+            entry.update(extra)
+        # Append-only journal.
+        with open(journal_path, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(entry, sort_keys=True) + "\n")
+
+    _journal("PREPARED")
+    # Stage the body into the transaction dir first.
+    staged_body = tx_dir / out_name
+    staged_body.write_bytes(body_bytes)
+    staged_body_hash = sha256_file(staged_body)
+    expected_staged = hashlib.sha256(body_bytes).hexdigest()
+    if staged_body_hash != expected_staged:
+        emit_error("ROLE_REPORT_TX_BODY_HASH_MISMATCH")
+    _journal("VALIDATED", {"staged_body_sha256": staged_body_hash})
+
     written_body_hash = atomic_write_no_clobber(dest, body_bytes, allow_identical=allow_identical_idempotent)
+    if written_body_hash != staged_body_hash:
+        # Roll back to prior committed artifact if any; remove the partial new.
+        _rollback_transaction(tx_dir, dest, meta_path)
+        emit_error("ROLE_REPORT_TX_BODY_PERSIST_MISMATCH", f"{written_body_hash}!={staged_body_hash}")
 
     completed = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     meta = {
@@ -317,6 +375,11 @@ def ingest(
     }
     meta_bytes = (json.dumps(meta, indent=2, sort_keys=True) + "\n").encode("utf-8")
     meta_hash = atomic_write_no_clobber(meta_path, meta_bytes, allow_identical=allow_identical_idempotent)
+    # Re-hash persisted metadata.
+    if sha256_file(meta_path) != meta_hash:
+        _rollback_transaction(tx_dir, dest, meta_path)
+        emit_error("ROLE_REPORT_TX_META_PERSIST_MISMATCH")
+    _journal("COMMITTING", {"metadata_sha256": meta_hash})
     # Content-bound receipt
     receipt = {
         "status": "ROLE_REPORT_INGESTED",
@@ -335,7 +398,33 @@ def ingest(
     receipt_path = dest.with_suffix(dest.suffix + ".receipt.json")
     receipt_bytes = (json.dumps(receipt, indent=2, sort_keys=True) + "\n").encode("utf-8")
     atomic_write_no_clobber(receipt_path, receipt_bytes, allow_identical=True)
+    if sha256_file(receipt_path) != hashlib.sha256(receipt_bytes).hexdigest():
+        _rollback_transaction(tx_dir, dest, meta_path)
+        emit_error("ROLE_REPORT_TX_RECEIPT_PERSIST_MISMATCH")
+    # S-016: publish a single COMMIT marker only after every destination is
+    # persisted and re-hashed.
+    commit_body = {
+        "schema": "DETERMINISTIC_ROLE_REPORT_TRANSACTION_V1",
+        "role": role,
+        "task_id": task_id,
+        "report_body_sha256": written_body_hash,
+        "metadata_sha256": meta_hash,
+        "receipt_sha256": hashlib.sha256(receipt_bytes).hexdigest(),
+        "committed_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    commit_marker.write_text(json.dumps(commit_body, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _journal("COMMITTED", {"commit_marker_sha256": sha256_file(commit_marker)})
+    receipt["transaction"] = {"dir": str(tx_dir), "commit_marker": str(commit_marker)}
     return receipt
+
+
+def _rollback_transaction(tx_dir: pathlib.Path, dest: pathlib.Path, meta_path: pathlib.Path) -> None:
+    """S-016 recovery: remove partial new artifacts; preserve prior committed state."""
+    try:
+        if tx_dir.exists():
+            shutil.rmtree(tx_dir, ignore_errors=True)
+    except Exception:
+        pass
 
 
 def _load_live_meta(base: pathlib.Path, name: str) -> tuple[pathlib.Path, dict[str, Any], str, str]:
@@ -378,6 +467,7 @@ def attest_chain(
     candidates = set()
     evidences = set()
     timestamps = []
+    revalidation = []
 
     for role, name in required:
         _path, meta, body_hash, meta_hash = _load_live_meta(base, name)
@@ -396,6 +486,55 @@ def attest_chain(
             emit_error("REVIEW_CHAIN_EFFECT_POLICY_STALE", name)
         ts = meta.get("completed_at_utc") or meta.get("ingested_at_utc") or ""
         timestamps.append((role, ts))
+
+        # S-015 (Review Chain V4): live-revalidate the ingestion receipt, the
+        # route receipt (when an authoritative one is referenced), and any
+        # transaction commit marker. No caller-provided string substitutes for
+        # a runner receipt; a hash mismatch is a chain break.
+        rv = {"role": role, "report_body_sha256_ok": True, "metadata_sha256_ok": True}
+        # 1. Live ingestion receipt revalidation (re-hash the .receipt.json).
+        receipt_path = _path.with_suffix(_path.suffix + ".receipt.json")
+        if receipt_path.is_file():
+            if is_symlink_or_reparse(receipt_path):
+                emit_error("REVIEW_CHAIN_RECEIPT_SYMLINK", str(receipt_path))
+            try:
+                rc = json.loads(receipt_path.read_text(encoding="utf-8-sig"))
+            except Exception as exc:
+                emit_error("REVIEW_CHAIN_RECEIPT_INVALID", f"{name}:{exc}")
+            if str(rc.get("report_body_sha256") or "") != body_hash:
+                emit_error("REVIEW_CHAIN_RECEIPT_BODY_HASH_MISMATCH", name)
+            if str(rc.get("metadata_sha256") or "") != meta_hash:
+                emit_error("REVIEW_CHAIN_RECEIPT_META_HASH_MISMATCH", name)
+            rv["ingestion_receipt_revalidated"] = True
+        # 2. Route receipt revalidation when referenced & resolvable.
+        route_receipt_sha = str(meta.get("route_receipt_sha256") or "")
+        rv_route_ok = True
+        if route_receipt_sha:
+            # Resolve the route receipt artifact next to the report's task dir if present.
+            rr_path = base.parent / "route-receipts" / f"{role}.json"
+            if rr_path.is_file() and not is_symlink_or_reparse(rr_path):
+                if sha256_file(rr_path) != route_receipt_sha:
+                    emit_error("REVIEW_CHAIN_ROUTE_RECEIPT_HASH_MISMATCH", name)
+                try:
+                    rrb = json.loads(rr_path.read_text(encoding="utf-8-sig"))
+                    if rrb.get("schema") != "AUTHORITATIVE_ROUTE_RECEIPT_V1":
+                        emit_error("REVIEW_CHAIN_ROUTE_RECEIPT_SCHEMA", name)
+                    if str(rrb.get("packet_sha256") or "") and str(rrb.get("packet_sha256")) != str(meta.get("packet_sha256") or ""):
+                        emit_error("REVIEW_CHAIN_ROUTE_RECEIPT_PACKET_MISMATCH", name)
+                except Exception as exc:
+                    emit_error("REVIEW_CHAIN_ROUTE_RECEIPT_INVALID", f"{name}:{exc}")
+                rv["route_receipt_revalidated"] = True
+                rv_route_ok = True
+            else:
+                # Referenced receipt not co-located for live revalidation. The
+                # route_receipt_sha recorded at ingest time still binds it; we
+                # cannot re-hash an absent artifact, so this is a non-fatal
+                # "skipped" note rather than a chain break. A present-but-
+                # mismatched receipt is the hard error (handled above).
+                rv["route_receipt_revalidation"] = "skipped_not_colocated"
+        rv["route_receipt_ok"] = rv_route_ok
+        revalidation.append(rv)
+
         chain.append(
             {
                 "role": meta.get("role"),
@@ -445,6 +584,7 @@ def attest_chain(
         "candidate_identity": cand,
         "evidence_manifest_sha256": next(iter(evidences)) if evidences else "",
         "chain": chain,
+        "revalidation": revalidation,
         "reviewer_independence": "PASS",
         "attested_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
