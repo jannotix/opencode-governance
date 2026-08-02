@@ -25,7 +25,7 @@ PLUGIN_ID = "opencode-governance-effect-enforcement"
 OWNED_MARKER = ".opencode-governance-ownership.json"
 PLUGIN_DIR_NAME = "opencode-governance-effect-enforcement"
 ENTRY_NAME = "opencode-governance-effect-enforcement.mjs"
-VERSION = "4.0.2"
+VERSION = "4.0.3"
 SCHEMA_POLICY = "ROLE_EFFECT_ENFORCEMENT_V1_2"
 # Accept previous schema during upgrade install only when source already upgraded.
 SCHEMA_POLICY_ACCEPTED = {

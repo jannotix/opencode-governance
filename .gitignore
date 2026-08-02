@@ -32,3 +32,4 @@ env/
 .codex/
 .claude/
 .opencode-tmp/
+.ai/

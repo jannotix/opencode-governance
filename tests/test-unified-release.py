@@ -36,7 +36,7 @@ def main() -> None:
         invoke(INSTALL, "--config-dir", config, "--routing-config", VALID_PROFILE)
         manifest_path = config / "opencode-governance-routing.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
-        assert manifest["governance_version"] == "4.0.2"
+        assert manifest["governance_version"] == "4.0.3"
         assert len(manifest["managed_tools"]) == 24
         assert manifest.get("effect_plugin_sha256")
         assert manifest.get("effect_policy_sha256")

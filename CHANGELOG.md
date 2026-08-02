@@ -5,6 +5,86 @@ Dates use `YYYY-MM-DD`. Older micro-releases are summarized; see git history for
 ## Unreleased
 
 
+## 4.0.3 - 2026-08-02
+
+Security patch: pre-side-effect role transactions, Executor containment, and
+attestation hardening over 4.0.2.
+
+### 4.0.2 defects corrected
+
+- **S-001**: Handshake was post-execution. `governed-role-attempt.py` validated
+  the handshake only after `opencode run` terminated, so model/tool activity
+  could occur before a missing handshake was discovered. 4.0.3 introduces a
+  same-process pre-side-effect READY gate (`EFFECT_PLUGIN_RUNTIME_READY_GATE_V2`)
+  with a host acknowledgement that must be present before any tool effect.
+- **S-002**: READY was emitted before policy/hook readiness. The plugin now
+  validates launch, plugin self-hash, policy hash/schema, tool registry,
+  capability manifest and hook construction before emitting READY; setup
+  failures produce a typed NOT_READY record instead.
+- **S-003**: Launch single-use was per-tool-call, breaking multi-tool sessions.
+  Launch single-use is now session-level (`ROLE_SESSION_CLAIM_CONTRACT_V1`):
+  the launch is claimed once per process/session and cached in-process.
+- **S-004**: The Executor transaction launch was not consumed. The role launcher
+  now accepts `--launch-file`/`--expected-launch-sha256`/`--attempt-manifest`
+  and treats the prepared launch as the sole authoritative launch;
+  `executor-attempt finalize` revalidates the role-process receipt and the
+  consumed launch hash.
+- **S-005**: Prompt transport regressed to argv. The prompt is now transported
+  over stdin (`GOVERNED_ROLE_STDIN_TRANSPORT_V1`); `argv_prompt_bytes=0`.
+- **S-006**: The Executor child ran in the real workspace. Executor cwd and
+  `--dir` now equal the isolated execution root; reviewers use immutable
+  evidence roots.
+- **S-007**: Executor shell effects were not safely classified. The
+  `EXECUTOR_COMMAND_BROKER_V1` provides deterministic command classes with an
+  explicit deny list (rm, npm/yarn/pnpm, docker/kubectl, interpreters,
+  git commit/push/reset/clean) and a read-only git allowlist.
+- **S-008**: `apply_patch` had no path extraction. `STRICT_PATCH_PATH_CONTRACT_V1`
+  parses every file header and enforces containment for all targets; `multiedit`
+  validates every edit destination.
+- **S-009**: The review workflow was not wired to process launchers.
+  `GOVERNED_REVIEW_ORCHESTRATION_V1` is a host-owned operation that starts the
+  two independent reviewers and the final reviewer under governed launchers.
+- **S-010**: The real OpenCode self-test could false-pass. The self-test now
+  requires a hook-generated ALLOW decision receipt; handshake-only is not
+  acceptance.
+- **S-011**: Handshake validation was incomplete. READY now binds and the
+  launcher validates launch hash, policy hash, route receipt, opencode version
+  (derived from the binary), process/session identity, and more.
+- **S-012**: The handshake nonce was unrelated to the launch nonce. READY now
+  echoes and binds the launch nonce.
+- **S-013**: Non-zero exit was reported as completion. A non-zero OpenCode exit
+  is now a typed `GOVERNED_ROLE_PROCESS_FAILED`.
+- **S-014**: Route receipts were not authoritative. `AUTHORITATIVE_ROUTE_RECEIPT_V1`
+  is a strict, hash-bound schema; arbitrary JSON is rejected on the production
+  path.
+- **S-015**: Review Chain V3 did not revalidate its receipts. Review Chain V4
+  live-revalidates ingestion and route receipts and records per-role
+  revalidation evidence.
+- **S-016**: Report commit was not transactional. `DETERMINISTIC_ROLE_REPORT_TRANSACTION_V1`
+  stages body/metadata/receipt with a journal and a single COMMIT marker.
+- **S-017**: Reviewer evidence isolation was filename-based. Immutable evidence
+  roots with closed manifests are now built by the orchestrator.
+- **S-018**: Tool capability manifests were not launch-bound.
+  `TOOL_CAPABILITY_MANIFEST_V1` is hash-bound at launch and validated at setup.
+- **S-019**: Published runtime commands used incorrect argparse ordering. The
+  exact top-level `--config-dir` form is now documented and tested.
+
+### Contracts introduced
+
+`EFFECT_PLUGIN_RUNTIME_READY_GATE_V2`, `GOVERNED_ROLE_LAUNCH_CONTRACT_V3`,
+`GOVERNED_ROLE_PROCESS_CONTRACT_V2`, `ROLE_SESSION_CLAIM_CONTRACT_V1`,
+`GOVERNED_ROLE_STDIN_TRANSPORT_V1`, `EXECUTOR_COMMAND_BROKER_V1`,
+`STRICT_PATCH_PATH_CONTRACT_V1`, `GOVERNED_REVIEW_ORCHESTRATION_V1`,
+`AUTHORITATIVE_ROUTE_RECEIPT_V1`, `DETERMINISTIC_ROLE_REPORT_TRANSACTION_V1`,
+`REVIEW_CHAIN_ATTESTATION_V4`, `TOOL_CAPABILITY_MANIFEST_V1`.
+
+### Assurance
+
+Until the full hook+process matrix for a version: `LOCAL_INTEGRITY`,
+`SEMANTIC_STATE_MACHINE_ENFORCED`, `EFFECT_POLICY_EXPERIMENTAL`. After: may
+claim `ROLE_EFFECT_ENFORCEMENT_ACTIVE` (not OS-sandboxed / externally attested).
+
+
 ## 4.0.2 - 2026-08-02
 
 Security patch: end-to-end role runtime enforcement (R-001–R-012 over 4.0.1).
