@@ -38,13 +38,14 @@ def sha256_file(path: pathlib.Path) -> str:
 def load_spec(root: pathlib.Path) -> tuple[dict[str, Any], str]:
     path = root / SPEC_REL
     raw = path.read_bytes()
-    # Normalise to LF for stable hashing of committed JSON when loaded
+    # Normalise to LF for cross-platform deterministic hashing (CRLF checkouts on Windows).
     text = raw.decode("utf-8-sig")
     if text.startswith("\ufeff"):
         text = text.lstrip("\ufeff")
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
     data = json.loads(text)
-    # Canonical digest of committed file bytes (as on disk)
-    return data, sha256_file(path)
+    source_sha = sha256_bytes(text.encode("utf-8"))
+    return data, source_sha
 
 
 def emit_py(spec: dict[str, Any], source_sha: str) -> str:
