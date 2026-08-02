@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""GOVERNED_ROLE_LAUNCH_CONTRACT_V2 + plugin preflight (non-mutating)."""
+"""GOVERNED_ROLE_LAUNCH_CONTRACT_V3 + plugin preflight (non-mutating).
+
+4.0.3: launch receipts are V3 (session-single-use, capability-manifest- and
+route-receipt-bound). V2 receipts remain accepted on read for an in-flight
+upgrade window; new launches are V3."""
 from __future__ import annotations
 
 import argparse
@@ -14,7 +18,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-CONTRACT = "GOVERNED_ROLE_LAUNCH_CONTRACT_V2"
+CONTRACT = "GOVERNED_ROLE_LAUNCH_CONTRACT_V3"
+CONTRACT_V2 = "GOVERNED_ROLE_LAUNCH_CONTRACT_V2"
 PLUGIN_ID = "opencode-governance-effect-enforcement"
 OWNED = ".opencode-governance-ownership.json"
 PLUGIN_DIR = "opencode-governance-effect-enforcement"
@@ -98,12 +103,20 @@ def write_launch_v2(
     ttl_seconds: int = 3600,
     single_use: bool = True,
     parent_pid: int | None = None,
+    tool_capability_manifest: str = "",
+    tool_capability_manifest_sha256: str = "",
+    work_class: str = "",
+    frozen_target: str = "",
+    route: str = "",
+    model: str = "",
+    variant: str = "",
+    model_family: str = "",
 ) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
     expires = now + timedelta(seconds=max(60, ttl_seconds))
     body = {
         "schema": CONTRACT,
-        "version": "4.0.2",
+        "version": "4.0.3",
         "launch_id": str(uuid.uuid4()),
         "nonce": secrets.token_hex(16),
         "issued_at_utc": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -126,6 +139,16 @@ def write_launch_v2(
         "expected_opencode_version": expected_opencode_version,
         "parent_pid": int(parent_pid if parent_pid is not None else os.getpid()),
         "expected_child_identity": "",
+        # S-018: tool capability manifest binding (hash-bound at launch).
+        "tool_capability_manifest": tool_capability_manifest,
+        "tool_capability_manifest_sha256": tool_capability_manifest_sha256,
+        # Executor attempt binding (frozen target / route / model).
+        "work_class": work_class,
+        "frozen_target": frozen_target,
+        "route": route,
+        "model": model,
+        "variant": variant,
+        "model_family": model_family,
     }
     out = pathlib.Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)

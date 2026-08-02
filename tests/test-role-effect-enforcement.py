@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""4.0.2 ROLE_EFFECT_ENFORCEMENT_V1_2 — installed plugin, shell/path/ingest negatives."""
+"""4.0.3 ROLE_EFFECT_ENFORCEMENT_V1_3 — installed plugin, shell/path/ingest negatives."""
 from __future__ import annotations
 
 import hashlib
@@ -68,7 +68,7 @@ try {{
     def test_policy_schema_v1_1(self) -> None:
         body = json.loads(POLICY.read_text(encoding="utf-8"))
         self.assertEqual(body["schema"], "ROLE_EFFECT_ENFORCEMENT_V1_2")
-        self.assertEqual(body["governance_version"], "4.0.2")
+        self.assertEqual(body["governance_version"], "4.0.3")
 
     def test_export_contract(self) -> None:
         r = subprocess.run(
@@ -85,7 +85,7 @@ try {{
         )
         data = json.loads(r.stdout.strip())
         self.assertEqual(data["HOOK"], "tool.execute.before")
-        self.assertEqual(data["SCHEMA"], "ROLE_EFFECT_ENFORCEMENT_V1_2")
+        self.assertEqual(data["SCHEMA"], "ROLE_EFFECT_ENFORCEMENT_V1_3")
         self.assertIn("named_async", data["PLUGIN_EXPORT_CONTRACT"])
 
     def test_inactive_passthrough(self) -> None:

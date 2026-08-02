@@ -713,7 +713,10 @@ def real_opencode_hook_self_test(config_dir: pathlib.Path, policy_path: pathlib.
             "process_id": handshake.get("process_id"),
             "nonce": handshake.get("nonce"),
         }
-        if handshake.get("schema") != "EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1":
+        if handshake.get("schema") not in {
+            "EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1",
+            "EFFECT_PLUGIN_RUNTIME_READY_GATE_V2",
+        }:
             evidence["status"] = "OPENCODE_HOOK_SELF_TEST_FAIL"
             evidence["reason"] = "handshake schema mismatch"
             return evidence
