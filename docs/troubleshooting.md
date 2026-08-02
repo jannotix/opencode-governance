@@ -47,8 +47,8 @@ A headless external Architect child requested a shell or tool permission that co
 - This is **not** a provider/model failure and does **not** trigger model fallback.
 - The runner restores `.ai/**` when the project fingerprint is unchanged and preserves attempt logs.
 - Prefer native OpenCode tools (`read`/`list`/`glob`/`grep`/LSP) for discovery.
-- Upgrade to Governance 3.7.6+, reinstall, run `verify` / `verify-routing`, then retry.
-- If the workspace root is not the Git repository (for example a non-Git outer workspace with `Source_Code/` nested Git), install **3.7.6+** and pass explicit `-WorkspaceDir` / `-RepositoryDir` (or rely on unique nested-Git resolution). Managed roots include both `workspace/.ai` and `repository/.ai`.
+- Upgrade to Governance 3.7.7+, reinstall, run `verify` / `verify-routing`, then retry.
+- If the workspace root is not the Git repository (for example a non-Git outer workspace with `Source_Code/` nested Git), install **3.7.7+** and pass explicit `-WorkspaceDir` / `-RepositoryDir` (or rely on unique nested-Git resolution). Managed roots include both `workspace/.ai` and `repository/.ai`.
 
 ### Architect child never starts / “filename or extension is too long”
 

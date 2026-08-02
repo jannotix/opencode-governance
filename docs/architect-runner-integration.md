@@ -1,6 +1,6 @@
 # Architect Runner Integration
 
-OpenCode Governance installs deterministic Architect runners (`architect-attempt.ps1|.sh`) with transactional failover, PowerShell 7 host checks, content-aware project-state integrity, multi-root nested workspace transactions, routing validation, durable transaction journals, headless permission contracts, stdin prompt transport and workflow-continuation gates. This document describes the current **3.7.6** surface.
+OpenCode Governance installs deterministic Architect runners (`architect-attempt.ps1|.sh`) with transactional failover, PowerShell 7 host checks, content-aware project-state integrity, multi-root nested workspace transactions, routing validation, durable transaction journals, headless permission contracts, stdin prompt transport and workflow-continuation gates. This document describes the current **3.7.7** surface.
 
 ## Scope
 
@@ -28,12 +28,13 @@ The runner is not used for `ai-workflow`, `ai-execute`, `ai-review` or `ai-relea
 
 ## Installed tools
 
-With routing and 3.7.6 capabilities enabled, the installation records fifteen managed tools, including:
+With routing and 3.7.7 capabilities enabled, the installation records sixteen managed tools, including:
 
 ```text
 opencode-governance-tools/architect-attempt.ps1
 opencode-governance-tools/architect-attempt.sh
 opencode-governance-tools/architect-headless-contract.py
+opencode-governance-tools/legacy-architect-orphan-recovery.py
 opencode-governance-tools/executor-attempt.ps1
 opencode-governance-tools/executor-attempt.sh
 opencode-governance-tools/context-intelligence.ps1
@@ -51,10 +52,10 @@ opencode-governance-tools/governance-pre-commit.py
 The routing manifest records:
 
 ```text
-governance_version: 3.7.6
-architect_runner_version: 3.7.6
-context_intelligence_version: 3.7.6
-workflow_continuation_version: 3.7.6
+governance_version: 3.7.7
+architect_runner_version: 3.7.7
+context_intelligence_version: 3.7.7
+workflow_continuation_version: 3.7.7
 ```
 
 Before replacing an existing routing installation, the wrapper validates the complete new profile. An invalid profile cannot remove the current manifest, aliases or managed tools. Every existing managed tool is copied into the timestamped installation backup before replacement.
@@ -115,7 +116,7 @@ OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1
 
 The environment marker identifies the child process. The argument marker is visible to the governed command gate. A marked child continues normally and never recursively launches another runner.
 
-## Workspace / repository roots (3.7.6)
+## Workspace / repository roots (3.7.7)
 
 The runner implements `WORKSPACE_REPOSITORY_ROOT_CONTRACT_V1`:
 
@@ -214,7 +215,7 @@ TOOL_EXECUTION_ABORTED
 
 Matched from phrases such as `tool execution aborted`, `tool call aborted`, `process killed`, `terminated by signal`, or abnormal exit codes (`< 0` or `>= 128`). Profiles may list `TOOL_EXECUTION_ABORTED` under `settings.eligible_failures` to allow bounded failover after an abort; otherwise the failure is ineligible but `.ai/**` is still restored when the project fingerprint is unchanged.
 
-New in 3.7.6:
+New in 3.7.5:
 
 ```text
 WORKSPACE_REPOSITORY_ROOT_CONTRACT_V1
@@ -223,13 +224,23 @@ PROJECT_STATE_CHANGESET_DIAGNOSTIC_V1
 ARCHITECT_PHASE_ADVANCED
 ```
 
-Explicit orphan recovery (no auto-adopt):
+New in 3.7.6 / 3.7.7 — evidence-bound orphan recovery (no auto-adopt):
+
+```text
+LEGACY_ARCHITECT_ORPHAN_RECOVERY_CONTRACT_V1
+EVIDENCE_BOUND_RECOVERY_RECEIPT_V2
+LEGACY_FORENSIC_BUNDLE_V1_ADAPTER   # 3.7.7: Windows V1 forensic layout
+```
 
 ```text
 architect-attempt.ps1 -RecoverTransaction -WorkspaceDir <ws> -RepositoryDir <repo> `
-  -Command ai-resume -TaskId <task> -RecoveryDecision adopt-governance-only|rollback `
-  -ExpectedTransactionHash <hash>
+  -Command ai-resume -TaskId <task> `
+  -RecoveryDecision validate-governance-only|adopt-governance-only|rollback `
+  -ExpectedTransactionHash <hash> `
+  -EvidenceBundlePath <bundle.zip> -ExpectedEvidenceBundleHash <sha256> ...
 ```
+
+3.7.7 accepts both `CANONICAL_RECOVERY_EVIDENCE_V2` and `LEGACY_PROJECT_STATE_FORENSICS_V1` evidence. See [legacy-orphan-recovery.md](legacy-orphan-recovery.md).
 
 When resume reaches `READY_FOR_EXECUTION`, the runner emits `ARCHITECT_PHASE_ADVANCED` with `NEXT_COMMAND=/ai-execute` and `ATTEMPT_CONSUMED=false`.
 

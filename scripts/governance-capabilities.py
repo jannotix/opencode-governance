@@ -14,7 +14,7 @@ import stat
 import sys
 from typing import Any
 
-VERSION = "3.7.6"
+VERSION = "3.7.7"
 BASE_VERSION = "3.4.4"
 CAPABILITY_TOOL_NAMES = (
     "governance-authority.py",
@@ -35,7 +35,7 @@ BASE_TOOL_NAMES = (
     "workflow-continuation.ps1",
     "workflow-continuation.py",
 )
-# Product 3.7.6+ managed recovery helper (inserted after headless contract in expected_tools).
+# Product 3.7.7+ managed recovery helper (inserted after headless contract in expected_tools).
 RECOVERY_TOOL_NAME = "legacy-architect-orphan-recovery.py"
 AGENT_NAMES = (
     "architect",
@@ -154,7 +154,7 @@ def capability_tools(config: pathlib.Path) -> list[pathlib.Path]:
 def expected_tools(config: pathlib.Path) -> list[pathlib.Path]:
     tools = config_paths(config)["tools"]
     base = base_tools(config)
-    # Insert recovery module after architect-headless-contract.py for 3.7.6+.
+    # Insert recovery module after architect-headless-contract.py for 3.7.7+.
     out: list[pathlib.Path] = []
     inserted = False
     for path in base:
