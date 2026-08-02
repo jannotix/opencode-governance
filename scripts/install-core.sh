@@ -214,6 +214,7 @@ else:
             raise SystemExit("Every model ID must use provider/model format from 'opencode models'.")
 
 legacy_edit = re.compile(r'(?m)^  edit:\r?\n    "\*": deny\r?\n    "\.ai/\*\*": allow\r?\n')
+legacy_edit_readonly = re.compile(r'(?m)^  edit:\r?\n    "\*": deny\r?\n')
 portable_edit = '''  edit:
     "*": deny
     ".ai": allow
@@ -223,6 +224,9 @@ portable_edit = '''  edit:
     '.ai\\*': allow
     '*\\.ai': allow
     '*\\.ai\\*': allow
+'''
+portable_edit_readonly = '''  edit:
+    "*": deny
 '''
 legacy_executor_edit = re.compile(
     r'(?m)^  edit:\r?\n    "\*": allow\r?\n    "\.ai/\*\*": deny\r?\n    "\.git/\*\*": deny\r?\n'
@@ -262,6 +266,14 @@ def render(template, name, model_token, model, variant_token, variant, role, can
         text, count = legacy_executor_edit.subn(portable_executor_edit, text)
         if count != 1:
             raise SystemExit(f'Cannot render portable Executor edit denies for {source}.')
+    elif template in {'reviewer', 'reviewer-architecture', 'final-reviewer'}:
+        # 4.0.0 technical read-only reviewers: pure edit deny (ingestion channel writes reports).
+        text, count = legacy_edit_readonly.subn(portable_edit_readonly, text)
+        if count != 1:
+            # Fallback to historical .ai allow shape if present.
+            text, count = legacy_edit.subn(portable_edit, text)
+        if count != 1:
+            raise SystemExit(f'Cannot render portable read-only permissions for {source}.')
     else:
         text, count = legacy_edit.subn(portable_edit, text)
         if count != 1:

@@ -19,7 +19,9 @@ $Commands = @(
     'ai-status', 'ai-resume', 'ai-metrics', 'ai-release'
 )
 $AiEditAgents = @(
-    'architect', 'build', 'plan',
+    'architect', 'build', 'plan'
+)
+$ReadonlyReviewAgents = @(
     'reviewer', 'reviewer-architecture', 'final-reviewer'
 )
 $PortableAiEditRules = @(
@@ -108,6 +110,14 @@ foreach ($Name in $AiEditAgents) {
     foreach ($Rule in $PortableAiEditRules) {
         if ($Lines -cnotcontains $Rule) { throw "$Name missing portable .ai edit rule: $Rule" }
     }
+}
+foreach ($Name in $ReadonlyReviewAgents) {
+    $Path = Join-Path $ConfigDir "agents\$Name.md"
+    $Lines = Get-Content $Path
+    if ($Lines -cnotcontains '    "*": deny') { throw "$Name missing technical read-only edit deny" }
+    $Text = Get-Content $Path -Raw
+    if ($Text -notmatch '(?m)^  bash:\s*$') { throw "$Name missing bash permission block" }
+    if ($Text -match '(?m)^    "\*": ask\s*$') { throw "$Name must not use bash ask default under 4.0.0" }
 }
 
 foreach ($Value in @(

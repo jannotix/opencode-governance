@@ -244,6 +244,7 @@ if (Test-Path $RoutingManifestPath -PathType Leaf) {
 }
 
 $LegacyAiEditPattern = '(?m)^  edit:\r?\n    "\*": deny\r?\n    "\.ai/\*\*": allow\r?\n'
+$LegacyReadonlyEditPattern = '(?m)^  edit:\r?\n    "\*": deny\r?\n'
 $PortableAiEditBlock = @'
   edit:
     "*": deny
@@ -254,6 +255,10 @@ $PortableAiEditBlock = @'
     '.ai\*': allow
     '*\.ai': allow
     '*\.ai\*': allow
+'@
+$PortableReadonlyEditBlock = @'
+  edit:
+    "*": deny
 '@
 $LegacyExecutorEditPattern = '(?m)^  edit:\r?\n    "\*": allow\r?\n    "\.ai/\*\*": deny\r?\n    "\.git/\*\*": deny\r?\n'
 $PortableExecutorEditBlock = @'
@@ -332,6 +337,14 @@ function Render-Agent(
     if ($Template -eq 'executor') {
         if ($Text -notmatch $LegacyExecutorEditPattern) { throw "Cannot render portable Executor edit denies for $Source." }
         $Text = [regex]::Replace($Text, $LegacyExecutorEditPattern, ($PortableExecutorEditBlock.TrimEnd() + "`n"))
+    } elseif ($Template -in @('reviewer','reviewer-architecture','final-reviewer')) {
+        if ($Text -match $LegacyReadonlyEditPattern) {
+            $Text = [regex]::Replace($Text, $LegacyReadonlyEditPattern, ($PortableReadonlyEditBlock.TrimEnd() + "`n"), 1)
+        } elseif ($Text -match $LegacyAiEditPattern) {
+            $Text = [regex]::Replace($Text, $LegacyAiEditPattern, ($PortableAiEditBlock.TrimEnd() + "`n"))
+        } else {
+            throw "Cannot render portable read-only permissions for $Source."
+        }
     } else {
         if ($Text -notmatch $LegacyAiEditPattern) { throw "Cannot render portable .ai permissions for $Source." }
         $Text = [regex]::Replace($Text, $LegacyAiEditPattern, ($PortableAiEditBlock.TrimEnd() + "`n"))
