@@ -884,7 +884,18 @@ function Invoke-Route([object]$Route,[int]$Attempt,[string]$Logs){
     throw 'EFFECT_PLUGIN_NOT_ACTIVE: governed-role-launch.py missing (install 4.0.1 capabilities).'
   }
   $pre = & python $launchHelper preflight-plugin --config-dir $ConfigDir 2>&1
-  if($LASTEXITCODE -ne 0){ throw "EFFECT_PLUGIN_NOT_ACTIVE: $pre" }
+  if($LASTEXITCODE -ne 0){
+    # Auto-install owned plugin when managed installer is available (upgrade/test fixtures).
+    $installer = Join-Path $ConfigDir 'opencode-governance-tools\install-effect-plugin.py'
+    if(-not (Test-Path -LiteralPath $installer -PathType Leaf)){ $installer = Join-Path $PSScriptRoot 'install-effect-plugin.py' }
+    $sourceDir = if(Test-Path -LiteralPath (Join-Path $ConfigDir 'opencode-governance-tools\opencode-governance-effect-enforcement\index.mjs')){ Join-Path $ConfigDir 'opencode-governance-tools' } else { $PSScriptRoot }
+    if(Test-Path -LiteralPath $installer -PathType Leaf){
+      # Heal path: install plugin files + hashes; full self-test remains the product install path.
+      $null = & python $installer --config-dir $ConfigDir --source-dir $sourceDir install --skip-self-test 2>&1
+    }
+    $pre = & python $launchHelper preflight-plugin --config-dir $ConfigDir 2>&1
+    if($LASTEXITCODE -ne 0){ throw "EFFECT_PLUGIN_NOT_ACTIVE: $pre" }
+  }
   $repoRoot = if($script:RepositoryDir){ [string]$script:RepositoryDir } elseif($RepositoryDir){ [string]$RepositoryDir } else { [string]$ProjectDir }
   $effectPolicy = Join-Path $ConfigDir 'plugins\opencode-governance-effect-enforcement\role-effect-policy.json'
   $effectSha = ''

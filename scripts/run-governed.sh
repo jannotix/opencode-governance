@@ -786,7 +786,21 @@ try:
             raise RuntimeError('EFFECT_PLUGIN_NOT_ACTIVE: governed-role-launch.py missing')
         pre=subprocess.run([sys.executable,str(launch_helper),'preflight-plugin','--config-dir',str(config)],capture_output=True,text=True)
         if pre.returncode!=0:
-            raise RuntimeError(f'EFFECT_PLUGIN_NOT_ACTIVE: {(pre.stderr or pre.stdout).strip()}')
+            installer=tools_dir/'install-effect-plugin.py'
+            source_dir=tools_dir if (tools_dir/'opencode-governance-effect-enforcement'/'index.mjs').is_file() else pathlib.Path(os.environ.get('OPENCODE_GOVERNANCE_TOOLS_DIR') or tools_dir)
+            # Prefer tools dir, else repository scripts next to this file via OPENCODE_GOVERNANCE_TOOLS_DIR
+            if not installer.is_file():
+                # fall back: sibling of governed-role-launch when running from source checkout
+                cand=pathlib.Path(str(launch_helper)).resolve().parent/'install-effect-plugin.py'
+                if cand.is_file():
+                    installer=cand
+                    source_dir=cand.parent
+            if installer.is_file():
+                # Heal path: install plugin files + hashes; full self-test remains the product install path.
+                subprocess.run([sys.executable,str(installer),'--config-dir',str(config),'--source-dir',str(source_dir),'install','--skip-self-test'],capture_output=True,text=True)
+            pre=subprocess.run([sys.executable,str(launch_helper),'preflight-plugin','--config-dir',str(config)],capture_output=True,text=True)
+            if pre.returncode!=0:
+                raise RuntimeError(f'EFFECT_PLUGIN_NOT_ACTIVE: {(pre.stderr or pre.stdout).strip()}')
         repo_for_env=str(repository) if repository is not None else str(project)
         effect_policy=config/'plugins'/'opencode-governance-effect-enforcement'/'role-effect-policy.json'
         if not effect_policy.is_file():

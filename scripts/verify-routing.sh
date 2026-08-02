@@ -136,7 +136,7 @@ if version in fingerprint_versions:
             for value in ['DETERMINISTIC_ROLE_REPORT_INGESTION_V2','REVIEW_CHAIN_ATTESTATION_V2']:
                 if value not in ingest_raw:
                     raise SystemExit(f'role-report-ingest missing 4.0.1 marker: {value}')
-            if not manifest.get('effect_plugin_sha256') or not manifest.get('effect_policy_sha256'):
+            if not data.get('effect_plugin_sha256') or not data.get('effect_policy_sha256'):
                 raise SystemExit('Routing manifest missing effect plugin hash bindings')
 
     if version in hardened_versions and 'default cooldown must be an integer between 60 and 86400 seconds.' not in ps_runner: raise SystemExit('PowerShell Architect runner missing cooldown validation.')
