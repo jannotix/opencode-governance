@@ -33,6 +33,11 @@ MOCK="$TMP/mock-gov.sh"
 cat >"$MOCK" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ -n "${OPENCODE_GOVERNANCE_HANDSHAKE_PATH:-}" ]]; then
+  mkdir -p "$(dirname "$OPENCODE_GOVERNANCE_HANDSHAKE_PATH")"
+  role="${OPENCODE_GOVERNANCE_ROLE:-architect}"
+  printf '%s\n' "{\"schema\":\"EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1\",\"role\":\"$role\",\"plugin_sha256\":\"mock\",\"policy_sha256\":\"mock\",\"process_id\":$$,\"nonce\":\"mock-test\"}" > "$OPENCODE_GOVERNANCE_HANDSHAKE_PATH"
+fi
 project=''
 while [[ $# -gt 0 ]]; do case "$1" in --dir) project="$2"; shift 2;; *) shift;; esac; done
 echo success-ws >"$project/.ai/STATUS.md"
@@ -58,6 +63,11 @@ MOCK="$TMP/mock-mut.sh"
 cat >"$MOCK" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ -n "${OPENCODE_GOVERNANCE_HANDSHAKE_PATH:-}" ]]; then
+  mkdir -p "$(dirname "$OPENCODE_GOVERNANCE_HANDSHAKE_PATH")"
+  role="${OPENCODE_GOVERNANCE_ROLE:-architect}"
+  printf '%s\n' "{\"schema\":\"EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1\",\"role\":\"$role\",\"plugin_sha256\":\"mock\",\"policy_sha256\":\"mock\",\"process_id\":$$,\"nonce\":\"mock-test\"}" > "$OPENCODE_GOVERNANCE_HANDSHAKE_PATH"
+fi
 project=''
 while [[ $# -gt 0 ]]; do case "$1" in --dir) project="$2"; shift 2;; *) shift;; esac; done
 echo partial >"$project/.ai/STATUS.md"

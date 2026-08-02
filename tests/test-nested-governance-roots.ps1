@@ -63,6 +63,7 @@ $fx=New-NestedFixture 'gov-only'
 $mock=Join-Path $TempRoot 'mock-gov-only.ps1'
 Write-Mock $mock @'
 param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+if($env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH){$d=Split-Path -Parent $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH; if($d){New-Item -ItemType Directory -Force -Path $d|Out-Null}; $r=if($env:OPENCODE_GOVERNANCE_ROLE){$env:OPENCODE_GOVERNANCE_ROLE}else{'architect'}; (@{schema='EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1';role=$r;plugin_sha256='mock';policy_sha256='mock';process_id=$PID;nonce='mock-test'}|ConvertTo-Json -Compress)|Set-Content -LiteralPath $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH -Encoding utf8}
 $project=''
 for($i=0;$i-lt$Args.Count;$i++){if($Args[$i]-eq'--dir'){$project=$Args[++$i]}}
 'success-ws'|Set-Content (Join-Path $project '.ai/STATUS.md')
@@ -89,6 +90,7 @@ $stateJson='{"task_id":"TASK-NEST","state":"DISCOVERY","current_phase":"DISCOVER
 $mock2=Join-Path $TempRoot 'mock-resume.ps1'
 Write-Mock $mock2 @'
 param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+if($env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH){$d=Split-Path -Parent $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH; if($d){New-Item -ItemType Directory -Force -Path $d|Out-Null}; $r=if($env:OPENCODE_GOVERNANCE_ROLE){$env:OPENCODE_GOVERNANCE_ROLE}else{'architect'}; (@{schema='EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1';role=$r;plugin_sha256='mock';policy_sha256='mock';process_id=$PID;nonce='mock-test'}|ConvertTo-Json -Compress)|Set-Content -LiteralPath $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH -Encoding utf8}
 $project=''
 for($i=0;$i-lt$Args.Count;$i++){if($Args[$i]-eq'--dir'){$project=$Args[++$i]}}
 $path=Join-Path $project 'Source_Code/.ai/tasks/TASK-NEST/RUN_STATE.json'
@@ -111,6 +113,7 @@ $fx3=New-NestedFixture 'app-mutate'
 $mock3=Join-Path $TempRoot 'mock-mutate.ps1'
 Write-Mock $mock3 @'
 param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+if($env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH){$d=Split-Path -Parent $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH; if($d){New-Item -ItemType Directory -Force -Path $d|Out-Null}; $r=if($env:OPENCODE_GOVERNANCE_ROLE){$env:OPENCODE_GOVERNANCE_ROLE}else{'architect'}; (@{schema='EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1';role=$r;plugin_sha256='mock';policy_sha256='mock';process_id=$PID;nonce='mock-test'}|ConvertTo-Json -Compress)|Set-Content -LiteralPath $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH -Encoding utf8}
 $project=''
 for($i=0;$i-lt$Args.Count;$i++){if($Args[$i]-eq'--dir'){$project=$Args[++$i]}}
 'partial'|Set-Content (Join-Path $project '.ai/STATUS.md')
@@ -134,6 +137,7 @@ New-Item -ItemType Directory -Force -Path $extra|Out-Null
 $mock4=Join-Path $TempRoot 'mock-unreg.ps1'
 Write-Mock $mock4 @'
 param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+if($env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH){$d=Split-Path -Parent $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH; if($d){New-Item -ItemType Directory -Force -Path $d|Out-Null}; $r=if($env:OPENCODE_GOVERNANCE_ROLE){$env:OPENCODE_GOVERNANCE_ROLE}else{'architect'}; (@{schema='EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1';role=$r;plugin_sha256='mock';policy_sha256='mock';process_id=$PID;nonce='mock-test'}|ConvertTo-Json -Compress)|Set-Content -LiteralPath $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH -Encoding utf8}
 $project=''
 for($i=0;$i-lt$Args.Count;$i++){if($Args[$i]-eq'--dir'){$project=$Args[++$i]}}
 'changed'|Set-Content (Join-Path $project 'other/.ai/NOTE.md')
@@ -173,6 +177,7 @@ git -C $single init -q
 $mockS=Join-Path $TempRoot 'mock-single.ps1'
 Write-Mock $mockS @'
 param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+if($env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH){$d=Split-Path -Parent $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH; if($d){New-Item -ItemType Directory -Force -Path $d|Out-Null}; $r=if($env:OPENCODE_GOVERNANCE_ROLE){$env:OPENCODE_GOVERNANCE_ROLE}else{'architect'}; (@{schema='EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1';role=$r;plugin_sha256='mock';policy_sha256='mock';process_id=$PID;nonce='mock-test'}|ConvertTo-Json -Compress)|Set-Content -LiteralPath $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH -Encoding utf8}
 $project=''
 for($i=0;$i-lt$Args.Count;$i++){if($Args[$i]-eq'--dir'){$project=$Args[++$i]}}
 'ok'|Set-Content (Join-Path $project '.ai/STATUS.md'); exit 0

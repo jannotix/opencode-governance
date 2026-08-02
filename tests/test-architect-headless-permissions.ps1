@@ -84,6 +84,7 @@ function Invoke-MockRunner([string]$Mode,[string]$OpenCodeCommand,[string[]]$Pre
   $Mock=Join-Path $TempRoot ("mock-$Mode.ps1")
   @'
 param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+if($env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH){$d=Split-Path -Parent $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH; if($d){New-Item -ItemType Directory -Force -Path $d|Out-Null}; $r=if($env:OPENCODE_GOVERNANCE_ROLE){$env:OPENCODE_GOVERNANCE_ROLE}else{'architect'}; (@{schema='EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1';role=$r;plugin_sha256='mock';policy_sha256='mock';process_id=$PID;nonce='mock-test'}|ConvertTo-Json -Compress)|Set-Content -LiteralPath $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH -Encoding utf8}
 $project=''; $agent=''; $model=''
 for($i=0;$i-lt$Args.Count;$i++){
   if($Args[$i]-eq'--dir'){$project=$Args[++$i]}
@@ -189,6 +190,7 @@ New-Item -ItemType Directory -Force -Path $ps1Launcher|Out-Null
 $ps1Path=Join-Path $ps1Launcher 'opencode mock.ps1'
 @'
 param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+if($env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH){$d=Split-Path -Parent $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH; if($d){New-Item -ItemType Directory -Force -Path $d|Out-Null}; $r=if($env:OPENCODE_GOVERNANCE_ROLE){$env:OPENCODE_GOVERNANCE_ROLE}else{'architect'}; (@{schema='EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1';role=$r;plugin_sha256='mock';policy_sha256='mock';process_id=$PID;nonce='mock-test'}|ConvertTo-Json -Compress)|Set-Content -LiteralPath $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH -Encoding utf8}
 Write-Output "GOVERNANCE_RESULT`nTASK_ID: TASK-001`nSTATE: READY_FOR_EXECUTION"
 $path=Join-Path ($Args[[array]::IndexOf($Args,'--dir')+1]) '.ai/tasks/TASK-001/RUN_STATE.json'
 $state=Get-Content -LiteralPath $path -Raw|ConvertFrom-Json

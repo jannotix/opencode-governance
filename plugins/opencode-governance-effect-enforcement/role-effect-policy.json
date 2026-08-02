@@ -1,55 +1,51 @@
 {
-  "schema": "ROLE_EFFECT_ENFORCEMENT_V1_1",
-  "governance_version": "4.0.1",
+  "schema": "ROLE_EFFECT_ENFORCEMENT_V1_2",
+  "governance_version": "4.0.2",
   "contracts": [
-    "ROLE_EFFECT_ENFORCEMENT_V1_1",
-    "CANONICAL_ROLE_PATH_CONTAINMENT_V1",
+    "ROLE_EFFECT_ENFORCEMENT_V1_2",
+    "EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1",
+    "GOVERNED_ROLE_LAUNCH_CONTRACT_V2",
+    "GOVERNED_ROLE_PROCESS_CONTRACT_V1",
+    "STRICT_TOOL_EFFECT_REGISTRY_V1",
     "STRICT_SHELL_EFFECT_CLASSIFICATION_V1",
-    "GOVERNED_ROLE_LAUNCH_CONTRACT_V1"
+    "CANONICAL_ROLE_PATH_CONTAINMENT_V1",
+    "STRICT_GIT_READ_HELPER_V1",
+    "DETERMINISTIC_ROLE_REPORT_INGESTION_V3",
+    "REVIEW_CHAIN_ATTESTATION_V3"
   ],
   "effect_classes": [
-    "READ",
-    "WRITE",
-    "CREATE",
-    "DELETE",
-    "RENAME",
-    "EXECUTE",
-    "NETWORK",
-    "DEPENDENCY_MUTATION",
-    "GIT_METADATA_MUTATION",
-    "GIT_REMOTE_MUTATION",
-    "PROCESS_CONTROL",
-    "SECRET_ACCESS",
-    "EXTERNAL_SIDE_EFFECT"
+    "READ", "WRITE", "CREATE", "DELETE", "RENAME", "EXECUTE", "NETWORK",
+    "DEPENDENCY_MUTATION", "GIT_METADATA_MUTATION", "GIT_REMOTE_MUTATION",
+    "PROCESS_CONTROL", "SECRET_ACCESS", "EXTERNAL_SIDE_EFFECT"
   ],
   "roles": {
     "architect": {
-      "allowed_effects": ["READ", "WRITE", "CREATE"],
+      "allowed_effects": ["READ", "WRITE", "CREATE", "EXECUTE"],
       "write_roots": ["GOVERNANCE"],
-      "deny_effects": ["GIT_REMOTE_MUTATION", "DEPENDENCY_MUTATION", "SECRET_ACCESS", "EXTERNAL_SIDE_EFFECT", "PROCESS_CONTROL"],
+      "deny_effects": ["GIT_REMOTE_MUTATION", "DEPENDENCY_MUTATION", "SECRET_ACCESS", "EXTERNAL_SIDE_EFFECT", "PROCESS_CONTROL", "NETWORK"],
       "deny_tools": ["task"],
       "bash_mode": "deny_default_allowlist",
-      "bash_allowlist_note": "STRICT_SHELL: only parser-validated git -C <exact-repository> {status,rev-parse,log,diff,show,grep}",
-      "edit_mode": "governance_only"
+      "edit_mode": "governance_only",
+      "bash_note": "EXECUTE allowed only for STRICT_SHELL parser-validated read-only git -C forms"
     },
     "plan": {
       "allowed_effects": ["READ", "WRITE", "CREATE"],
       "write_roots": ["GOVERNANCE"],
-      "deny_effects": ["GIT_REMOTE_MUTATION", "DEPENDENCY_MUTATION", "SECRET_ACCESS", "EXTERNAL_SIDE_EFFECT"],
+      "deny_effects": ["GIT_REMOTE_MUTATION", "DEPENDENCY_MUTATION", "SECRET_ACCESS", "EXTERNAL_SIDE_EFFECT", "NETWORK"],
       "bash_mode": "deny",
       "edit_mode": "governance_only"
     },
     "build": {
       "allowed_effects": ["READ", "WRITE", "CREATE"],
       "write_roots": ["GOVERNANCE"],
-      "deny_effects": ["GIT_REMOTE_MUTATION", "DEPENDENCY_MUTATION", "SECRET_ACCESS", "EXTERNAL_SIDE_EFFECT"],
+      "deny_effects": ["GIT_REMOTE_MUTATION", "DEPENDENCY_MUTATION", "SECRET_ACCESS", "EXTERNAL_SIDE_EFFECT", "NETWORK"],
       "bash_mode": "deny",
       "edit_mode": "governance_only"
     },
     "executor": {
       "allowed_effects": ["READ", "WRITE", "CREATE", "DELETE", "RENAME", "EXECUTE"],
       "write_roots": ["EXECUTION_ROOT"],
-      "deny_effects": ["GIT_REMOTE_MUTATION", "SECRET_ACCESS", "EXTERNAL_SIDE_EFFECT"],
+      "deny_effects": ["GIT_REMOTE_MUTATION", "SECRET_ACCESS", "EXTERNAL_SIDE_EFFECT", "NETWORK"],
       "bash_mode": "execution_root_only",
       "edit_mode": "execution_root_only",
       "deny_paths": [".ai", ".git"]
@@ -60,8 +56,17 @@
       "deny_effects": ["WRITE", "CREATE", "DELETE", "RENAME", "EXECUTE", "NETWORK", "GIT_METADATA_MUTATION", "GIT_REMOTE_MUTATION", "PROCESS_CONTROL", "SECRET_ACCESS", "EXTERNAL_SIDE_EFFECT", "DEPENDENCY_MUTATION"],
       "bash_mode": "deny",
       "edit_mode": "deny",
-      "deny_tools": ["edit", "bash", "task", "write"],
-      "report_channel": "deterministic_ingestion_v2"
+      "deny_tools": ["edit", "bash", "task", "write", "multiedit", "apply_patch"],
+      "report_channel": "deterministic_ingestion_v3"
+    },
+    "implementation-reviewer": {
+      "allowed_effects": ["READ"],
+      "write_roots": [],
+      "deny_effects": ["WRITE", "CREATE", "DELETE", "RENAME", "EXECUTE", "NETWORK", "GIT_METADATA_MUTATION", "GIT_REMOTE_MUTATION", "PROCESS_CONTROL", "SECRET_ACCESS", "EXTERNAL_SIDE_EFFECT", "DEPENDENCY_MUTATION"],
+      "bash_mode": "deny",
+      "edit_mode": "deny",
+      "deny_tools": ["edit", "bash", "task", "write", "multiedit", "apply_patch"],
+      "report_channel": "deterministic_ingestion_v3"
     },
     "reviewer-architecture": {
       "allowed_effects": ["READ"],
@@ -69,8 +74,17 @@
       "deny_effects": ["WRITE", "CREATE", "DELETE", "RENAME", "EXECUTE", "NETWORK", "GIT_METADATA_MUTATION", "GIT_REMOTE_MUTATION", "PROCESS_CONTROL", "SECRET_ACCESS", "EXTERNAL_SIDE_EFFECT", "DEPENDENCY_MUTATION"],
       "bash_mode": "deny",
       "edit_mode": "deny",
-      "deny_tools": ["edit", "bash", "task", "write"],
-      "report_channel": "deterministic_ingestion_v2"
+      "deny_tools": ["edit", "bash", "task", "write", "multiedit", "apply_patch"],
+      "report_channel": "deterministic_ingestion_v3"
+    },
+    "architecture-reviewer": {
+      "allowed_effects": ["READ"],
+      "write_roots": [],
+      "deny_effects": ["WRITE", "CREATE", "DELETE", "RENAME", "EXECUTE", "NETWORK", "GIT_METADATA_MUTATION", "GIT_REMOTE_MUTATION", "PROCESS_CONTROL", "SECRET_ACCESS", "EXTERNAL_SIDE_EFFECT", "DEPENDENCY_MUTATION"],
+      "bash_mode": "deny",
+      "edit_mode": "deny",
+      "deny_tools": ["edit", "bash", "task", "write", "multiedit", "apply_patch"],
+      "report_channel": "deterministic_ingestion_v3"
     },
     "final-reviewer": {
       "allowed_effects": ["READ"],
@@ -78,22 +92,14 @@
       "deny_effects": ["WRITE", "CREATE", "DELETE", "RENAME", "EXECUTE", "NETWORK", "GIT_METADATA_MUTATION", "GIT_REMOTE_MUTATION", "PROCESS_CONTROL", "SECRET_ACCESS", "EXTERNAL_SIDE_EFFECT", "DEPENDENCY_MUTATION"],
       "bash_mode": "deny",
       "edit_mode": "deny",
-      "deny_tools": ["edit", "bash", "task", "write"],
-      "report_channel": "deterministic_ingestion_v2"
+      "deny_tools": ["edit", "bash", "task", "write", "multiedit", "apply_patch"],
+      "report_channel": "deterministic_ingestion_v3"
     }
   },
   "secret_path_globs": [".env", ".env.*", "*.pem", "*.key", "*credentials*", "*secrets*"],
   "fail_closed_unknown_role": true,
+  "fail_closed_unknown_tool": true,
   "fail_closed_ambiguous_path": true,
-  "fail_closed_inactive_without_launch": true,
-  "assurance_until_runtime_pass": [
-    "LOCAL_INTEGRITY",
-    "SEMANTIC_STATE_MACHINE_ENFORCED",
-    "EFFECT_POLICY_EXPERIMENTAL"
-  ],
-  "assurance_after_runtime_pass": [
-    "LOCAL_INTEGRITY",
-    "SEMANTIC_STATE_MACHINE_ENFORCED",
-    "ROLE_EFFECT_ENFORCEMENT_ACTIVE"
-  ]
+  "assurance_until_runtime_pass": ["LOCAL_INTEGRITY", "SEMANTIC_STATE_MACHINE_ENFORCED", "EFFECT_POLICY_EXPERIMENTAL"],
+  "assurance_after_runtime_pass": ["LOCAL_INTEGRITY", "SEMANTIC_STATE_MACHINE_ENFORCED", "ROLE_EFFECT_ENFORCEMENT_ACTIVE"]
 }

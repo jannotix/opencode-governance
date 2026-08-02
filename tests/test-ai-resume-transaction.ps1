@@ -105,6 +105,7 @@ $mock = Join-Path $TempRoot 'v372-windows-abort-mock.ps1'
 $state = Join-Path $TempRoot 'v372-windows-abort-count'
 @'
 param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+if($env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH){$d=Split-Path -Parent $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH; if($d){New-Item -ItemType Directory -Force -Path $d|Out-Null}; $r=if($env:OPENCODE_GOVERNANCE_ROLE){$env:OPENCODE_GOVERNANCE_ROLE}else{'architect'}; (@{schema='EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1';role=$r;plugin_sha256='mock';policy_sha256='mock';process_id=$PID;nonce='mock-test'}|ConvertTo-Json -Compress)|Set-Content -LiteralPath $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH -Encoding utf8}
 $project='';$model=''
 for($i=0;$i-lt$Args.Count;$i++){if($Args[$i]-eq'--dir'){$project=$Args[++$i]}elseif($Args[$i]-eq'--model'){$model=$Args[++$i]}}
 $count=if(Test-Path $env:MOCK_STATE){[int](Get-Content $env:MOCK_STATE)}else{0};($count+1)|Set-Content $env:MOCK_STATE
@@ -174,6 +175,7 @@ $meta = [ordered]@{
 $orphanMock = Join-Path $TempRoot 'v372-windows-orphan-mock.ps1'
 @'
 param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+if($env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH){$d=Split-Path -Parent $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH; if($d){New-Item -ItemType Directory -Force -Path $d|Out-Null}; $r=if($env:OPENCODE_GOVERNANCE_ROLE){$env:OPENCODE_GOVERNANCE_ROLE}else{'architect'}; (@{schema='EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1';role=$r;plugin_sha256='mock';policy_sha256='mock';process_id=$PID;nonce='mock-test'}|ConvertTo-Json -Compress)|Set-Content -LiteralPath $env:OPENCODE_GOVERNANCE_HANDSHAKE_PATH -Encoding utf8}
 $project=''
 for($i=0;$i-lt$Args.Count;$i++){if($Args[$i]-eq'--dir'){$project=$Args[++$i]}}
 if(Test-Path (Join-Path $project '.ai/ORPHAN_PARTIAL.md')){exit 25}

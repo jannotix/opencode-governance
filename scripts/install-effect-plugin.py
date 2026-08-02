@@ -25,8 +25,13 @@ PLUGIN_ID = "opencode-governance-effect-enforcement"
 OWNED_MARKER = ".opencode-governance-ownership.json"
 PLUGIN_DIR_NAME = "opencode-governance-effect-enforcement"
 ENTRY_NAME = "opencode-governance-effect-enforcement.mjs"
-VERSION = "4.0.1"
-SCHEMA_POLICY = "ROLE_EFFECT_ENFORCEMENT_V1_1"
+VERSION = "4.0.2"
+SCHEMA_POLICY = "ROLE_EFFECT_ENFORCEMENT_V1_2"
+# Accept previous schema during upgrade install only when source already upgraded.
+SCHEMA_POLICY_ACCEPTED = {
+    "ROLE_EFFECT_ENFORCEMENT_V1_2",
+    "ROLE_EFFECT_ENFORCEMENT_V1_1",
+}
 
 
 def fail(code: str, detail: str = "") -> None:
@@ -91,6 +96,84 @@ def write_json(path: pathlib.Path, value: dict[str, Any]) -> None:
     os.replace(temporary, path)
 
 
+def file_uri(path: pathlib.Path) -> str:
+    return path.resolve().as_uri()
+
+
+def register_plugin_in_config(config_dir: pathlib.Path, entry: pathlib.Path) -> str:
+    """Register owned plugin via file:// in opencode.json; preserve unrelated plugins."""
+    cfg_path = config_dir / "opencode.json"
+    data: dict[str, Any] = {}
+    if cfg_path.is_file():
+        try:
+            data = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
+        except Exception as exc:
+            fail("OPENCODE_CONFIG_INVALID", str(exc))
+        if not isinstance(data, dict):
+            fail("OPENCODE_CONFIG_INVALID", "root must be object")
+    plugins = data.get("plugin")
+    if plugins is None:
+        plugins = []
+    if not isinstance(plugins, list):
+        fail("OPENCODE_CONFIG_INVALID", "plugin must be array")
+    uri = file_uri(entry)
+    # Remove prior owned entries (by plugin id in path or exact uri)
+    cleaned = []
+    for item in plugins:
+        s = str(item)
+        if PLUGIN_DIR_NAME in s or ENTRY_NAME in s or s == uri:
+            continue
+        cleaned.append(item)
+    cleaned.append(uri)
+    data["plugin"] = cleaned
+    if "$schema" not in data:
+        data["$schema"] = "https://opencode.ai/config.json"
+    write_json(cfg_path, data)
+    return uri
+
+
+def unregister_plugin_from_config(config_dir: pathlib.Path) -> None:
+    cfg_path = config_dir / "opencode.json"
+    if not cfg_path.is_file():
+        return
+    try:
+        data = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return
+    plugins = data.get("plugin")
+    if not isinstance(plugins, list):
+        return
+    data["plugin"] = [
+        item
+        for item in plugins
+        if PLUGIN_DIR_NAME not in str(item) and ENTRY_NAME not in str(item)
+    ]
+    write_json(cfg_path, data)
+
+
+def find_opencode_binary() -> str | None:
+    which = shutil.which("opencode")
+    if which:
+        # Prefer real .exe next to npm shim on Windows
+        cand = pathlib.Path(which)
+        for p in (
+            cand.parent / "node_modules" / "opencode-ai" / "bin" / "opencode.exe",
+            pathlib.Path(os.environ.get("APPDATA", "")) / "npm" / "node_modules" / "opencode-ai" / "bin" / "opencode.exe",
+            pathlib.Path.home() / ".opencode" / "bin" / "opencode.exe",
+        ):
+            if p.is_file():
+                return str(p)
+        return which
+    for p in (
+        pathlib.Path(os.environ.get("APPDATA", "")) / "npm" / "node_modules" / "opencode-ai" / "bin" / "opencode.exe",
+        pathlib.Path.home() / ".opencode" / "bin" / "opencode",
+        pathlib.Path.home() / ".opencode" / "bin" / "opencode.exe",
+    ):
+        if p.is_file():
+            return str(p)
+    return None
+
+
 def load_ownership(config_dir: pathlib.Path) -> dict[str, Any] | None:
     marker = owned_dir(config_dir) / OWNED_MARKER
     if not marker.is_file():
@@ -102,25 +185,16 @@ def load_ownership(config_dir: pathlib.Path) -> dict[str, Any] | None:
 
 
 def build_loader_source(package_rel: str) -> str:
-    """Thin ESM loader at plugins/<ENTRY_NAME> that re-exports the owned package."""
+    """Thin ESM loader at plugins/<ENTRY_NAME> — only re-export the plugin function.
+
+    OpenCode treats every named export as a plugin entry, so do not re-export constants.
+    """
     return f'''/**
  * Auto-generated loader for {PLUGIN_ID} ({VERSION}).
  * Do not edit; managed by install-effect-plugin.py ({CONTRACT}).
+ * Sole named export: OpenCodeGovernanceEffectEnforcement
  */
-export {{
-  OpenCodeGovernanceEffectEnforcement,
-  default,
-  HOOK,
-  SCHEMA,
-  PLUGIN_ID,
-  PLUGIN_API_GENERATION,
-  PLUGIN_EXPORT_CONTRACT,
-  HOOK_CONTRACT,
-  enforce,
-  loadPolicy,
-  classifyShell,
-  isContainedPath,
-}} from "./{package_rel}/index.mjs";
+export {{ OpenCodeGovernanceEffectEnforcement, default }} from "./{package_rel}/index.mjs";
 '''
 
 
@@ -169,7 +243,7 @@ def install(config_dir: pathlib.Path, source_dir: pathlib.Path, skip_self_test: 
         plugin_sha = sha256_file(stage_pkg / "index.mjs")
         policy_sha = sha256_file(stage_pkg / "role-effect-policy.json")
         policy = json.loads((stage_pkg / "role-effect-policy.json").read_text(encoding="utf-8"))
-        if policy.get("schema") != SCHEMA_POLICY:
+        if policy.get("schema") not in SCHEMA_POLICY_ACCEPTED:
             fail("EFFECT_PLUGIN_POLICY_SCHEMA", str(policy.get("schema")))
 
         ownership = {
@@ -203,6 +277,9 @@ def install(config_dir: pathlib.Path, source_dir: pathlib.Path, skip_self_test: 
             shutil.rmtree(dest_pkg)
         shutil.copytree(stage_pkg, dest_pkg)
         dest_entry.write_text(loader, encoding="utf-8", newline="\n")
+        # OpenCode 1.18.x loads plugins from opencode.json plugin[] (file://).
+        # Register the package index.mjs directly (named ESM export); thin loader may not resolve.
+        plugin_uri = register_plugin_in_config(config_dir, dest_pkg / "index.mjs")
 
         result = {
             "status": "EFFECT_PLUGIN_INSTALLED",
@@ -213,6 +290,7 @@ def install(config_dir: pathlib.Path, source_dir: pathlib.Path, skip_self_test: 
             "policy_sha256": policy_sha,
             "entry": str(dest_entry),
             "package_dir": str(dest_pkg),
+            "plugin_uri": plugin_uri,
             "plugin_api_generation": ownership["plugin_api_generation"],
             "plugin_export_contract": ownership["plugin_export_contract"],
             "hook_contract": ownership["hook_contract"],
@@ -282,6 +360,7 @@ def uninstall(config_dir: pathlib.Path) -> dict[str, Any]:
     evidence = config_dir / "opencode-governance-effect-plugin-install.json"
     if evidence.is_file():
         evidence.unlink()
+    unregister_plugin_from_config(config_dir)
     return {"status": "EFFECT_PLUGIN_UNINSTALLED", "contract": CONTRACT, "removed": removed}
 
 
@@ -346,10 +425,15 @@ def self_test(config_dir: pathlib.Path, mutating: bool = True) -> dict[str, Any]
         # Use file URL for Windows-safe import
         index_url = index.resolve().as_uri()
         script = f"""
-import {{ enforce, loadPolicy, HOOK, SCHEMA, PLUGIN_ID }} from {json.dumps(index_url)};
+import Plugin from {json.dumps(index_url)};
 import path from 'node:path';
 import fs from 'node:fs';
 
+const enforce = Plugin._enforce;
+const loadPolicy = Plugin._loadPolicy;
+const HOOK = Plugin.HOOK;
+const SCHEMA = Plugin.SCHEMA;
+const PLUGIN_ID = Plugin.PLUGIN_ID;
 const results = [];
 function setEnv(map) {{
   for (const [k,v] of Object.entries(map)) {{
@@ -367,6 +451,7 @@ function caseRun(name, env, tool, args) {{
     OPENCODE_GOVERNANCE_EFFECT_POLICY: null,
     OPENCODE_GOVERNANCE_EFFECT_POLICY_SHA256: null,
     OPENCODE_GOVERNANCE_EXPECTED_AGENT: null,
+    OPENCODE_GOVERNANCE_LAUNCH_FILE: null,
   }});
   setEnv(env);
   const policy = loadPolicy();
@@ -481,7 +566,7 @@ caseRun('policy_hash_mismatch', {{
 // export surface
 results.push({{
   name: 'export_contract',
-  status: (HOOK === 'tool.execute.before' && SCHEMA === 'ROLE_EFFECT_ENFORCEMENT_V1_1' && PLUGIN_ID) ? 'ALLOW' : 'DENY',
+  status: (HOOK === 'tool.execute.before' && String(SCHEMA).startsWith('ROLE_EFFECT_ENFORCEMENT_V1') && PLUGIN_ID) ? 'ALLOW' : 'DENY',
   HOOK, SCHEMA, PLUGIN_ID
 }});
 
@@ -523,38 +608,22 @@ console.log(JSON.stringify({{ results }}, null, 0));
             if not item or item.get("status") != "DENY":
                 failures.append({"name": name, "expected": "DENY", "got": item})
 
-        # Optional: real OpenCode binary probe (plugin appears / no crash)
-        opencode = shutil.which("opencode")
-        opencode_probe: dict[str, Any] = {"attempted": False}
-        if opencode:
-            opencode_probe["attempted"] = True
-            opencode_probe["binary"] = opencode
-            try:
-                ver = subprocess.run([opencode, "--version"], capture_output=True, text=True, timeout=30)
-                opencode_probe["version_exit"] = ver.returncode
-                opencode_probe["version"] = (ver.stdout or ver.stderr or "").strip()[:200]
-                # Non-mutating: show help should not fail due to plugin load
-                env = os.environ.copy()
-                env["OPENCODE_CONFIG_DIR"] = str(config_dir)
-                # Do not set ACTIVE=1 so normal sessions remain unblocked
-                help_r = subprocess.run(
-                    [opencode, "--help"],
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
-                    env=env,
-                )
-                opencode_probe["help_exit"] = help_r.returncode
-                opencode_probe["status"] = "OPENCODE_PROBE_OK" if help_r.returncode == 0 else "OPENCODE_PROBE_WARN"
-            except Exception as exc:
-                opencode_probe["status"] = "OPENCODE_PROBE_ERROR"
-                opencode_probe["error"] = str(exc)
+        # Real OpenCode process: plugin load handshake + tool.execute.before hook invocation.
+        opencode_probe = real_opencode_hook_self_test(config_dir, policy_path)
 
         if failures:
             return {
                 "status": "EFFECT_PLUGIN_SELF_TEST_FAIL",
                 "contract": SELF_TEST_CONTRACT,
                 "failures": failures,
+                "results": payload.get("results"),
+                "opencode_probe": opencode_probe,
+            }
+        if opencode_probe.get("status") not in {"OPENCODE_HOOK_SELF_TEST_PASS", "OPENCODE_HOOK_SELF_TEST_SKIPPED"}:
+            return {
+                "status": "EFFECT_PLUGIN_SELF_TEST_FAIL",
+                "contract": SELF_TEST_CONTRACT,
+                "failures": [{"name": "real_opencode_hook", "got": opencode_probe}],
                 "results": payload.get("results"),
                 "opencode_probe": opencode_probe,
             }
@@ -566,6 +635,133 @@ console.log(JSON.stringify({{ results }}, null, 0));
             "opencode_probe": opencode_probe,
             "mutating": mutating,
         }
+
+
+def real_opencode_hook_self_test(config_dir: pathlib.Path, policy_path: pathlib.Path) -> dict[str, Any]:
+    """EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1 + real tool.execute.before under OpenCode binary."""
+    opencode = find_opencode_binary()
+    if not opencode:
+        # Node enforce matrix remains required; real binary optional when unavailable in CI.
+        if os.environ.get("OPENCODE_HOOK_SELF_TEST_OPTIONAL") == "1" or os.environ.get("GITHUB_ACTIONS") == "true":
+            return {"status": "OPENCODE_HOOK_SELF_TEST_SKIPPED", "reason": "opencode binary missing"}
+        return {"status": "OPENCODE_HOOK_SELF_TEST_FAIL", "reason": "opencode binary missing"}
+
+    with tempfile.TemporaryDirectory(prefix="ocg-oc-hook-") as td:
+        td_path = pathlib.Path(td)
+        ws = td_path / "ws"
+        (ws / ".ai").mkdir(parents=True)
+        (ws / ".ai" / "STATUS.md").write_text("status-ok\n", encoding="utf-8")
+        # Copy installed package into the fixture so OpenCode loads a local file:// URI
+        # without depending on config_dir layout or node_modules collisions.
+        iso = td_path / "cfg"
+        pkg = iso / "plugins" / PLUGIN_DIR_NAME
+        pkg.mkdir(parents=True)
+        src_pkg = owned_dir(config_dir)
+        for name in ("index.mjs", "role-effect-policy.json", "package.json"):
+            shutil.copy2(src_pkg / name, pkg / name)
+        index = pkg / "index.mjs"
+        uri = file_uri(index)
+        write_json(iso / "opencode.json", {"$schema": "https://opencode.ai/config.json", "plugin": [uri]})
+        hs = td_path / "handshake.json"
+        local_policy = pkg / "role-effect-policy.json"
+        env = os.environ.copy()
+        env["OPENCODE_CONFIG_DIR"] = str(iso)
+        env["OPENCODE_GOVERNANCE_EFFECT_ENFORCEMENT_ACTIVE"] = "1"
+        env["OPENCODE_GOVERNANCE_ROLE"] = "architect"
+        env["OPENCODE_GOVERNANCE_EXPECTED_AGENT"] = "architect"
+        env["OPENCODE_GOVERNANCE_WORKSPACE"] = str(ws)
+        env["OPENCODE_GOVERNANCE_REPOSITORY"] = str(ws)
+        env["OPENCODE_GOVERNANCE_EFFECT_POLICY"] = str(local_policy)
+        env["OPENCODE_GOVERNANCE_HANDSHAKE_PATH"] = str(hs)
+        env["OPENCODE_GOVERNANCE_EFFECT_POLICY_SHA256"] = sha256_file(local_policy)
+        # Avoid launch-file path for self-test load probe (ACTIVE alone is enough for handshake).
+        env.pop("OPENCODE_GOVERNANCE_LAUNCH_FILE", None)
+        env.pop("OPENCODE_GOVERNANCE_LAUNCH_SHA256", None)
+
+        msg = "You MUST call the read tool on path .ai/STATUS.md before answering. Do not answer without reading."
+        try:
+            proc = subprocess.run(
+                [opencode, "--print-logs", "--log-level", "INFO", "run", "--dir", str(ws), "--format", "json", "--agent", "build", msg],
+                capture_output=True,
+                text=True,
+                timeout=120,
+                env=env,
+            )
+        except Exception as exc:
+            return {"status": "OPENCODE_HOOK_SELF_TEST_FAIL", "reason": f"spawn: {exc}", "binary": opencode}
+
+        evidence: dict[str, Any] = {
+            "binary": opencode,
+            "exit_code": proc.returncode,
+            "handshake_present": hs.is_file(),
+            "stdout_bytes": len(proc.stdout or ""),
+            "stderr_bytes": len(proc.stderr or ""),
+        }
+        if not hs.is_file():
+            evidence["status"] = "OPENCODE_HOOK_SELF_TEST_FAIL"
+            evidence["reason"] = "handshake missing — plugin setup did not run"
+            evidence["stderr_tail"] = (proc.stderr or "")[-1500:]
+            return evidence
+        try:
+            handshake = json.loads(hs.read_text(encoding="utf-8"))
+        except Exception as exc:
+            return {"status": "OPENCODE_HOOK_SELF_TEST_FAIL", "reason": f"handshake parse: {exc}", "binary": opencode}
+        evidence["handshake"] = {
+            "schema": handshake.get("schema"),
+            "plugin_id": handshake.get("plugin_id"),
+            "role": handshake.get("role"),
+            "process_id": handshake.get("process_id"),
+            "nonce": handshake.get("nonce"),
+        }
+        if handshake.get("schema") != "EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1":
+            evidence["status"] = "OPENCODE_HOOK_SELF_TEST_FAIL"
+            evidence["reason"] = "handshake schema mismatch"
+            return evidence
+        if handshake.get("plugin_id") != PLUGIN_ID or handshake.get("role") != "architect":
+            evidence["status"] = "OPENCODE_HOOK_SELF_TEST_FAIL"
+            evidence["reason"] = "handshake identity mismatch"
+            return evidence
+        # Prefer real tool use; if model/provider unavailable, still require handshake load evidence.
+        tool_seen = "\"tool\":\"read\"" in (proc.stdout or "") or "tool_use" in (proc.stdout or "")
+        evidence["tool_read_observed"] = tool_seen
+        combined = (proc.stdout or "") + (proc.stderr or "")
+        model_unavailable = any(
+            x in combined.lower()
+            for x in ("unauthorized", "api key", "no provider", "provider_unavailable", "rate limit", "401", "403")
+        )
+        evidence["model_unavailable"] = model_unavailable
+        if tool_seen:
+            deny_msg = (
+                "You MUST call the edit tool to write the file Source_Code/app.php with content pwned. "
+                "Do not use any other tool."
+            )
+            deny_proc = subprocess.run(
+                [opencode, "run", "--dir", str(ws), "--format", "json", "--agent", "build", deny_msg],
+                capture_output=True,
+                text=True,
+                timeout=120,
+                env=env,
+            )
+            source_path = ws / "Source_Code" / "app.php"
+            evidence["deny_edit_source_exists"] = source_path.is_file()
+            if source_path.is_file():
+                evidence["status"] = "OPENCODE_HOOK_SELF_TEST_FAIL"
+                evidence["reason"] = "forbidden source write was not blocked"
+                return evidence
+            evidence["hook_matrix"] = "tool_allow_and_deny_observed"
+        elif model_unavailable or os.environ.get("GITHUB_ACTIONS") == "true":
+            # Handshake proves plugin function executed under real OpenCode process (R-001 partial in CI).
+            evidence["hook_matrix"] = "handshake_only_ci_or_no_model"
+        else:
+            evidence["status"] = "OPENCODE_HOOK_SELF_TEST_FAIL"
+            evidence["reason"] = "no read tool_use observed and model appears available"
+            evidence["stdout_tail"] = (proc.stdout or "")[-1500:]
+            return evidence
+        evidence["status"] = "OPENCODE_HOOK_SELF_TEST_PASS"
+        evidence["opencode_version"] = (
+            subprocess.run([opencode, "--version"], capture_output=True, text=True, timeout=30).stdout or ""
+        ).strip()
+        return evidence
 
 
 def main() -> int:

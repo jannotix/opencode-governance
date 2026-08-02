@@ -38,6 +38,11 @@ make_project "$project"
 cat > "$mock" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ -n "${OPENCODE_GOVERNANCE_HANDSHAKE_PATH:-}" ]]; then
+  mkdir -p "$(dirname "$OPENCODE_GOVERNANCE_HANDSHAKE_PATH")"
+  role="${OPENCODE_GOVERNANCE_ROLE:-architect}"
+  printf '%s\n' "{\"schema\":\"EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1\",\"role\":\"$role\",\"plugin_sha256\":\"mock\",\"policy_sha256\":\"mock\",\"process_id\":$$,\"nonce\":\"mock-test\"}" > "$OPENCODE_GOVERNANCE_HANDSHAKE_PATH"
+fi
 project=''; model=''
 while [[ $# -gt 0 ]]; do case "$1" in --dir) project="$2"; shift 2 ;; --model) model="$2"; shift 2 ;; *) shift ;; esac; done
 count=0; [[ ! -f "$MOCK_STATE" ]] || count="$(cat "$MOCK_STATE")"; echo $((count+1)) > "$MOCK_STATE"
@@ -76,6 +81,11 @@ mock="$TEMP_ROOT/v372-linux-post-mock"
 make_project "$project" IMPLEMENTING DOCUMENTATION_SYNC
 printf 'keep-me\n' > "$project/.ai/IMPLEMENTATION_NOTE.md"
 cat > "$mock" <<'MOCK'
+if [[ -n "${OPENCODE_GOVERNANCE_HANDSHAKE_PATH:-}" ]]; then
+  mkdir -p "$(dirname "$OPENCODE_GOVERNANCE_HANDSHAKE_PATH")"
+  role="${OPENCODE_GOVERNANCE_ROLE:-architect}"
+  printf '%s\n' "{\"schema\":\"EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1\",\"role\":\"$role\",\"plugin_sha256\":\"mock\",\"policy_sha256\":\"mock\",\"process_id\":$$,\"nonce\":\"mock-test\"}" > "$OPENCODE_GOVERNANCE_HANDSHAKE_PATH"
+fi
 #!/usr/bin/env bash
 exit 0
 MOCK
@@ -186,6 +196,11 @@ PY
 cat > "$mock" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ -n "${OPENCODE_GOVERNANCE_HANDSHAKE_PATH:-}" ]]; then
+  mkdir -p "$(dirname "$OPENCODE_GOVERNANCE_HANDSHAKE_PATH")"
+  role="${OPENCODE_GOVERNANCE_ROLE:-architect}"
+  printf '%s\n' "{\"schema\":\"EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1\",\"role\":\"$role\",\"plugin_sha256\":\"mock\",\"policy_sha256\":\"mock\",\"process_id\":$$,\"nonce\":\"mock-test\"}" > "$OPENCODE_GOVERNANCE_HANDSHAKE_PATH"
+fi
 project=''
 while [[ $# -gt 0 ]]; do case "$1" in --dir) project="$2"; shift 2 ;; *) shift ;; esac; done
 [[ ! -e "$project/.ai/ORPHAN_PARTIAL.md" ]]

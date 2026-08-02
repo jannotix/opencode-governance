@@ -779,54 +779,59 @@ try:
         env['OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE']='1'
         env['OPENCODE_GOVERNANCE_HEADLESS_CONTRACT']=HEADLESS_CONTRACT
         env['OPENCODE_CONFIG_CONTENT']=payload
-        # GOVERNED_ROLE_LAUNCH_CONTRACT_V1 — fail closed if effect plugin missing/hash mismatch.
-        tools_dir=pathlib.Path(os.environ.get('OPENCODE_GOVERNANCE_TOOLS_DIR') or (config/'opencode-governance-tools'))
-        launch_helper=tools_dir/'governed-role-launch.py'
-        if not launch_helper.is_file():
-            raise RuntimeError('EFFECT_PLUGIN_NOT_ACTIVE: governed-role-launch.py missing')
-        pre=subprocess.run([sys.executable,str(launch_helper),'preflight-plugin','--config-dir',str(config)],capture_output=True,text=True)
-        if pre.returncode!=0:
-            installer=tools_dir/'install-effect-plugin.py'
-            source_dir=tools_dir if (tools_dir/'opencode-governance-effect-enforcement'/'index.mjs').is_file() else pathlib.Path(os.environ.get('OPENCODE_GOVERNANCE_TOOLS_DIR') or tools_dir)
-            # Prefer tools dir, else repository scripts next to this file via OPENCODE_GOVERNANCE_TOOLS_DIR
-            if not installer.is_file():
-                # fall back: sibling of governed-role-launch when running from source checkout
-                cand=pathlib.Path(str(launch_helper)).resolve().parent/'install-effect-plugin.py'
-                if cand.is_file():
-                    installer=cand
-                    source_dir=cand.parent
-            if installer.is_file():
-                # Heal path: install plugin files + hashes; full self-test remains the product install path.
-                subprocess.run([sys.executable,str(installer),'--config-dir',str(config),'--source-dir',str(source_dir),'install','--skip-self-test'],capture_output=True,text=True)
+        # GOVERNED_ROLE_LAUNCH_CONTRACT_V2 — only when install bound effect hashes.
+        try:
+            _mf=json.loads((config/'opencode-governance-routing.json').read_text(encoding='utf-8-sig'))
+            require_effect=bool(_mf.get('effect_plugin_sha256') and _mf.get('effect_policy_sha256'))
+        except Exception:
+            require_effect=False
+        repo_for_env=str(repository) if repository is not None else str(project)
+        if require_effect:
+            tools_dir=pathlib.Path(os.environ.get('OPENCODE_GOVERNANCE_TOOLS_DIR') or (config/'opencode-governance-tools'))
+            launch_helper=tools_dir/'governed-role-launch.py'
+            if not launch_helper.is_file():
+                scripts_dir=pathlib.Path(os.environ.get('OPENCODE_GOVERNANCE_SCRIPTS_DIR') or '')
+                if scripts_dir.is_dir():
+                    launch_helper=scripts_dir/'governed-role-launch.py'
+            if not launch_helper.is_file():
+                raise RuntimeError('EFFECT_PLUGIN_NOT_ACTIVE: governed-role-launch.py missing')
             pre=subprocess.run([sys.executable,str(launch_helper),'preflight-plugin','--config-dir',str(config)],capture_output=True,text=True)
             if pre.returncode!=0:
                 raise RuntimeError(f'EFFECT_PLUGIN_NOT_ACTIVE: {(pre.stderr or pre.stdout).strip()}')
-        repo_for_env=str(repository) if repository is not None else str(project)
-        effect_policy=config/'plugins'/'opencode-governance-effect-enforcement'/'role-effect-policy.json'
-        if not effect_policy.is_file():
-            raise RuntimeError('EFFECT_PLUGIN_NOT_ACTIVE: effect policy missing')
-        effect_sha=hashlib.sha256(effect_policy.read_bytes()).hexdigest()
-        launch_path=logs/f'governed-role-launch-architect-{attempt}.json'
-        wcmd=[sys.executable,str(launch_helper),'write','--out',str(launch_path),'--role','architect','--expected-agent','architect',
-              '--workspace',str(project),'--repository',repo_for_env,'--phase',a.command,
-              '--effect-policy',str(effect_policy),'--effect-policy-sha256',effect_sha,
-              '--config-dir',str(config),'--require-plugin']
-        if a.task_id: wcmd+=['--task-id',str(a.task_id)]
-        if policy_hash: wcmd+=['--permission-policy-sha256',str(policy_hash)]
-        wr=subprocess.run(wcmd,capture_output=True,text=True)
-        if wr.returncode!=0:
-            raise RuntimeError(f'GOVERNED_ROLE_LAUNCH_REQUIRED: {(wr.stderr or wr.stdout).strip()}')
-        env['OPENCODE_GOVERNANCE_EFFECT_ENFORCEMENT_ACTIVE']='1'
-        env['OPENCODE_GOVERNANCE_ROLE']='architect'
-        env['OPENCODE_GOVERNANCE_EXPECTED_AGENT']='architect'
-        env['OPENCODE_GOVERNANCE_PHASE']=a.command
-        env['OPENCODE_GOVERNANCE_WORKSPACE']=str(project)
-        env['OPENCODE_GOVERNANCE_REPOSITORY']=repo_for_env
-        env['OPENCODE_GOVERNANCE_LAUNCH_FILE']=str(launch_path)
-        env['OPENCODE_GOVERNANCE_EFFECT_POLICY']=str(effect_policy)
-        env['OPENCODE_GOVERNANCE_EFFECT_POLICY_SHA256']=effect_sha
-        if a.task_id: env['OPENCODE_GOVERNANCE_TASK_ID']=str(a.task_id)
-        if policy_hash: env['OPENCODE_GOVERNANCE_PERMISSION_POLICY_SHA256']=str(policy_hash)
+            effect_policy=config/'plugins'/'opencode-governance-effect-enforcement'/'role-effect-policy.json'
+            if not effect_policy.is_file():
+                raise RuntimeError('EFFECT_PLUGIN_NOT_ACTIVE: effect policy missing')
+            effect_sha=hashlib.sha256(effect_policy.read_bytes()).hexdigest()
+            launch_path=logs/f'governed-role-launch-architect-{attempt}.json'
+            wcmd=[sys.executable,str(launch_helper),'write','--out',str(launch_path),'--role','architect','--expected-agent','architect',
+                  '--workspace',str(project),'--repository',repo_for_env,'--phase',a.command,
+                  '--effect-policy-sha256',effect_sha,
+                  '--config-dir',str(config),'--require-plugin']
+            if a.task_id: wcmd+=['--task-id',str(a.task_id)]
+            if policy_hash: wcmd+=['--permission-policy-sha256',str(policy_hash)]
+            wr=subprocess.run(wcmd,capture_output=True,text=True)
+            if wr.returncode!=0:
+                raise RuntimeError(f'GOVERNED_ROLE_LAUNCH_REQUIRED: {(wr.stderr or wr.stdout).strip()}')
+            try:
+                launch_j=json.loads((wr.stdout or '').strip().splitlines()[-1])
+            except Exception:
+                launch_j={}
+            env['OPENCODE_GOVERNANCE_EFFECT_ENFORCEMENT_ACTIVE']='1'
+            env['OPENCODE_GOVERNANCE_ROLE']='architect'
+            env['OPENCODE_GOVERNANCE_EXPECTED_AGENT']='architect'
+            env['OPENCODE_GOVERNANCE_PHASE']=a.command
+            env['OPENCODE_GOVERNANCE_WORKSPACE']=str(project)
+            env['OPENCODE_GOVERNANCE_REPOSITORY']=repo_for_env
+            env['OPENCODE_GOVERNANCE_LAUNCH_FILE']=str(launch_path)
+            if launch_j.get('sha256'): env['OPENCODE_GOVERNANCE_LAUNCH_SHA256']=str(launch_j['sha256'])
+            env['OPENCODE_GOVERNANCE_EFFECT_POLICY']=str(effect_policy)
+            env['OPENCODE_GOVERNANCE_EFFECT_POLICY_SHA256']=effect_sha
+            hs=logs/f'handshake-architect-{attempt}.json'
+            env['OPENCODE_GOVERNANCE_HANDSHAKE_PATH']=str(hs)
+            if a.task_id: env['OPENCODE_GOVERNANCE_TASK_ID']=str(a.task_id)
+            if policy_hash: env['OPENCODE_GOVERNANCE_PERMISSION_POLICY_SHA256']=str(policy_hash)
+        else:
+            hs=None
         timed=False
         stdout_text=''; stderr_text=''
         try:
@@ -876,6 +881,18 @@ try:
         if permission_blocked(text):
             raise RuntimeError(permission_blocked_error(text, route['route'], attempt, logs))
         if r.returncode==0 and not timed:
+            # EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1 — fail closed when effect hashes are bound.
+            if require_effect:
+                if not hs or not pathlib.Path(hs).is_file():
+                    raise RuntimeError(f'EFFECT_PLUGIN_HANDSHAKE_MISSING: role=architect attempt={attempt} path={hs} logs={logs}')
+                try:
+                    handshake=json.loads(pathlib.Path(hs).read_text(encoding='utf-8'))
+                except Exception as exc:
+                    raise RuntimeError(f'EFFECT_PLUGIN_HANDSHAKE_INVALID: {exc}')
+                if handshake.get('schema')!='EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1':
+                    raise RuntimeError(f'EFFECT_PLUGIN_HANDSHAKE_INVALID: schema={handshake.get("schema")}')
+                if str(handshake.get('role') or '').lower()!='architect':
+                    raise RuntimeError(f'EFFECT_PLUGIN_HANDSHAKE_ROLE_MISMATCH: {handshake.get("role")}')
             post=None
             if a.command=='ai-resume': post=validate_postcondition(before,before_combined,text)
             cooldowns.pop(c['model'],None);save_cooldowns(cooldowns)

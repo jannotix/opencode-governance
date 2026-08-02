@@ -17,10 +17,15 @@ import sys
 import time
 from typing import Any
 
-SCHEMA = "opencode-governance.role-report/v2"
+SCHEMA = "opencode-governance.role-report/v3"
+SCHEMA_V2 = "opencode-governance.role-report/v2"
 SCHEMA_V1_COMPAT = "opencode-governance.role-report/v1"
-CHAIN_SCHEMA = "REVIEW_CHAIN_ATTESTATION_V2"
-INGEST_CONTRACT = "DETERMINISTIC_ROLE_REPORT_INGESTION_V2"
+CHAIN_SCHEMA = "REVIEW_CHAIN_ATTESTATION_V3"
+CHAIN_SCHEMA_V2 = "REVIEW_CHAIN_ATTESTATION_V2"
+INGEST_CONTRACT = "DETERMINISTIC_ROLE_REPORT_INGESTION_V3"
+INGEST_CONTRACT_V2 = "DETERMINISTIC_ROLE_REPORT_INGESTION_V2"
+PRODUCTION_SCHEMAS = {SCHEMA}
+LEGACY_SCHEMAS = {SCHEMA_V2, SCHEMA_V1_COMPAT}
 # Strict task id: alphanumeric, underscore, hyphen; no separators/path forms.
 TASK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
@@ -203,8 +208,13 @@ def ingest(
 
     envelope = json.loads(envelope_path.read_text(encoding="utf-8-sig"))
     schema = envelope.get("schema")
-    if schema not in {SCHEMA, SCHEMA_V1_COMPAT}:
-        emit_error("ROLE_REPORT_SCHEMA_INVALID", str(schema))
+    allow_legacy = bool(envelope.get("allow_legacy_schema")) or os.environ.get("OPENCODE_GOVERNANCE_ALLOW_LEGACY_REPORT_SCHEMA") == "1"
+    if schema == SCHEMA:
+        pass
+    elif schema in LEGACY_SCHEMAS and allow_legacy:
+        pass
+    else:
+        emit_error("ROLE_REPORT_SCHEMA_INVALID", f"{schema}; production requires {SCHEMA}")
 
     role = envelope.get("role")
     if role not in ALLOWED_ROLES:
@@ -241,7 +251,7 @@ def ingest(
     if effect_sha:
         effect_sha = validate_sha256(effect_sha, "effect_policy_sha256")
 
-    # Route receipt is authoritative for route_id / model_family when provided.
+    # Route receipt is mandatory for V3 production path (R-009).
     route_id = str(envelope.get("route_id") or "")
     model_family = str(envelope.get("model_family") or "")
     route_receipt_sha = ""
@@ -251,14 +261,12 @@ def ingest(
         route_id = str(receipt.get("route_id") or receipt.get("route") or "")
         model_family = str(receipt.get("model_family") or receipt.get("family") or "")
         route_receipt_sha = sha256_file(route_receipt_path)
-        if not route_id:
-            emit_error("ROLE_REPORT_ROUTE_RECEIPT_INVALID", "route_id")
+        if not route_id or not model_family:
+            emit_error("ROLE_REPORT_ROUTE_RECEIPT_INVALID", "route_id/model_family")
     elif schema == SCHEMA:
-        # V2 prefers runner receipt; still accept envelope only with explicit marker.
-        if not envelope.get("accept_envelope_route_without_receipt"):
-            # Soft: allow if both set (compat) but mark untrusted.
-            if not route_id or not model_family:
-                emit_error("ROLE_REPORT_ROUTE_RECEIPT_REQUIRED")
+        emit_error("ROLE_REPORT_ROUTE_RECEIPT_REQUIRED")
+    elif envelope.get("accept_envelope_route_without_receipt"):
+        emit_error("ROLE_REPORT_ROUTE_RECEIPT_REQUIRED", "accept_envelope_route_without_receipt removed in V3 production")
 
     tool_transcript_sha = str(envelope.get("tool_transcript_sha256") or "")
     if tool_transcript_sha:

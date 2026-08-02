@@ -14,7 +14,7 @@ import stat
 import sys
 from typing import Any
 
-VERSION = "4.0.1"
+VERSION = "4.0.2"
 BASE_VERSION = "3.4.4"
 CAPABILITY_TOOL_NAMES = (
     "governance-authority.py",
@@ -45,6 +45,8 @@ SEMANTIC_TOOL_NAMES = (
     "role-report-ingest.py",
     "install-effect-plugin.py",
     "governed-role-launch.py",
+    "governed-role-attempt.py",
+    "governance-read-git.py",
 )
 EFFECT_PLUGIN_DIR_NAME = "opencode-governance-effect-enforcement"
 AGENT_NAMES = (
