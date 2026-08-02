@@ -362,6 +362,10 @@ class ReportTransactionTests(unittest.TestCase):
             self.assertEqual(len(payload["attestation"]["revalidation"]), 3)
             for rv in payload["attestation"]["revalidation"]:
                 self.assertTrue(rv.get("report_body_sha256_ok"))
+            # Follow-up: route receipts are now co-located on ingest, so V4
+            # live-revalidates them rather than skipping with "not_colocated".
+            revalidated = [rv for rv in payload["attestation"]["revalidation"] if rv.get("route_receipt_revalidated")]
+            self.assertTrue(revalidated, "no route receipt was live-revalidated (co-location broken)")
 
     def test_body_tamper_breaks_chain(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -400,6 +404,33 @@ class LaunchV3Tests(unittest.TestCase):
             self.assertTrue(body["nonce"])
             self.assertIn("tool_capability_manifest_sha256", body)
             self.assertIn("route", body)
+
+    def test_launch_binding_fields_populate_via_cli(self) -> None:
+        """Follow-up: model/route/manifest binding fields flow through the CLI."""
+        with tempfile.TemporaryDirectory() as td:
+            out = pathlib.Path(td) / "launch.json"
+            r = subprocess.run([sys.executable, str(GOVERNED_LAUNCH), "write",
+                                "--out", str(out), "--role", "executor",
+                                "--expected-agent", "executor",
+                                "--workspace", td, "--repository", td,
+                                "--execution-root", td, "--task-id", "T1",
+                                "--packet-sha256", "ab" * 32,
+                                "--model", "test/exec", "--variant", "high",
+                                "--model-family", "family-a", "--route", "executor",
+                                "--work-class", "PATCH", "--frozen-target", "abc1234",
+                                "--tool-capability-manifest", "/path/to/manifest.json",
+                                "--tool-capability-manifest-sha256", "f" * 64],
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            body = json.loads(r.stdout.strip().splitlines()[-1])["launch"]
+            self.assertEqual(body["model"], "test/exec")
+            self.assertEqual(body["variant"], "high")
+            self.assertEqual(body["model_family"], "family-a")
+            self.assertEqual(body["route"], "executor")
+            self.assertEqual(body["work_class"], "PATCH")
+            self.assertEqual(body["frozen_target"], "abc1234")
+            self.assertEqual(body["tool_capability_manifest"], "/path/to/manifest.json")
+            self.assertEqual(body["tool_capability_manifest_sha256"], "f" * 64)
 
 
 @unittest.skipUnless(node_available(), "node not available")

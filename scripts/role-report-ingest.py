@@ -292,6 +292,22 @@ def ingest(
             if not route_id or not model_family:
                 emit_error("ROLE_REPORT_ROUTE_RECEIPT_INVALID", "route_id/model_family")
         route_receipt_sha = sha256_file(route_receipt_path)
+        # S-015 follow-up: co-locate the validated route receipt so Review Chain
+        # V4 can live-revalidate (re-hash + re-check schema/packet) rather than
+        # skip with "not_colocated". Copy atomically into the task route-receipts dir.
+        if role and schema == SCHEMA:
+            colocated_dir = project / ".ai" / "tasks" / task_id / "route-receipts"
+            colocated_dir.mkdir(parents=True, exist_ok=True)
+            if is_symlink_or_reparse(colocated_dir):
+                emit_error("ROLE_REPORT_ROUTE_RECEIPT_DIR_SYMLINK", str(colocated_dir))
+            colocated = colocated_dir / f"{role}.json"
+            try:
+                rr_bytes = route_receipt_path.read_bytes()
+                rr_tmp = colocated.with_name(colocated.name + f".tmp.{os.getpid()}")
+                rr_tmp.write_bytes(rr_bytes)
+                os.replace(rr_tmp, colocated)
+            except Exception as exc:
+                emit_error("ROLE_REPORT_ROUTE_RECEIPT_COLOCATE_FAILED", str(exc))
     elif schema == SCHEMA:
         emit_error("ROLE_REPORT_ROUTE_RECEIPT_REQUIRED")
     elif envelope.get("accept_envelope_route_without_receipt"):

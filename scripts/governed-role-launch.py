@@ -206,6 +206,16 @@ def main() -> int:
     w.add_argument("--no-single-use", action="store_true")
     w.add_argument("--config-dir", default="")
     w.add_argument("--require-plugin", action="store_true")
+    # S-018 / S-014 binding fields (forwarded into the V3 launch body so the
+    # plugin can hash-bind the capability manifest and the chain can revalidate).
+    w.add_argument("--tool-capability-manifest", default="")
+    w.add_argument("--tool-capability-manifest-sha256", default="")
+    w.add_argument("--work-class", default="")
+    w.add_argument("--frozen-target", default="")
+    w.add_argument("--route", default="")
+    w.add_argument("--model", default="")
+    w.add_argument("--variant", default="")
+    w.add_argument("--model-family", default="")
     args = p.parse_args()
     if args.cmd == "preflight-plugin":
         print(json.dumps(preflight_plugin(pathlib.Path(args.config_dir)), sort_keys=True))
@@ -236,6 +246,14 @@ def main() -> int:
         expected_opencode_version=args.expected_opencode_version,
         ttl_seconds=args.ttl_seconds,
         single_use=not args.no_single_use,
+        tool_capability_manifest=args.tool_capability_manifest,
+        tool_capability_manifest_sha256=args.tool_capability_manifest_sha256,
+        work_class=args.work_class,
+        frozen_target=args.frozen_target,
+        route=args.route,
+        model=args.model,
+        variant=args.variant,
+        model_family=args.model_family,
     )
     print(json.dumps(result, sort_keys=True))
     return 0
