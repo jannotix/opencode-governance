@@ -364,41 +364,64 @@ function Prepare-Attempt([object]$Routing) {
         created_at = [DateTime]::UtcNow.ToString('o')
     }
     Write-Json $Data $Paths.manifest
-    # GOVERNED_ROLE_LAUNCH_CONTRACT_V1 — runner-owned launch file for executor OpenCode session.
+    # GOVERNED_ROLE_LAUNCH_CONTRACT_V2 — content-bound launch for dedicated Executor process.
     $launchHelper = Join-Path $ConfigDir 'opencode-governance-tools\governed-role-launch.py'
     if (-not (Test-Path -LiteralPath $launchHelper -PathType Leaf)) {
         $launchHelper = Join-Path $PSScriptRoot 'governed-role-launch.py'
     }
+    if (-not (Test-Path -LiteralPath $launchHelper -PathType Leaf)) {
+        throw 'EFFECT_PLUGIN_NOT_ACTIVE: governed-role-launch.py missing'
+    }
     $launchPath = Join-Path (Split-Path -Parent $Paths.manifest) 'governed-role-launch-executor.json'
+    $handshakePath = Join-Path (Split-Path -Parent $Paths.manifest) 'handshake-executor.json'
     $effectPolicy = Join-Path $ConfigDir 'plugins\opencode-governance-effect-enforcement\role-effect-policy.json'
     $effectSha = ''
     if (Test-Path -LiteralPath $effectPolicy) {
         $effectSha = (Get-FileHash -LiteralPath $effectPolicy -Algorithm SHA256).Hash.ToLowerInvariant()
     }
-    if (Test-Path -LiteralPath $launchHelper -PathType Leaf) {
-        $wargs = @(
-            $launchHelper,'write','--out',$launchPath,'--role','executor','--expected-agent',[string]$RouteAgent,
-            '--workspace',[string]$Project,'--repository',[string]$Project,'--execution-root',[string]$Worktree,
-            '--task-id',[string]$TaskId,'--packet-sha256',[string]$PacketSha256.ToLowerInvariant(),
-            '--phase','ai-execute','--config-dir',$ConfigDir
-        )
-        if ($effectSha) { $wargs += @('--effect-policy',$effectPolicy,'--effect-policy-sha256',$effectSha) }
-        $null = & python @wargs 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            throw "GOVERNED_ROLE_LAUNCH_REQUIRED: failed to write executor launch file"
-        }
-        $Data | Add-Member NoteProperty governed_role_launch_file $launchPath -Force
-        $Data | Add-Member NoteProperty open_code_governance_role 'executor' -Force
-        Write-Json $Data $Paths.manifest
+    $requirePlugin = Test-Path -LiteralPath $effectPolicy -PathType Leaf
+    try {
+        $rm = Get-Content -LiteralPath (Join-Path $ConfigDir 'opencode-governance-routing.json') -Raw | ConvertFrom-Json
+        if ($rm.effect_plugin_sha256 -and $rm.effect_policy_sha256) { $requirePlugin = $true }
+    } catch {}
+    $wargs = @(
+        $launchHelper,'write','--out',$launchPath,'--role','executor','--expected-agent',[string]$RouteAgent,
+        '--workspace',[string]$Project,'--repository',[string]$Project,'--execution-root',[string]$Worktree,
+        '--task-id',[string]$TaskId,'--packet-sha256',[string]$PacketSha256.ToLowerInvariant(),
+        '--phase','ai-execute','--config-dir',$ConfigDir
+    )
+    if ($effectSha) { $wargs += @('--effect-policy',$effectPolicy,'--effect-policy-sha256',$effectSha) }
+    if ($requirePlugin) { $wargs += @('--require-plugin') }
+    $written = & python @wargs 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "GOVERNED_ROLE_LAUNCH_REQUIRED: $written"
     }
+    $launchSha = ''
+    try {
+        $launchObj = ($written | Select-Object -Last 1 | ConvertFrom-Json)
+        if ($launchObj.sha256) { $launchSha = [string]$launchObj.sha256 }
+    } catch {}
+    if (-not $launchSha -and (Test-Path -LiteralPath $launchPath)) {
+        $launchSha = (Get-FileHash -LiteralPath $launchPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+    $Data | Add-Member NoteProperty governed_role_launch_file $launchPath -Force
+    $Data | Add-Member NoteProperty governed_role_launch_sha256 $launchSha -Force
+    $Data | Add-Member NoteProperty open_code_governance_role 'executor' -Force
+    $Data | Add-Member NoteProperty required_role_runner 'governed-role-attempt.py' -Force
+    Write-Json $Data $Paths.manifest
     [pscustomobject]@{
         execution_root = $Worktree
         attempt_manifest = $Paths.manifest
         route_agent = $RouteAgent
         governed_role_launch_file = $launchPath
+        governed_role_launch_sha256 = $launchSha
+        required_role_runner = 'governed-role-attempt.py'
         OPENCODE_GOVERNANCE_LAUNCH_FILE = $launchPath
+        OPENCODE_GOVERNANCE_LAUNCH_SHA256 = $launchSha
+        OPENCODE_GOVERNANCE_HANDSHAKE_PATH = $handshakePath
         OPENCODE_GOVERNANCE_EFFECT_ENFORCEMENT_ACTIVE = '1'
         OPENCODE_GOVERNANCE_ROLE = 'executor'
+        OPENCODE_GOVERNANCE_EXPECTED_AGENT = [string]$RouteAgent
         OPENCODE_GOVERNANCE_EXECUTION_ROOT = $Worktree
     } | ConvertTo-Json -Compress
 }

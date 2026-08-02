@@ -877,6 +877,7 @@ function Invoke-Route([object]$Route,[int]$Attempt,[string]$Logs){
   $info.Environment['OPENCODE_CONFIG_CONTENT'] = $overlay.json
   # GOVERNED_ROLE_LAUNCH_CONTRACT_V2 — require plugin only when install bound effect hashes.
   $requireEffect = $false
+  $handshakePathForAttempt = $null
   try {
     $rm = Get-Content -LiteralPath (Join-Path $ConfigDir 'opencode-governance-routing.json') -Raw | ConvertFrom-Json
     if($rm.effect_plugin_sha256 -and $rm.effect_policy_sha256){ $requireEffect = $true }
@@ -915,10 +916,13 @@ function Invoke-Route([object]$Route,[int]$Attempt,[string]$Logs){
     $info.Environment['OPENCODE_GOVERNANCE_EFFECT_POLICY_SHA256'] = $effectSha
     $hsDir = Join-Path $Logs 'handshakes'
     New-Item -ItemType Directory -Force -Path $hsDir | Out-Null
-    $info.Environment['OPENCODE_GOVERNANCE_HANDSHAKE_PATH'] = (Join-Path $hsDir "architect-$Attempt.json")
+    $handshakePathForAttempt = Join-Path $hsDir "architect-$Attempt.json"
+    $info.Environment['OPENCODE_GOVERNANCE_HANDSHAKE_PATH'] = $handshakePathForAttempt
     if($TaskId){ $info.Environment['OPENCODE_GOVERNANCE_TASK_ID'] = [string]$TaskId }
     if($script:HeadlessPolicyHash){ $info.Environment['OPENCODE_GOVERNANCE_PERMISSION_POLICY_SHA256'] = [string]$script:HeadlessPolicyHash }
   }
+  $script:LastRequireEffect = [bool]$requireEffect
+  $script:LastHandshakePath = $handshakePathForAttempt
   # Never place the governed prompt on argv, in environment variables, or via shell interpolation.
   # Never pass blanket --auto. Deny-by-default bash eliminates ask; residual asks fail closed.
   foreach($v in @($Launch.prefix)){ $null = $info.ArgumentList.Add([string]$v) }
@@ -1037,6 +1041,24 @@ try{
       throw (New-PermissionBlockedError $result.text $route.route $attempt $Logs)
     }
     if($result.exit -eq 0 -and -not $result.timed_out){
+      # EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1 — fail closed when effect hashes are bound.
+      if($script:LastRequireEffect){
+        $hsPath = [string]$script:LastHandshakePath
+        if([string]::IsNullOrWhiteSpace($hsPath) -or -not (Test-Path -LiteralPath $hsPath -PathType Leaf)){
+          throw "EFFECT_PLUGIN_HANDSHAKE_MISSING: role=architect attempt=$attempt path=$hsPath logs=$Logs"
+        }
+        try {
+          $handshake = Get-Content -LiteralPath $hsPath -Raw | ConvertFrom-Json
+        } catch {
+          throw "EFFECT_PLUGIN_HANDSHAKE_INVALID: $($_.Exception.Message)"
+        }
+        if([string]$handshake.schema -ne 'EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1'){
+          throw "EFFECT_PLUGIN_HANDSHAKE_INVALID: schema=$($handshake.schema)"
+        }
+        if([string]$handshake.role -ne 'architect'){
+          throw "EFFECT_PLUGIN_HANDSHAKE_ROLE_MISMATCH: $($handshake.role)"
+        }
+      }
       $post=$null
       if($Command -eq 'ai-resume'){ $post=Validate-ResumePostcondition $BeforeTask $BeforeCombined $result }
       $Cooldowns.Remove([string]$route.candidate.model);Save-Cooldowns $Cooldowns

@@ -12,12 +12,12 @@ Security patch: end-to-end role runtime enforcement (R-001–R-012 over 4.0.1).
 ### 4.0.1 residuals corrected
 
 - R-001: Real OpenCode process self-test (plugin load handshake + tool stream when model available); `file://` registration in `opencode.json`.
-- R-002: Positive `EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1` required by governed launchers.
-- R-003/R-004/R-005: `GOVERNED_ROLE_PROCESS_CONTRACT_V1` via `governed-role-attempt.py` (dedicated OpenCode child per security role).
+- R-002: Positive `EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1` required by governed launchers (`governed-role-attempt.py` and Architect `run-governed.*` when effect hashes are bound).
+- R-003/R-004/R-005: `GOVERNED_ROLE_PROCESS_CONTRACT_V1` via `governed-role-attempt.py` (dedicated OpenCode child per security role); Executor prepare emits Launch V2 + SHA-256 and names `governed-role-attempt.py` as the required runner (no silent skip when helper missing).
 - R-006: `STRICT_TOOL_EFFECT_REGISTRY_V1` — unknown tools fail closed; `allowed_effects` allowlist enforced.
 - R-007: Strict Git option denylist + `governance-read-git.py` helper.
 - R-008: Removed runner `install --skip-self-test` auto-heal.
-- R-009/R-010/R-011: Launch V2 (hash/nonce/expiry/single-use); report V3 requires route receipt; chain V3.
+- R-009/R-010/R-011: Launch V2 (hash/nonce/expiry/single-use, `OPENCODE_GOVERNANCE_LAUNCH_SHA256`); report V3 requires route receipt (receipt-bound, not envelope-only); chain V3.
 - R-012: OpenCode 1.18.9 real process evidence (handshake + optional tool hook).
 
 ### Assurance

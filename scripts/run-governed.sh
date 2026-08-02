@@ -826,6 +826,8 @@ try:
             env['OPENCODE_GOVERNANCE_HANDSHAKE_PATH']=str(hs)
             if a.task_id: env['OPENCODE_GOVERNANCE_TASK_ID']=str(a.task_id)
             if policy_hash: env['OPENCODE_GOVERNANCE_PERMISSION_POLICY_SHA256']=str(policy_hash)
+        else:
+            hs=None
         timed=False
         stdout_text=''; stderr_text=''
         try:
@@ -875,6 +877,18 @@ try:
         if permission_blocked(text):
             raise RuntimeError(permission_blocked_error(text, route['route'], attempt, logs))
         if r.returncode==0 and not timed:
+            # EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1 — fail closed when effect hashes are bound.
+            if require_effect:
+                if not hs or not pathlib.Path(hs).is_file():
+                    raise RuntimeError(f'EFFECT_PLUGIN_HANDSHAKE_MISSING: role=architect attempt={attempt} path={hs} logs={logs}')
+                try:
+                    handshake=json.loads(pathlib.Path(hs).read_text(encoding='utf-8'))
+                except Exception as exc:
+                    raise RuntimeError(f'EFFECT_PLUGIN_HANDSHAKE_INVALID: {exc}')
+                if handshake.get('schema')!='EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1':
+                    raise RuntimeError(f'EFFECT_PLUGIN_HANDSHAKE_INVALID: schema={handshake.get("schema")}')
+                if str(handshake.get('role') or '').lower()!='architect':
+                    raise RuntimeError(f'EFFECT_PLUGIN_HANDSHAKE_ROLE_MISMATCH: {handshake.get("role")}')
             post=None
             if a.command=='ai-resume': post=validate_postcondition(before,before_combined,text)
             cooldowns.pop(c['model'],None);save_cooldowns(cooldowns)

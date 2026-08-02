@@ -18,8 +18,13 @@ Install self-test launches the real OpenCode binary, requires EFFECT_PLUGIN_RUNT
 
 Use governed-role-attempt.py --role <role> for dedicated OpenCode children. Do not treat in-process subagents as security principals.
 
+## Route identity (report V3)
+
+Production `opencode-governance.role-report/v3` requires an authoritative **route receipt** artifact. Envelope-only `route_id` / `model_family` fields are rejected. Route identity is **receipt-bound and runner-produced**, not caller-controlled JSON and not an independent remote attestation of OpenCode session internals.
+
 ## Residual trust
 
 LOCAL_INTEGRITY / not OS_SANDBOXED / local-admin can still modify plugins.
+Primary Architect runners (`run-governed.*`) fail closed on missing `EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1` when effect plugin hashes are bound in the routing manifest. Executor prepare always emits Launch V2 + `OPENCODE_GOVERNANCE_LAUNCH_SHA256`; the OpenCode Executor child must be started via `governed-role-attempt.py`, which verifies the handshake.
 
 

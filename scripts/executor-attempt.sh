@@ -338,44 +338,72 @@ def prepare_attempt(routing):
         'created_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
     write_attempt(data, manifest_path)
-    # GOVERNED_ROLE_LAUNCH_CONTRACT_V1 — runner-owned launch file for executor OpenCode session.
+    # GOVERNED_ROLE_LAUNCH_CONTRACT_V2 — content-bound launch for dedicated Executor process.
     tools_dir = config_dir / 'opencode-governance-tools'
     launch_helper = tools_dir / 'governed-role-launch.py'
+    if not launch_helper.is_file():
+        launch_helper = pathlib.Path(__file__).resolve().parent / 'governed-role-launch.py'
+    if not launch_helper.is_file():
+        fail('EFFECT_PLUGIN_NOT_ACTIVE: governed-role-launch.py missing')
     launch_path = manifest_path.parent / 'governed-role-launch-executor.json'
+    handshake_path = manifest_path.parent / 'handshake-executor.json'
     effect_policy = config_dir / 'plugins' / 'opencode-governance-effect-enforcement' / 'role-effect-policy.json'
     effect_sha = ''
     if effect_policy.is_file():
         effect_sha = hashlib.sha256(effect_policy.read_bytes()).hexdigest()
-    if launch_helper.is_file():
-        cmd = [
-            sys.executable, str(launch_helper), 'write',
-            '--out', str(launch_path),
-            '--role', 'executor',
-            '--expected-agent', str(args.route_agent),
-            '--workspace', str(project),
-            '--repository', str(project),
-            '--execution-root', str(worktree),
-            '--task-id', str(args.task_id),
-            '--packet-sha256', args.packet_sha256.lower(),
-            '--phase', 'ai-execute',
-            '--config-dir', str(config_dir),
-        ]
-        if effect_sha:
-            cmd += ['--effect-policy', str(effect_policy), '--effect-policy-sha256', effect_sha]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            fail(f'GOVERNED_ROLE_LAUNCH_REQUIRED: {(result.stderr or result.stdout).strip()}')
-        data['governed_role_launch_file'] = str(launch_path)
-        data['open_code_governance_role'] = 'executor'
-        write_attempt(data, manifest_path)
+    require_plugin = effect_policy.is_file()
+    try:
+        routing_mf = json.loads((config_dir / 'opencode-governance-routing.json').read_text(encoding='utf-8-sig'))
+        if routing_mf.get('effect_plugin_sha256') and routing_mf.get('effect_policy_sha256'):
+            require_plugin = True
+    except Exception:
+        pass
+    cmd = [
+        sys.executable, str(launch_helper), 'write',
+        '--out', str(launch_path),
+        '--role', 'executor',
+        '--expected-agent', str(args.route_agent),
+        '--workspace', str(project),
+        '--repository', str(project),
+        '--execution-root', str(worktree),
+        '--task-id', str(args.task_id),
+        '--packet-sha256', args.packet_sha256.lower(),
+        '--phase', 'ai-execute',
+        '--config-dir', str(config_dir),
+    ]
+    if effect_sha:
+        cmd += ['--effect-policy', str(effect_policy), '--effect-policy-sha256', effect_sha]
+    if require_plugin:
+        cmd += ['--require-plugin']
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        fail(f'GOVERNED_ROLE_LAUNCH_REQUIRED: {(result.stderr or result.stdout).strip()}')
+    launch_sha = ''
+    try:
+        launch_j = json.loads((result.stdout or '').strip().splitlines()[-1])
+        launch_sha = str(launch_j.get('sha256') or '')
+    except Exception:
+        launch_sha = ''
+    if not launch_sha and launch_path.is_file():
+        launch_sha = hashlib.sha256(launch_path.read_bytes()).hexdigest()
+    data['governed_role_launch_file'] = str(launch_path)
+    data['governed_role_launch_sha256'] = launch_sha
+    data['open_code_governance_role'] = 'executor'
+    data['required_role_runner'] = 'governed-role-attempt.py'
+    write_attempt(data, manifest_path)
     print(json.dumps({
         'execution_root': str(worktree),
         'attempt_manifest': str(manifest_path),
         'route_agent': args.route_agent,
         'governed_role_launch_file': str(launch_path),
+        'governed_role_launch_sha256': launch_sha,
+        'required_role_runner': 'governed-role-attempt.py',
         'OPENCODE_GOVERNANCE_LAUNCH_FILE': str(launch_path),
+        'OPENCODE_GOVERNANCE_LAUNCH_SHA256': launch_sha,
+        'OPENCODE_GOVERNANCE_HANDSHAKE_PATH': str(handshake_path),
         'OPENCODE_GOVERNANCE_EFFECT_ENFORCEMENT_ACTIVE': '1',
         'OPENCODE_GOVERNANCE_ROLE': 'executor',
+        'OPENCODE_GOVERNANCE_EXPECTED_AGENT': str(args.route_agent),
         'OPENCODE_GOVERNANCE_EXECUTION_ROOT': str(worktree),
     }, separators=(',', ':')))
 
