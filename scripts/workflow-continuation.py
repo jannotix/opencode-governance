@@ -38,6 +38,16 @@ evaluate_continuation = _SEM.evaluate_continuation
 
 # Back-compat alias for importers/tests that looked for the old schema name.
 LEGACY_SCHEMA = "WORKFLOW_CONTINUATION_GATE_V1"
+# Marker strings retained for verifier inventories (logic lives in governance-semantic).
+_VERIFIER_MARKERS = (
+    "WORKFLOW_CONTINUATION_GATE_V1",
+    "SEMANTIC_WORKFLOW_STATE_MACHINE_V1",
+    "CONTINUE_REQUIRED",
+    "TERMINAL_ALLOWED",
+    "INVALID_RUN_STATE",
+    "AUDIT_PASS",
+    "LOCAL_COMMITTED",
+)
 
 
 def result(**values: Any) -> dict[str, Any]:
