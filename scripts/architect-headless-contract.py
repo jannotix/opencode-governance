@@ -170,6 +170,21 @@ _HARD_DENIES = [
     "wget *",
     "ssh *",
     "scp *",
+    # Secret-path shell denials (defense in depth beyond read/external_directory).
+    "cat */.ssh/*",
+    "cat */.env*",
+    "Get-Content */.ssh/*",
+    "Get-Content */.env*",
+    "type */.ssh/*",
+    "type */.env*",
+    "cat */id_rsa*",
+    "cat */id_ed25519*",
+    "Get-Content */id_rsa*",
+    "Get-Content */id_ed25519*",
+    "cat */.aws/*",
+    "Get-Content */.aws/*",
+    "cat */.netrc*",
+    "Get-Content */.netrc*",
 ]
 
 
@@ -211,8 +226,16 @@ def build_read_permission() -> dict[str, str]:
         "**/.aws/**": "deny",
         "**/.azure/**": "deny",
         "**/.config/gcloud/**": "deny",
+        "**/.netrc": "deny",
+        "**/.npmrc": "deny",
+        "**/.pypirc": "deny",
+        "**/kubeconfig": "deny",
+        "**/.kube/**": "deny",
         "**/AppData/Local/Google/Chrome/**": "deny",
         "**/AppData/Roaming/Mozilla/**": "deny",
+        "**/.mozilla/**": "deny",
+        "**/.config/google-chrome/**": "deny",
+        "**/.config/chromium/**": "deny",
     }
 
 
@@ -526,11 +549,22 @@ def load_jsonc_object(text: str) -> tuple[Any, str, str]:
 
 
 if __name__ == "__main__":
+    import argparse
     import sys
 
-    if len(sys.argv) > 1 and sys.argv[1] == "emit-config":
-        roots = sys.argv[2:] if len(sys.argv) > 2 else []
-        cfg = build_headless_config(external_roots=roots)
+    parser = argparse.ArgumentParser(prog="architect-headless-contract")
+    sub = parser.add_subparsers(dest="command")
+    emit = sub.add_parser("emit-config")
+    emit.add_argument("--model", default="")
+    emit.add_argument("--variant", default="")
+    emit.add_argument("roots", nargs="*")
+    args = parser.parse_args()
+    if args.command == "emit-config":
+        cfg = build_headless_config(
+            model=args.model or None,
+            variant=args.variant or None,
+            external_roots=list(args.roots or []),
+        )
         print(config_json(cfg))
         print(config_sha256(cfg), file=sys.stderr)
     else:

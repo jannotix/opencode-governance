@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 export OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1
+# When installed as architect-attempt.sh, this directory also holds architect-headless-contract.py.
+export OPENCODE_GOVERNANCE_TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 python3 - "$@" <<'PY'
 import argparse, base64, hashlib, json, os, pathlib, re, shutil, stat, subprocess, sys, tempfile, time
 
@@ -161,55 +163,34 @@ HEADLESS_CONTRACT='ARCHITECT_HEADLESS_PERMISSION_CONTRACT_V1'
 headless_policy_hash=None
 headless_config_content=None
 
+def resolve_headless_contract_path():
+    candidates=[]
+    tools_dir=os.environ.get('OPENCODE_GOVERNANCE_TOOLS_DIR')
+    if tools_dir:
+        candidates.append(pathlib.Path(tools_dir)/'architect-headless-contract.py')
+    candidates.append(config/'opencode-governance-tools'/'architect-headless-contract.py')
+    # Repo checkout layout: scripts/run-governed.sh next to scripts/architect-headless-contract.py
+    candidates.append(pathlib.Path(tools_dir or '.')/'architect-headless-contract.py')
+    for path in candidates:
+        if path and path.is_file():
+            return path
+    raise RuntimeError('HEADLESS_CONTRACT_MISSING: architect-headless-contract.py is not installed next to the Architect runner.')
+
 def build_headless_config(model, variant, external_roots):
-    bash={'*':'deny'}
-    for pattern in [
-        'git status','git status *','git diff','git diff *','git log','git log *','git show','git show *','git grep','git grep *',
-        'git rev-parse','git rev-parse *','git ls-files','git ls-files *','git submodule status','git submodule status *',
-        'git worktree list','git worktree list *','git branch --show-current','git branch --show-current *','git remote -v','git remote -v *',
-        'pwd','pwd *','ls','ls *','cat','cat *','head','head *','tail','tail *','grep','grep *','rg','rg *','stat','stat *',
-        'sha256sum','sha256sum *','realpath','realpath *','sed -n *','find * -print','find * -print *','find * -type *','find * -name *','find * -maxdepth *',
-        'Test-Path','Test-Path *','Get-ChildItem','Get-ChildItem *','Get-Content','Get-Content *','Get-Item','Get-Item *',
-        'Get-FileHash','Get-FileHash *','Resolve-Path','Resolve-Path *','Select-String','Select-String *','Get-Command','Get-Command *',
-        'ConvertFrom-Json','ConvertFrom-Json *','Select-Object','Select-Object *','Where-Object','Where-Object *',
-        'ForEach-Object','ForEach-Object *','Sort-Object','Sort-Object *','Measure-Object','Measure-Object *',
-        'Format-List','Format-List *','Format-Table','Format-Table *',
-    ]:
-        bash[pattern]='allow'
-    for pattern in [
-        'git push','git push *','git fetch','git fetch *','git pull','git pull *','git merge','git merge *','git rebase','git rebase *',
-        'git cherry-pick','git cherry-pick *','git revert','git revert *','git reset','git reset *','git checkout','git checkout *',
-        'git switch','git switch *','git clean','git clean *','git add','git add *','git commit','git commit *',
-        'git remote add *','git remote set-url *','git remote remove *','git remote rename *',
-        'rm *','rmdir *','del *','Remove-Item *','Set-Content *','Add-Content *','Out-File *','Move-Item *','Copy-Item *','New-Item *',
-        'Invoke-Expression *','iex *','pwsh *','powershell *','cmd *','bash -c *','sh -c *','python *','python3 *','node *','php *','ruby *','perl *',
-        'npm install *','npm update *','npm i *','composer install *','composer update *','pip install *',
-        'find * -delete *','find * -exec *','sed -i *','chmod *','chown *','curl *','wget *','ssh *','scp *',
-    ]:
-        bash[pattern]='deny'
-    edit={'*':'deny','.ai':'allow','.ai/*':'allow','.ai/**':'allow','*/.ai':'allow','*/.ai/*':'allow','*/.ai/**':'allow'}
-    read={'*':'allow','*.env':'deny','*.env.*':'deny','*.env.example':'allow','**/.ssh/**':'deny','**/id_rsa*':'deny','**/id_ed25519*':'deny','**/*credentials*':'deny','**/credentials.json':'deny','**/.aws/**':'deny','**/.azure/**':'deny','**/.config/gcloud/**':'deny'}
-    external={'*':'deny'}
-    for root in external_roots:
-        if not root: continue
-        norm=str(root).replace('\\','/')
-        external[norm]='allow'; external[norm+'/**']='allow'; external[norm+'/*']='allow'
-    agent_perm={
-        'bash':bash,'edit':edit,'read':read,'question':'deny','webfetch':'deny','websearch':'deny','doom_loop':'deny',
-        'external_directory':external,'skill':{'*':'allow'},'glob':'allow','grep':'allow','lsp':'allow',
-        'task':{'*':'deny','explore':'allow','scout':'allow','executor':'allow','reviewer':'allow','reviewer-architecture':'allow','final-reviewer':'allow'},
-    }
-    architect={'permission':agent_perm}
-    if model: architect['model']=model
-    if variant: architect['variant']=variant
-    config={
-        '$schema':'https://opencode.ai/config.json',
-        'permission':{'bash':{'*':'deny'},'question':'deny','webfetch':'deny','websearch':'deny','external_directory':external},
-        'agent':{'architect':architect},
-        'experimental':{'governance_headless_contract':HEADLESS_CONTRACT},
-    }
-    payload=json.dumps(config,separators=(',',':'),ensure_ascii=False)
-    digest=hashlib.sha256(payload.encode('utf-8')).hexdigest()
+    contract=resolve_headless_contract_path()
+    cmd=[sys.executable,str(contract),'emit-config']
+    if model: cmd += ['--model',str(model)]
+    if variant: cmd += ['--variant',str(variant)]
+    cmd += [str(root) for root in external_roots if root]
+    result=subprocess.run(cmd,capture_output=True,text=True)
+    if result.returncode!=0:
+        raise RuntimeError(f'HEADLESS_CONTRACT_EMIT_FAILED: {result.stderr.strip() or result.returncode}')
+    payload=(result.stdout or '').strip()
+    if not payload.startswith('{'):
+        raise RuntimeError('HEADLESS_CONTRACT_EMIT_FAILED: empty or non-JSON overlay.')
+    digest=(result.stderr or '').strip()
+    if not re.fullmatch(r'[a-f0-9]{64}',digest):
+        digest=hashlib.sha256(payload.encode('utf-8')).hexdigest()
     return payload, digest
 
 def permission_blocked(text: str) -> bool:

@@ -28,11 +28,12 @@ The runner is not used for `ai-workflow`, `ai-execute`, `ai-review` or `ai-relea
 
 ## Installed tools
 
-With routing and 3.7.3 capabilities enabled, the installation records fourteen managed tools, including:
+With routing and 3.7.3 capabilities enabled, the installation records fifteen managed tools, including:
 
 ```text
 opencode-governance-tools/architect-attempt.ps1
 opencode-governance-tools/architect-attempt.sh
+opencode-governance-tools/architect-headless-contract.py
 opencode-governance-tools/executor-attempt.ps1
 opencode-governance-tools/executor-attempt.sh
 opencode-governance-tools/context-intelligence.ps1

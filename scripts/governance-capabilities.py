@@ -26,6 +26,7 @@ CAPABILITY_TOOL_NAMES = (
 BASE_TOOL_NAMES = (
     "architect-attempt.ps1",
     "architect-attempt.sh",
+    "architect-headless-contract.py",
     "executor-attempt.ps1",
     "executor-attempt.sh",
     "context-intelligence.ps1",

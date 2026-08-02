@@ -85,9 +85,11 @@ Only Architect may write authorised Governance state under `.ai/**`. Only Execut
 
 ## External directory policy
 
-Narrow, canonicalised, read-oriented roots may be allowed for the active OpenCode config directory, installed Governance tools, and the handoff file directory. Broad home-directory access is denied. Credential paths (`.env`, SSH keys, cloud credentials, browser profiles) are denied at the read layer. Runtime external grants are removed when the child ends.
+Narrow, canonicalised, read-oriented roots may be allowed for the active OpenCode config directory, installed Governance tools, and the handoff file directory. Broad home-directory access is denied via `external_directory: "*": deny` plus explicit root allows. Credential paths (`.env`, SSH keys, cloud credentials, browser profiles, `.netrc`, kubeconfig) are denied at the `read` layer, with additional bash hard-denies for common secret path forms.
 
-Prefer having the trusted runner verify installation metadata and pass only sanitised non-secret results.
+**Residual risk (honest):** OpenCode enforces path-aware tools and many bash path touches through `external_directory`, but shell is not a perfect sandbox. Prefer native OpenCode tools for filesystem discovery. The trusted runner should verify installation metadata itself and pass only sanitised non-secret results to the Architect.
+
+Runtime external grants are environment-scoped and disappear when the child ends.
 
 ## JSONC routing handling
 

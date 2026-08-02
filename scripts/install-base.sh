@@ -111,11 +111,12 @@ if [[ -n "$JSONC_BACKUP" && -f "$JSONC_BACKUP" ]]; then cp -p "$JSONC_BACKUP" "$
 
 if [[ -n "$ROUTING_CONFIG" ]]; then
   tools="$CONFIG_DIR/opencode-governance-tools"
-  for name in architect-attempt.ps1 architect-attempt.sh context-intelligence.ps1 context-intelligence.sh context-intelligence.py workflow-continuation.ps1 workflow-continuation.py; do [[ ! -f "$tools/$name" ]] || cp -p "$tools/$name" "$backup_dir/$name";done
+  for name in architect-attempt.ps1 architect-attempt.sh architect-headless-contract.py context-intelligence.ps1 context-intelligence.sh context-intelligence.py workflow-continuation.ps1 workflow-continuation.py; do [[ ! -f "$tools/$name" ]] || cp -p "$tools/$name" "$backup_dir/$name";done
   cp "$SCRIPT_DIR/run-governed.ps1" "$tools/architect-attempt.ps1";cp "$SCRIPT_DIR/run-governed.sh" "$tools/architect-attempt.sh"
+  cp "$SCRIPT_DIR/architect-headless-contract.py" "$tools/architect-headless-contract.py"
   cp "$SCRIPT_DIR/context-intelligence.ps1" "$tools/context-intelligence.ps1";cp "$SCRIPT_DIR/context-intelligence.sh" "$tools/context-intelligence.sh";cp "$SCRIPT_DIR/context-intelligence.py" "$tools/context-intelligence.py"
   cp "$SCRIPT_DIR/workflow-continuation.ps1" "$tools/workflow-continuation.ps1";cp "$SCRIPT_DIR/workflow-continuation.py" "$tools/workflow-continuation.py"
-  chmod +x "$tools/architect-attempt.sh" "$tools/context-intelligence.sh" "$tools/context-intelligence.py" "$tools/workflow-continuation.py"
+  chmod +x "$tools/architect-attempt.sh" "$tools/architect-headless-contract.py" "$tools/context-intelligence.sh" "$tools/context-intelligence.py" "$tools/workflow-continuation.py"
 
   python3 - "$CONFIG_DIR" <<'PY'
 import json,pathlib,re,sys
@@ -123,7 +124,7 @@ root=pathlib.Path(sys.argv[1]);tools=root/'opencode-governance-tools';manifest_p
 data=json.loads(manifest_path.read_text(encoding='utf-8-sig'))
 if data.get('schema_version')!='1.0': raise SystemExit('Routing manifest schema_version must be 1.0.')
 data['governance_version']='3.4.4';data['architect_runner_version']='3.4.4';data['context_intelligence_version']='3.4.4';data['workflow_continuation_version']='3.4.4'
-data['managed_tools']=[str(tools/name) for name in ['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','workflow-continuation.ps1','workflow-continuation.py']]
+data['managed_tools']=[str(tools/name) for name in ['architect-attempt.ps1','architect-attempt.sh','architect-headless-contract.py','executor-attempt.ps1','executor-attempt.sh','context-intelligence.ps1','context-intelligence.sh','context-intelligence.py','workflow-continuation.ps1','workflow-continuation.py']]
 manifest_path.write_text(json.dumps(data,indent=2)+'\n',encoding='utf-8')
 marker='[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]';ps_runner=str(tools/'architect-attempt.ps1');sh_runner=str(tools/'architect-attempt.sh');ps_context=str(tools/'context-intelligence.ps1');sh_context=str(tools/'context-intelligence.sh');py_context=str(tools/'context-intelligence.py');workflow_ps=str(tools/'workflow-continuation.ps1');workflow_py=str(tools/'workflow-continuation.py')
 architect_policy=f'''

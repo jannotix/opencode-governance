@@ -11,7 +11,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 INSTALL = ROOT / "scripts" / "install.sh"
 VALID_PROFILE = ROOT / "tests" / "fixtures" / "routing" / "reviewer-failover.valid.json"
 MANAGED_TOOLS = (
-    "architect-attempt.ps1", "architect-attempt.sh",
+    "architect-attempt.ps1", "architect-attempt.sh", "architect-headless-contract.py",
     "executor-attempt.ps1", "executor-attempt.sh",
     "context-intelligence.ps1", "context-intelligence.sh", "context-intelligence.py",
     "workflow-continuation.ps1", "workflow-continuation.py",
@@ -34,7 +34,7 @@ def main() -> None:
         manifest_path = config / "opencode-governance-routing.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
         assert manifest["governance_version"] == "3.7.3"
-        assert len(manifest["managed_tools"]) == 14
+        assert len(manifest["managed_tools"]) == 15
         assert not (config / "opencode-governance-runtime.json").exists()
         before_settings = manifest["settings"]
         before_roles = manifest["roles"]

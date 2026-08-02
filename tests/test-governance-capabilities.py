@@ -21,7 +21,7 @@ COMMANDS = (
     "ai-metrics", "ai-release",
 )
 BASE_TOOLS = (
-    "architect-attempt.ps1", "architect-attempt.sh",
+    "architect-attempt.ps1", "architect-attempt.sh", "architect-headless-contract.py",
     "executor-attempt.ps1", "executor-attempt.sh",
     "context-intelligence.ps1", "context-intelligence.sh",
     "context-intelligence.py", "workflow-continuation.ps1",
@@ -102,7 +102,7 @@ class GovernanceCapabilitiesTests(unittest.TestCase):
         self.assertEqual("1.0", manifest["pre_commit_receipt_gate_version"])
         self.assertEqual(self.routing["settings"], manifest["settings"])
         self.assertEqual(self.routing["roles"], manifest["roles"])
-        self.assertEqual(14, len(manifest["managed_tools"]))
+        self.assertEqual(15, len(manifest["managed_tools"]))
         self.assertEqual(set(CAPABILITY_TOOLS), set(manifest["capability_tool_hashes"]))
         self.assertTrue(manifest["capability_section_hashes"])
         run("verify", "--config-dir", self.config)

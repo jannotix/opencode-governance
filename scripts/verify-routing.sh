@@ -14,21 +14,27 @@ python3 - "$CONFIG_DIR" "$SCRIPT_DIR/verify-routing-core.sh" "$SCRIPT_DIR/govern
 import json,os,pathlib,shutil,subprocess,sys,tempfile
 root=pathlib.Path(sys.argv[1]);core=pathlib.Path(sys.argv[2]);capabilities=pathlib.Path(sys.argv[3]);version=sys.argv[4]
 data=json.loads((root/'opencode-governance-routing.json').read_text(encoding='utf-8-sig'));tools=root/'opencode-governance-tools'
-base=[tools/name for name in ['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh']];expected=list(base)
+base=[tools/name for name in ['architect-attempt.ps1','architect-attempt.sh','executor-attempt.ps1','executor-attempt.sh']]
+expected=list(base)
+if version in {'3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3'}:
+    expected=[tools/'architect-attempt.ps1',tools/'architect-attempt.sh',tools/'architect-headless-contract.py',tools/'executor-attempt.ps1',tools/'executor-attempt.sh']
 context_versions={'3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3'}
 hardened_versions={'3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3'}
 fingerprint_versions={'3.3.4','3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3'}
 powershell7_versions={'3.3.3','3.3.4','3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3'}
 workflow_versions={'3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3'}
 capability_versions={'3.6.0','3.7.0','3.7.1','3.7.2','3.7.3'}
+context_ps=tools/'context-intelligence.ps1';context_sh=tools/'context-intelligence.sh';context_py=tools/'context-intelligence.py'
+workflow_ps=tools/'workflow-continuation.ps1';workflow_py=tools/'workflow-continuation.py'
+headless_contract=tools/'architect-headless-contract.py'
 if version in context_versions:
     runner='3.3.4' if version=='3.4.0' else version
     if data.get('architect_runner_version')!=runner: raise SystemExit(f'architect_runner_version must be {runner} for Governance {version}.')
     if data.get('context_intelligence_version')!=version: raise SystemExit(f'context_intelligence_version must be {version} for Governance {version}.')
-    expected += [tools/name for name in ['context-intelligence.ps1','context-intelligence.sh','context-intelligence.py']]
+    expected += [context_ps,context_sh,context_py]
     if version in workflow_versions:
         if data.get('workflow_continuation_version')!=version: raise SystemExit(f'workflow_continuation_version must be {version}.')
-        expected += [tools/'workflow-continuation.ps1',tools/'workflow-continuation.py']
+        expected += [workflow_ps,workflow_py]
     if version in capability_versions:
         expected += [tools/name for name in ['governance-authority.py','governance-memory.py','governance-evidence.py','governance-simulation.py','governance-pre-commit.py']]
 else:
@@ -42,7 +48,7 @@ marker='[[OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1]]'
 policy=['ARCHITECT_RUNNER_INTEGRATION','ARCHITECT_RUNNER_REQUIRED',marker,str(base[0]),str(base[1]),'Never invoke the Architect runner from inside the active OpenCode process.']
 if version in powershell7_versions: policy += ['POWERSHELL_7_REQUIRED','pwsh -NoProfile -File']
 if version in fingerprint_versions: policy += ['PROJECT_STATE_FINGERPRINT_V1','NON_GIT_PROJECT_SUPPORTED','PROJECT_STATE_CHANGED']
-if version in context_versions: policy += ['CONTEXT_INTELLIGENCE_V1','CONTEXT_BUDGET.json','SKILL_CAPABILITY_MANIFEST_V1','CONTEXT_SUFFICIENT','BLOCKED_CONTEXT_GAP',str(expected[4]),str(expected[5]),str(expected[6])]
+if version in context_versions: policy += ['CONTEXT_INTELLIGENCE_V1','CONTEXT_BUDGET.json','SKILL_CAPABILITY_MANIFEST_V1','CONTEXT_SUFFICIENT','BLOCKED_CONTEXT_GAP',str(context_ps),str(context_sh),str(context_py)]
 if version in hardened_versions: policy += ['Governance state paths may not traverse symbolic links or reparse points.']
 for name in ['architect','build','plan']:
     text=(root/'agents'/f'{name}.md').read_text(encoding='utf-8')
@@ -64,7 +70,7 @@ if version in {'3.7.2','3.7.3'}:
 if version in context_versions:
     for command in ['ai-workflow','ai-resume','ai-metrics']:
         text=(root/'commands'/f'{command}.md').read_text(encoding='utf-8')
-        for value in ['CONTEXT_INTELLIGENCE_ENTRY','BLOCKED_CONTEXT_GAP',str(expected[4]),str(expected[5])]:
+        for value in ['CONTEXT_INTELLIGENCE_ENTRY','BLOCKED_CONTEXT_GAP',str(context_ps),str(context_sh)]:
             if value not in text: raise SystemExit(f'{command} missing Context Intelligence marker: {value}')
 if version in fingerprint_versions:
     ps_runner=base[0].read_text(encoding='utf-8');sh_runner=base[1].read_text(encoding='utf-8')
@@ -78,9 +84,10 @@ if version in fingerprint_versions:
     if version == '3.7.3':
         for value in ['ARCHITECT_HEADLESS_PERMISSION_CONTRACT_V1','OPENCODE_CONFIG_CONTENT','ARCHITECT_PERMISSION_BLOCKED','HEADLESS_PERMISSION_CONTRACT','auto=disabled','ROUTING_MANIFEST_HASHES']:
             if value not in ps_runner or value not in sh_runner: raise SystemExit(f'Architect runner missing 3.7.3 headless permission marker: {value}')
+        if not headless_contract.is_file(): raise SystemExit(f'Managed headless contract tool missing: {headless_contract}')
     if version in hardened_versions and 'default cooldown must be an integer between 60 and 86400 seconds.' not in ps_runner: raise SystemExit('PowerShell Architect runner missing cooldown validation.')
 if version in context_versions:
-    ps_context=expected[4].read_text(encoding='utf-8');sh_context=expected[5].read_text(encoding='utf-8');py_context=expected[6].read_text(encoding='utf-8')
+    ps_context=context_ps.read_text(encoding='utf-8');sh_context=context_sh.read_text(encoding='utf-8');py_context=context_py.read_text(encoding='utf-8')
     for value in ['CONTEXT_BUDGET_V1','SKILL_SELECTION_V1','CONTENT_SUMMARY_CACHE_ENTRY_V1','CONTEXT_METRICS_V1']:
         if value not in ps_context or value not in py_context: raise SystemExit(f'Context tool missing marker: {value}')
     if 'context-intelligence.py' not in sh_context: raise SystemExit('Unix context wrapper does not invoke the managed Python core.')
@@ -88,12 +95,12 @@ if version in context_versions:
         for value in ['GOVERNANCE_STATE_LINK_FORBIDDEN','REQUIRED_SECTION_UNAVAILABLE','TERMINAL_STATE_REQUIRED']:
             if value not in ps_context or value not in py_context: raise SystemExit(f'Context hardening marker missing: {value}')
 if version in workflow_versions:
-    ps_workflow=expected[7].read_text(encoding='utf-8');py_workflow=expected[8].read_text(encoding='utf-8')
+    ps_workflow=workflow_ps.read_text(encoding='utf-8');py_workflow=workflow_py.read_text(encoding='utf-8')
     for value in ['WORKFLOW_CONTINUATION_GATE_V1','CONTINUE_REQUIRED','TERMINAL_ALLOWED','INVALID_RUN_STATE','AUDIT_PASS','LOCAL_COMMITTED']:
         if value not in ps_workflow or value not in py_workflow: raise SystemExit(f'Workflow continuation helper missing marker: {value}')
     for command in ['ai-workflow','ai-resume']:
         text=(root/'commands'/f'{command}.md').read_text(encoding='utf-8')
-        for value in ['WORKFLOW_CONTINUATION_GATE_V1','WINDOWS_WORKFLOW_CONTINUATION_CORE','UNIX_WORKFLOW_CONTINUATION_CORE',str(expected[7]),str(expected[8]),'CONTINUE_REQUIRED','TERMINAL_ALLOWED']:
+        for value in ['WORKFLOW_CONTINUATION_GATE_V1','WINDOWS_WORKFLOW_CONTINUATION_CORE','UNIX_WORKFLOW_CONTINUATION_CORE',str(workflow_ps),str(workflow_py),'CONTINUE_REQUIRED','TERMINAL_ALLOWED']:
             if value not in text: raise SystemExit(f'{command} missing workflow continuation marker: {value}')
 if version in capability_versions:
     if not capabilities.is_file(): raise SystemExit(f'Capability verifier not found: {capabilities}')

@@ -254,82 +254,41 @@ $Launch=Resolve-OpenCodeLaunch
 Write-Host "OPENCODE_CLI_RESOLVED host=$($Launch.host) launcher_type=$($Launch.launcher_type) launcher=$($Launch.launcher) prefix_count=$(@($Launch.prefix).Count)"
 
 # ARCHITECT_HEADLESS_PERMISSION_CONTRACT_V1 — temporary OPENCODE_CONFIG_CONTENT overlay (deny-by-default bash).
+# Canonical builder: architect-headless-contract.py (installed next to this runner).
 $script:HeadlessContractVersion='ARCHITECT_HEADLESS_PERMISSION_CONTRACT_V1'
 $script:HeadlessPolicyHash=$null
 $script:HeadlessConfigContent=$null
+function Resolve-HeadlessContractPath(){
+  $candidates=@(
+    (Join-Path $PSScriptRoot 'architect-headless-contract.py'),
+    (Join-Path (Split-Path -Parent $PSCommandPath) 'architect-headless-contract.py'),
+    (Join-Path $ConfigDir 'opencode-governance-tools/architect-headless-contract.py')
+  )
+  foreach($path in $candidates){if($path-and(Test-Path -LiteralPath $path -PathType Leaf)){return $path}}
+  throw 'HEADLESS_CONTRACT_MISSING: architect-headless-contract.py is not installed next to the Architect runner.'
+}
 function New-HeadlessPermissionOverlay([string]$Model,[string]$Variant,[string[]]$ExternalRoots){
-  $bash=[ordered]@{'*'='deny'}
-  foreach($pattern in @(
-    'git status','git status *','git diff','git diff *','git log','git log *','git show','git show *','git grep','git grep *',
-    'git rev-parse','git rev-parse *','git ls-files','git ls-files *','git submodule status','git submodule status *',
-    'git worktree list','git worktree list *','git branch --show-current','git branch --show-current *','git remote -v','git remote -v *',
-    'pwd','pwd *','ls','ls *','cat','cat *','head','head *','tail','tail *','grep','grep *','rg','rg *','stat','stat *',
-    'sha256sum','sha256sum *','realpath','realpath *','sed -n *','find * -print','find * -print *','find * -type *','find * -name *','find * -maxdepth *',
-    'Test-Path','Test-Path *','Get-ChildItem','Get-ChildItem *','Get-Content','Get-Content *','Get-Item','Get-Item *',
-    'Get-FileHash','Get-FileHash *','Resolve-Path','Resolve-Path *','Select-String','Select-String *','Get-Command','Get-Command *',
-    'ConvertFrom-Json','ConvertFrom-Json *','Select-Object','Select-Object *','Where-Object','Where-Object *',
-    'ForEach-Object','ForEach-Object *','Sort-Object','Sort-Object *','Measure-Object','Measure-Object *',
-    'Format-List','Format-List *','Format-Table','Format-Table *'
-  )){$bash[$pattern]='allow'}
-  foreach($pattern in @(
-    'git push','git push *','git fetch','git fetch *','git pull','git pull *','git merge','git merge *','git rebase','git rebase *',
-    'git cherry-pick','git cherry-pick *','git revert','git revert *','git reset','git reset *','git checkout','git checkout *',
-    'git switch','git switch *','git clean','git clean *','git add','git add *','git commit','git commit *',
-    'git remote add *','git remote set-url *','git remote remove *','git remote rename *',
-    'rm *','rmdir *','del *','Remove-Item *','Set-Content *','Add-Content *','Out-File *','Move-Item *','Copy-Item *','New-Item *',
-    'Invoke-Expression *','iex *','pwsh *','powershell *','cmd *','bash -c *','sh -c *','python *','python3 *','node *','php *','ruby *','perl *',
-    'npm install *','npm update *','npm i *','composer install *','composer update *','pip install *',
-    'find * -delete *','find * -exec *','sed -i *','chmod *','chown *','curl *','wget *','ssh *','scp *'
-  )){$bash[$pattern]='deny'}
-  $edit=[ordered]@{
-    '*'='deny';'.ai'='allow';'.ai/*'='allow';'.ai/**'='allow';'*/.ai'='allow';'*/.ai/*'='allow';'*/.ai/**'='allow'
-    '.ai\*'='allow';'*\.ai'='allow';'*\.ai\*'='allow'
-  }
-  $read=[ordered]@{
-    '*'='allow';'*.env'='deny';'*.env.*'='deny';'*.env.example'='allow'
-    '**/.ssh/**'='deny';'**/id_rsa*'='deny';'**/id_ed25519*'='deny';'**/*credentials*'='deny';'**/credentials.json'='deny'
-    '**/.aws/**'='deny';'**/.azure/**'='deny';'**/.config/gcloud/**'='deny'
-  }
-  $external=[ordered]@{'*'='deny'}
-  foreach($root in @($ExternalRoots|Where-Object{$_})){
-    $norm=$root.Replace('\','/')
-    $win=$root.Replace('/','\')
-    $external[$norm]='allow';$external["$norm/**"]='allow';$external["$norm/*"]='allow'
-    $external[$win]='allow';$external["$win\*"]='allow';$external["$win\**"]='allow'
-  }
-  $agentPerm=[ordered]@{
-    bash=$bash
-    edit=$edit
-    read=$read
-    question='deny'
-    webfetch='deny'
-    websearch='deny'
-    doom_loop='deny'
-    external_directory=$external
-    skill=[ordered]@{'*'='allow'}
-    glob='allow'
-    grep='allow'
-    lsp='allow'
-    task=[ordered]@{'*'='deny';explore='allow';scout='allow';executor='allow';reviewer='allow';'reviewer-architecture'='allow';'final-reviewer'='allow'}
-  }
-  $architect=[ordered]@{permission=$agentPerm}
-  if(-not[string]::IsNullOrWhiteSpace($Model)){$architect['model']=$Model}
-  if(-not[string]::IsNullOrWhiteSpace($Variant)){$architect['variant']=$Variant}
-  $config=[ordered]@{
-    '$schema'='https://opencode.ai/config.json'
-    permission=[ordered]@{
-      bash=[ordered]@{'*'='deny'}
-      question='deny'
-      webfetch='deny'
-      websearch='deny'
-      external_directory=$external
+  $contract=Resolve-HeadlessContractPath
+  $py=Get-Command python -ErrorAction SilentlyContinue
+  if(-not$py){$py=Get-Command python3 -ErrorAction SilentlyContinue}
+  if(-not$py){throw 'HEADLESS_CONTRACT_PYTHON_MISSING: python is required to emit the headless permission overlay.'}
+  $args=@($contract,'emit-config')
+  if(-not[string]::IsNullOrWhiteSpace($Model)){$args+='--model';$args+=$Model}
+  if(-not[string]::IsNullOrWhiteSpace($Variant)){$args+='--variant';$args+=$Variant}
+  foreach($root in @($ExternalRoots|Where-Object{$_})){$args+=[string]$root}
+  $stderrFile=Join-Path ([IO.Path]::GetTempPath()) ("headless-policy-"+[guid]::NewGuid().ToString('N')+".err")
+  try{
+    $json=& $py.Source @args 2>$stderrFile
+    if($LASTEXITCODE-ne0){throw "HEADLESS_CONTRACT_EMIT_FAILED: exit $LASTEXITCODE"}
+    $json=(($json|ForEach-Object{[string]$_})-join'').Trim()
+    if([string]::IsNullOrWhiteSpace($json)-or-not$json.StartsWith('{')){throw 'HEADLESS_CONTRACT_EMIT_FAILED: empty or non-JSON overlay.'}
+    $hash=Get-TextHash $json
+    if(Test-Path -LiteralPath $stderrFile -PathType Leaf){
+      $errText=(Get-Content -LiteralPath $stderrFile -Raw).Trim()
+      if($errText-match'^[a-f0-9]{64}$'){$hash=$errText.ToLowerInvariant()}
     }
-    agent=[ordered]@{architect=$architect}
-    experimental=[ordered]@{governance_headless_contract=$script:HeadlessContractVersion}
-  }
-  $json=$config|ConvertTo-Json -Depth 40 -Compress
-  $hash=Get-TextHash $json
-  [pscustomobject]@{json=$json;sha256=$hash;version=$script:HeadlessContractVersion}
+    [pscustomobject]@{json=$json;sha256=$hash;version=$script:HeadlessContractVersion}
+  }finally{Remove-Item -LiteralPath $stderrFile -Force -ErrorAction SilentlyContinue}
 }
 function Test-PermissionBlocked([string]$Text){
   $value=$Text.ToLowerInvariant()

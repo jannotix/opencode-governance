@@ -113,16 +113,18 @@ try{
         $ManifestPath=Join-Path $ConfigDir 'opencode-governance-routing.json'
         $ArchitectRunnerPs=Join-Path $ToolsDir 'architect-attempt.ps1'
         $ArchitectRunnerSh=Join-Path $ToolsDir 'architect-attempt.sh'
+        $HeadlessContract=Join-Path $ToolsDir 'architect-headless-contract.py'
         $ContextToolPs=Join-Path $ToolsDir 'context-intelligence.ps1'
         $ContextToolSh=Join-Path $ToolsDir 'context-intelligence.sh'
         $ContextToolPy=Join-Path $ToolsDir 'context-intelligence.py'
         $WorkflowGatePs=Join-Path $ToolsDir 'workflow-continuation.ps1'
         $WorkflowGatePy=Join-Path $ToolsDir 'workflow-continuation.py'
-        foreach($ManagedPath in @($ArchitectRunnerPs,$ArchitectRunnerSh,$ContextToolPs,$ContextToolSh,$ContextToolPy,$WorkflowGatePs,$WorkflowGatePy)){
+        foreach($ManagedPath in @($ArchitectRunnerPs,$ArchitectRunnerSh,$HeadlessContract,$ContextToolPs,$ContextToolSh,$ContextToolPy,$WorkflowGatePs,$WorkflowGatePy)){
             if(Test-Path -LiteralPath $ManagedPath -PathType Leaf){Copy-Item -LiteralPath $ManagedPath -Destination (Join-Path $BackupDir.FullName ([IO.Path]::GetFileName($ManagedPath)))-Force}
         }
         Copy-Item (Join-Path $PSScriptRoot 'run-governed.ps1') $ArchitectRunnerPs -Force
         Copy-Item (Join-Path $PSScriptRoot 'run-governed.sh') $ArchitectRunnerSh -Force
+        Copy-Item (Join-Path $PSScriptRoot 'architect-headless-contract.py') $HeadlessContract -Force
         Copy-Item (Join-Path $PSScriptRoot 'context-intelligence.ps1') $ContextToolPs -Force
         Copy-Item (Join-Path $PSScriptRoot 'context-intelligence.sh') $ContextToolSh -Force
         Copy-Item (Join-Path $PSScriptRoot 'context-intelligence.py') $ContextToolPy -Force
@@ -136,7 +138,7 @@ try{
         $Manifest|Add-Member NoteProperty context_intelligence_version '3.4.4' -Force
         $Manifest|Add-Member NoteProperty workflow_continuation_version '3.4.4' -Force
         $Manifest|Add-Member NoteProperty managed_tools @(
-            $ArchitectRunnerPs,$ArchitectRunnerSh,
+            $ArchitectRunnerPs,$ArchitectRunnerSh,$HeadlessContract,
             (Join-Path $ToolsDir 'executor-attempt.ps1'),(Join-Path $ToolsDir 'executor-attempt.sh'),
             $ContextToolPs,$ContextToolSh,$ContextToolPy,$WorkflowGatePs,$WorkflowGatePy
         ) -Force
