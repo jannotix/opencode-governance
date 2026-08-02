@@ -5,7 +5,7 @@ CORE="$ROOT/scripts/workflow-continuation.py"
 TEMP="$(mktemp -d)"
 trap 'rm -rf "$TEMP"' EXIT
 RUN_STATE="$TEMP/RUN_STATE.json"
-printf '%s\n' '{"top_level_command":"ai-workflow","current_phase":"AUDIT_PASS","next_required_phase":"IDEA_INTAKE","terminal_reason":null,"next_action":{"kind":"execute","command":"/ai-plan","arguments":[],"expected_postcondition":"READY_FOR_EXECUTION"}}' > "$RUN_STATE"
+printf '%s\n' '{"top_level_command":"ai-workflow","current_phase":"AUDIT_PASS","next_required_phase":"IDEA_INTAKE","terminal_reason":null,"lifecycle_mode":"STANDARD","next_action":{"kind":"execute","command":"/ai-init","arguments":[],"expected_postcondition":"IDEA_INTAKE"}}' > "$RUN_STATE"
 set +e
 output="$(python3 "$CORE" --run-state "$RUN_STATE" --expected-command ai-workflow)"
 code=$?
