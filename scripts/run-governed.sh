@@ -7,7 +7,10 @@ python3 - "$@" <<'PY'
 import argparse, base64, hashlib, json, os, pathlib, re, shutil, stat, subprocess, sys, tempfile, time
 
 p=argparse.ArgumentParser()
-p.add_argument('--project-dir',required=True)
+# WorkspaceDir / RepositoryDir (WORKSPACE_REPOSITORY_ROOT_CONTRACT_V1); --project-dir remains compatibility alias.
+p.add_argument('--project-dir')  # compatibility alias for workspace root / WorkspaceDir
+p.add_argument('--workspace-dir')  # WorkspaceDir
+p.add_argument('--repository-dir')  # RepositoryDir
 p.add_argument('--command',required=True,choices=['ai-init','ai-audit','ai-discover','ai-plan','ai-resume'])
 p.add_argument('--arguments',default='')
 p.add_argument('--arguments-file')
@@ -18,14 +21,27 @@ p.add_argument('--opencode-command',default='opencode')
 p.add_argument('--opencode-prefix-argument',action='append',default=[])
 p.add_argument('--timeout-seconds',type=int,default=3600)
 p.add_argument('--keep-attempt-logs',action='store_true')
+p.add_argument('--recover-transaction',action='store_true')
+p.add_argument('--recovery-decision',choices=['adopt-governance-only','rollback'])
+p.add_argument('--expected-transaction-hash')
+p.add_argument('--expected-evidence-bundle-hash')
 a=p.parse_args(sys.argv[1:])
 
-project=pathlib.Path(a.project_dir).resolve()
+WORKSPACE_ROOT_CONTRACT='WORKSPACE_REPOSITORY_ROOT_CONTRACT_V1'
+MULTI_GOVERNANCE_TX='MULTI_GOVERNANCE_ROOT_TRANSACTION_V1'
+CHANGESET_DIAGNOSTIC='PROJECT_STATE_CHANGESET_DIAGNOSTIC_V1'
+workspace_raw=a.workspace_dir or a.project_dir
+if not workspace_raw: raise SystemExit('WORKSPACE_ROOT_REQUIRED: Provide --workspace-dir or --project-dir.')
+project=pathlib.Path(workspace_raw).resolve()
 if not project.is_dir(): raise SystemExit('Project directory does not exist.')
 config=pathlib.Path(a.config_dir or os.environ.get('OPENCODE_CONFIG_DIR') or pathlib.Path.home()/'.config'/'opencode')
 routing_path=pathlib.Path(a.routing_config) if a.routing_config else config/'opencode-governance-routing.json'
 if not routing_path.is_file(): raise SystemExit(f'Routing profile/manifest not found: {routing_path}')
 if a.timeout_seconds<30: raise SystemExit('timeout-seconds must be at least 30.')
+repository=None
+managed_governance_roots=[]
+managed_root_records=[]
+fingerprint_manifest_before=[]
 
 def strip_jsonc(text: str) -> str:
     output=[]; index=0; in_string=False; escaped=False; line_comment=False; block_comment=False
@@ -112,14 +128,100 @@ if prompt_utf8_bytes>prompt_max_bytes:
         f'sha256={prompt_transport_sha256} contract={PROMPT_TRANSPORT_CONTRACT}'
     )
 
+def is_git_worktree(path):
+    if not shutil.which('git'): return False
+    r=subprocess.run(['git','-C',str(path),'rev-parse','--is-inside-work-tree'],capture_output=True)
+    return r.returncode==0 and r.stdout.strip()==b'true'
+
+def find_nested_git_roots(workspace, max_depth=6):
+    found=[]; stack=[(workspace,0)]; skip={'.git','.ai','node_modules','vendor','.venv','dist','build'}
+    while stack:
+        directory, depth=stack.pop()
+        if depth>max_depth: continue
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    if entry.is_symlink(): continue
+                    if entry.name=='.git':
+                        if directory!=workspace and is_git_worktree(directory):
+                            found.append(pathlib.Path(directory).resolve())
+                        continue
+                    if entry.name in skip or not entry.is_dir(follow_symlinks=False): continue
+                    child=pathlib.Path(entry.path)
+                    if (child/'.git').exists() and is_git_worktree(child):
+                        found.append(child.resolve()); continue
+                    stack.append((child, depth+1))
+        except OSError:
+            continue
+    uniq={str(p):p for p in found}
+    return sorted(uniq.values(), key=lambda p:str(p).lower())
+
+def recognized_governance(ai_path):
+    if not ai_path.is_dir() or ai_path.is_symlink(): return False
+    for name in ('STATUS.md','PROJECT_HISTORY.md','RUN_STATE.json','tasks','product','CONTEXT_INDEX.md','INSTRUCTION_INDEX.md','GOVERNANCE_MEMORY.md'):
+        if (ai_path/name).exists(): return True
+    return False
+
+def resolve_roots():
+    global repository, managed_governance_roots, project
+    workspace=project
+    source=''
+    if a.repository_dir:
+        repository=pathlib.Path(a.repository_dir).resolve()
+        if not repository.is_dir(): raise SystemExit(f'REPOSITORY_ROOT_NOT_FOUND: {repository}')
+        source='explicit_repository_dir'
+    else:
+        if is_git_worktree(workspace):
+            top=subprocess.run(['git','-C',str(workspace),'rev-parse','--show-toplevel'],capture_output=True,text=True)
+            repository=pathlib.Path(top.stdout.strip()).resolve() if top.returncode==0 and top.stdout.strip() else workspace
+            source='workspace_is_git'
+        else:
+            nested=find_nested_git_roots(workspace)
+            if len(nested)>1:
+                raise SystemExit('REPOSITORY_ROOT_AMBIGUOUS: '+'; '.join(str(p) for p in nested))
+            if len(nested)==1:
+                repository=nested[0]; source='unique_nested_git'
+            else:
+                repository=workspace; source='workspace_non_git'
+    try:
+        repository.relative_to(workspace)
+        inside=True
+    except ValueError:
+        inside=repository==workspace
+    if not inside and repository!=workspace:
+        raise SystemExit(f'REPOSITORY_ROOT_OUTSIDE_WORKSPACE: repository={repository} workspace={workspace}')
+    managed=[]
+    ws_ai=workspace/'.ai'
+    managed.append({'canonical_path':str(ws_ai.resolve() if ws_ai.exists() else ws_ai),'role':'workspace_governance'})
+    if repository!=workspace:
+        repo_ai=repository/'.ai'
+        managed.append({'canonical_path':str(repo_ai.resolve() if repo_ai.exists() else repo_ai),'role':'repository_governance'})
+    managed_governance_roots=managed
+    print(f'WORKSPACE_REPOSITORY_ROOT_CONTRACT contract={WORKSPACE_ROOT_CONTRACT} workspace={workspace} repository={repository} source={source} managed_roots={len(managed)}', flush=True)
+
+resolve_roots()
+
+def task_state_search_roots():
+    roots=[project]
+    if repository is not None and repository!=project: roots.append(repository)
+    return roots
+
+def find_task_state_path(task_id):
+    for root in task_state_search_roots():
+        path=root/'.ai'/'tasks'/task_id/'RUN_STATE.json'
+        if path.is_file(): return path
+    return None
+
 if a.command=='ai-resume':
     if not a.task_id:
         match=re.match(r'\s*([A-Za-z0-9][A-Za-z0-9._-]{2,})\b',a.arguments)
-        if match and (project/'.ai'/'tasks'/match.group(1)/'RUN_STATE.json').is_file():
+        if match and find_task_state_path(match.group(1)):
             a.task_id=match.group(1)
     if not a.task_id:
-        task_root=project/'.ai'/'tasks'
-        states=[p for p in task_root.glob('*/RUN_STATE.json')] if task_root.is_dir() else []
+        states=[]
+        for root in task_state_search_roots():
+            task_root=root/'.ai'/'tasks'
+            if task_root.is_dir(): states += list(task_root.glob('*/RUN_STATE.json'))
         if len(states)==1: a.task_id=states[0].parent.name
     if not a.task_id: raise SystemExit('RESUME_TASK_ID_REQUIRED')
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]+',a.task_id): raise SystemExit('RESUME_TASK_ID_INVALID')
@@ -285,39 +387,156 @@ def tree_hash(path):
         elif f.is_file(): rows.append(f'{rel}\t{hash_file(f)}')
     return hashlib.sha256('\n'.join(rows).encode()).hexdigest()
 def field(value): return base64.b64encode(str(value).encode('utf-8','surrogateescape')).decode('ascii')
-def project_tree_hash(root):
-    rows=[]; stack=[root]
+def managed_prefixes():
+    prefixes={'.ai'}
+    if repository is not None and repository.resolve()!=project.resolve():
+        try:
+            repo_rel=repository.resolve().relative_to(project.resolve()).as_posix().rstrip('/')
+            if repo_rel and repo_rel!='.':
+                prefixes.add(f'{repo_rel}/.ai')
+        except Exception:
+            pass
+    for m in managed_governance_roots:
+        path=pathlib.Path(m['canonical_path'])
+        try:
+            rel=path.resolve().relative_to(project.resolve()).as_posix().rstrip('/')
+        except Exception:
+            try:
+                rel=pathlib.Path(m['canonical_path']).relative_to(project).as_posix().rstrip('/')
+            except Exception:
+                continue
+        if rel and rel!='.' and not rel.startswith('..'):
+            prefixes.add(rel)
+    return sorted(prefixes)
+def normalize_rel(rel: str) -> str:
+    # Do not use lstrip('./') — that treats the argument as a character set and turns ".ai" into "ai".
+    norm=rel.replace('\\','/')
+    while norm.startswith('./'):
+        norm=norm[2:]
+    return norm.lstrip('/')
+def is_excluded_rel(rel, prefixes):
+    norm=normalize_rel(rel)
+    if norm=='.git' or norm.startswith('.git/') or '/.git/' in f'/{norm}/': return True
+    for p in prefixes:
+        pref=normalize_rel(p)
+        if norm==pref or norm.startswith(pref+'/'): return True
+    return False
+def project_tree_manifest(root):
+    # Root-aware fingerprint rows; excludes .git/** and exact managed Governance roots only.
+    rows=[]; stack=[root]; prefixes=managed_prefixes()
     while stack:
         directory=stack.pop()
-        with os.scandir(directory) as entries:
-            for entry in entries:
-                path=pathlib.Path(entry.path); rel=path.relative_to(root)
-                if entry.name=='.git' or (rel.parts and rel.parts[0]=='.ai'): continue
-                st=os.lstat(path); mode=stat.S_IMODE(st.st_mode); rf=field(rel.as_posix())
-                if stat.S_ISLNK(st.st_mode): rows.append(f'L|{rf}|{mode}|{field(os.readlink(path))}')
-                elif stat.S_ISDIR(st.st_mode): rows.append(f'D|{rf}|{mode}'); stack.append(path)
-                elif stat.S_ISREG(st.st_mode): rows.append(f'F|{rf}|{mode}|{st.st_size}|{hash_file(path)}')
-    return hashlib.sha256('\n'.join(sorted(rows)).encode()).hexdigest()
-def git_probe(args): return subprocess.run(['git','-C',str(project),*args],capture_output=True)
-def project_state_fingerprint():
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    path=pathlib.Path(entry.path); rel=path.relative_to(root).as_posix()
+                    if entry.name=='.git' or is_excluded_rel(rel, prefixes): continue
+                    st=os.lstat(path); mode=stat.S_IMODE(st.st_mode); rf=field(rel)
+                    if stat.S_ISLNK(st.st_mode): rows.append(f'L|{rf}|{mode}|{field(os.readlink(path))}')
+                    elif stat.S_ISDIR(st.st_mode): rows.append(f'D|{rf}|{mode}'); stack.append(path)
+                    elif stat.S_ISREG(st.st_mode): rows.append(f'F|{rf}|{mode}|{st.st_size}|{hash_file(path)}')
+        except OSError:
+            continue
+    return sorted(rows)
+def project_tree_hash(root):
+    return hashlib.sha256('\n'.join(project_tree_manifest(root)).encode()).hexdigest()
+def git_probe(args):
+    repo=repository or project
+    return subprocess.run(['git','-C',str(repo),*args],capture_output=True)
+def project_state_fingerprint(legacy=False):
+    # NON_GIT_PROJECT_SUPPORTED + PROJECT_STATE_FINGERPRINT_V1 with multi-root exclusions
     tree=project_tree_hash(project); mode='NON_GIT'; head='N/A'; index_hash='N/A'; subs='N/A'
-    if shutil.which('git'):
-        inside=git_probe(['rev-parse','--is-inside-work-tree'])
-        if inside.returncode==0 and inside.stdout.strip()==b'true':
-            mode='GIT'; hp=git_probe(['rev-parse','--verify','HEAD']); head=hp.stdout.decode().strip() if hp.returncode==0 else 'UNBORN'
-            ip=git_probe(['rev-parse','--git-path','index'])
-            if ip.returncode: raise RuntimeError('Unable to resolve Git index.')
-            idx=pathlib.Path(ip.stdout.decode().strip()); idx=idx if idx.is_absolute() else (project/idx).resolve(); index_hash=hash_file(idx) if idx.is_file() else 'ABSENT'
-            sp=git_probe(['submodule','status','--recursive'])
-            if sp.returncode: raise RuntimeError('Unable to read submodule state.')
-            subs=hashlib.sha256(sp.stdout).hexdigest()
-    manifest=f'PROJECT_STATE_FINGERPRINT_V1\nMODE={mode}\nTREE={tree}\nHEAD={head}\nINDEX={index_hash}\nSUBMODULES={subs}'
+    repo=repository or project
+    if shutil.which('git') and is_git_worktree(repo):
+        mode='GIT'; hp=git_probe(['rev-parse','--verify','HEAD']); head=hp.stdout.decode().strip() if hp.returncode==0 else 'UNBORN'
+        ip=git_probe(['rev-parse','--git-path','index'])
+        if ip.returncode: raise RuntimeError('Unable to resolve Git index.')
+        idx=pathlib.Path(ip.stdout.decode().strip()); idx=idx if idx.is_absolute() else (repo/idx).resolve(); index_hash=hash_file(idx) if idx.is_file() else 'ABSENT'
+        sp=git_probe(['submodule','status','--recursive'])
+        if sp.returncode: raise RuntimeError('Unable to read submodule state.')
+        subs=hashlib.sha256(sp.stdout).hexdigest()
+    base=f'PROJECT_STATE_FINGERPRINT_V1\nMODE={mode}\nTREE={tree}\nHEAD={head}\nINDEX={index_hash}\nSUBMODULES={subs}'
+    if legacy:
+        return hashlib.sha256(base.encode()).hexdigest()
+    managed=','.join(sorted(str(pathlib.Path(m['canonical_path'])).lower() for m in managed_governance_roots))
+    manifest=f'{base}\nWORKSPACE={str(project).lower()}\nREPOSITORY={str(repo).lower()}\nMANAGED={managed}'
     return hashlib.sha256(manifest.encode()).hexdigest()
+def path_class(rel, prefixes):
+    norm=normalize_rel(rel)
+    for p in prefixes:
+        pref=normalize_rel(p)
+        if norm==pref or norm.startswith(pref+'/'): return 'GOVERNANCE_ONLY_CHANGE'
+    if norm=='.git' or norm.startswith('.git/'): return 'GIT_METADATA_CHANGE'
+    base=pathlib.Path(norm).name
+    if base in {'package.json','composer.json','requirements.txt','pyproject.toml','go.mod','Cargo.toml'}: return 'DEPENDENCY_CHANGE'
+    for hint in ('node_modules/','vendor/','dist/','build/','__pycache__/'):
+        if norm.startswith(hint) or f'/{hint}' in f'/{norm}/': return 'GENERATED_ARTIFACT_CHANGE'
+    if re.search(r'\.(php|py|ts|tsx|js|jsx|go|rs|java|cs|c|cpp|h|rb)$', norm): return 'APPLICATION_SOURCE_CHANGE'
+    for seg in ('src','app','lib','Source_Code','source'):
+        if norm==seg or norm.startswith(seg+'/') or f'/{seg}/' in f'/{norm}/': return 'APPLICATION_SOURCE_CHANGE'
+    return 'UNKNOWN_CHANGE'
+def classify_changeset(before_rows, after_rows):
+    prefixes=managed_prefixes()
+    def parse(rows):
+        out={}
+        for row in rows:
+            parts=row.split('|',3)
+            if len(parts)<2: continue
+            try: rel=base64.b64decode(parts[1]).decode('utf-8','surrogateescape')
+            except Exception: continue
+            out[rel]=row
+        return out
+    before=parse(before_rows); after=parse(after_rows)
+    changes=[]; classes=set()
+    for key in sorted(set(before)|set(after)):
+        if before.get(key)==after.get(key): continue
+        cls=path_class(key, prefixes); classes.add(cls)
+        changes.append({'relative_path':key,'path_class':cls,'inside_managed_root':any(key==p or key.startswith(p+'/') for p in prefixes)})
+    if not changes: overall='NO_CHANGE'
+    elif classes<={'GOVERNANCE_ONLY_CHANGE'}: overall='GOVERNANCE_ONLY_CHANGE'
+    elif 'APPLICATION_SOURCE_CHANGE' in classes: overall='APPLICATION_SOURCE_CHANGE'
+    elif 'GIT_METADATA_CHANGE' in classes: overall='GIT_METADATA_CHANGE'
+    elif 'DEPENDENCY_CHANGE' in classes: overall='DEPENDENCY_CHANGE'
+    elif 'GENERATED_ARTIFACT_CHANGE' in classes: overall='GENERATED_ARTIFACT_CHANGE'
+    else: overall='UNKNOWN_CHANGE'
+    return {'diagnostic':CHANGESET_DIAGNOSTIC,'overall_class':overall,'change_count':len(changes),'classes':sorted(classes),'changes':changes[:200]}
+def assert_project_state_unchanged(expected, before_rows):
+    actual=project_state_fingerprint()
+    if actual==expected: return
+    diag=classify_changeset(before_rows, project_tree_manifest(project))
+    summary='; '.join(f"{c['path_class']}:{c['relative_path']}" for c in diag['changes'][:20])
+    raise RuntimeError(
+        f'ARCHITECT_FAILOVER_BLOCKED: PROJECT_STATE_CHANGED. diagnostic={CHANGESET_DIAGNOSTIC} '
+        f"overall={diag['overall_class']} changes={diag['change_count']} detail={summary} HUMAN_RECOVERY_REQUIRED"
+    )
 def restore_ai(ai,backup,existed,expected):
     if ai.exists(): shutil.rmtree(ai)
     if existed: shutil.copytree(backup,ai)
     actual=tree_hash(ai)
     if actual!=expected: raise RuntimeError(f'ARCHITECT_FAILOVER_BLOCKED: .ai restore hash mismatch ({actual} != {expected}). HUMAN_RECOVERY_REQUIRED')
+def restore_managed_roots(records):
+    errors=[]
+    for rec in records:
+        path=pathlib.Path(rec['canonical_path']); snap=pathlib.Path(rec['snapshot_path'])
+        expected=rec['tree_hash_before']; existed=bool(rec['existed_before'])
+        try:
+            if path.exists(): shutil.rmtree(path) if path.is_dir() else path.unlink()
+            if existed:
+                if not snap.exists(): raise RuntimeError(f'SNAPSHOT_MISSING: {snap}')
+                shutil.copytree(snap, path)
+            actual=tree_hash(path) if path.exists() else 'ABSENT'
+            if actual!=expected: raise RuntimeError(f'hash mismatch {actual} != {expected}')
+        except Exception as exc:
+            errors.append(f'{path}: {exc}')
+    if errors:
+        raise RuntimeError('MULTI_ROOT_RESTORE_INCOMPLETE: '+'; '.join(errors)+'. HUMAN_RECOVERY_REQUIRED')
+def combined_governance_hash():
+    parts=[]
+    for m in managed_governance_roots:
+        path=pathlib.Path(m['canonical_path'])
+        parts.append(f"{path}={tree_hash(path) if path.exists() else 'ABSENT'}")
+    if not parts: return tree_hash(project/'.ai')
+    return hashlib.sha256('\n'.join(sorted(parts)).encode()).hexdigest()
 def tx_dir(): return config/'opencode-governance-architect-tx'/hashlib.sha256(str(project).lower().encode()).hexdigest()
 def pid_alive(pid):
     try: os.kill(int(pid),0); return True
@@ -325,8 +544,8 @@ def pid_alive(pid):
 
 def task_snapshot():
     if a.command!='ai-resume': return None
-    path=project/'.ai'/'tasks'/a.task_id/'RUN_STATE.json'
-    if not path.is_file(): raise RuntimeError(f'RESUME_TASK_NOT_FOUND: {a.task_id}')
+    path=find_task_state_path(a.task_id)
+    if not path: raise RuntimeError(f'RESUME_TASK_NOT_FOUND: {a.task_id}')
     try: state=json.loads(path.read_text(encoding='utf-8-sig'))
     except Exception: raise RuntimeError(f'INVALID_RUN_STATE: {path}')
     if state.get('task_id') not in {None,a.task_id}: raise RuntimeError('RESUME_TASK_ID_MISMATCH')
@@ -335,20 +554,51 @@ def resume_mode():
     snap=task_snapshot(); state=json.loads(snap['path'].read_text(encoding='utf-8-sig'))
     phases=[str(state.get(k)).strip() for k in ('current_phase','state','last_safe_transition') if isinstance(state.get(k),str) and state.get(k).strip()]
     return 'POST_SIDE_EFFECT' if any(x in post_side_effect_phases for x in phases) else 'PRE_SIDE_EFFECT'
-def recover_orphan(tx,ai):
+def recover_orphan(tx):
     meta_path=tx/'meta.json'
     if not meta_path.is_file(): return
     meta=json.loads(meta_path.read_text(encoding='utf-8-sig'))
     if pid_alive(meta.get('pid')): raise RuntimeError('ARCHITECT_TRANSACTION_ACTIVE')
-    if project_state_fingerprint()!=meta.get('project_state_fingerprint'): raise RuntimeError('ARCHITECT_ORPHAN_RECOVERY_BLOCKED: PROJECT_STATE_CHANGED. HUMAN_RECOVERY_REQUIRED')
-    restore_ai(ai,tx/'ai-snapshot',bool(meta.get('ai_existed')),str(meta.get('ai_hash'))); shutil.rmtree(tx); print('ARCHITECT_ORPHAN_RECOVERED',file=sys.stderr)
-def open_tx(tx,ai,ai_hash,existed,project_state,before):
+    expected=meta.get('project_state_fingerprint')
+    has_multi=bool(meta.get('managed_governance_roots'))
+    current=project_state_fingerprint(legacy=not has_multi)
+    if current!=expected:
+        alt=project_state_fingerprint(legacy=has_multi)
+        if alt!=expected:
+            raise RuntimeError('ARCHITECT_ORPHAN_RECOVERY_BLOCKED: PROJECT_STATE_CHANGED. HUMAN_RECOVERY_REQUIRED')
+    if has_multi:
+        restore_managed_roots(meta['managed_governance_roots'])
+    else:
+        restore_ai(project/'.ai',tx/'ai-snapshot',bool(meta.get('ai_existed')),str(meta.get('ai_hash')))
+    shutil.rmtree(tx); print('ARCHITECT_ORPHAN_RECOVERED',file=sys.stderr)
+def open_tx(tx,project_state,before):
+    global managed_root_records
     if tx.exists(): shutil.rmtree(tx)
-    tx.mkdir(parents=True); backup=tx/'ai-snapshot'
-    if existed: shutil.copytree(ai,backup)
+    tx.mkdir(parents=True)
+    snap_root=tx/'managed-governance-roots'; snap_root.mkdir(parents=True)
+    records=[]
+    for m in managed_governance_roots:
+        path=pathlib.Path(m['canonical_path'])
+        key=hashlib.sha256(str(path).lower().encode()).hexdigest()[:16]
+        dest=snap_root/key
+        existed=path.exists(); th=tree_hash(path) if existed else 'ABSENT'
+        if existed: shutil.copytree(path, dest)
+        records.append({
+            'canonical_path':str(path),'existed_before':existed,'tree_hash_before':th,
+            'snapshot_path':str(dest),'snapshot_key':key,'role':m.get('role','governance')
+        })
+    managed_root_records=records
+    primary=next((r for r in records if r['role']=='repository_governance'), records[0] if records else None)
+    backup=tx/'ai-snapshot'
+    if primary and primary['existed_before']:
+        shutil.copytree(pathlib.Path(primary['snapshot_path']), backup)
     meta={
         'schema':'ARCHITECT_TRANSACTION_V2',
         'compatibility':'ARCHITECT_TRANSACTION_V1',
+        'extensions':{
+            'workspace_repository_root_contract':WORKSPACE_ROOT_CONTRACT,
+            'multi_governance_root_transaction':MULTI_GOVERNANCE_TX,
+        },
         'command':a.command,
         'task_id':a.task_id,
         'arguments_sha256':arguments_hash,
@@ -358,10 +608,15 @@ def open_tx(tx,ai,ai_hash,existed,project_state,before):
         'argv_prompt_bytes':0,
         'checkpoint_sha256':before['hash'] if before else None,
         'project_dir':str(project),
+        'workspace_root':str(project),
+        'repository_root':str(repository),
         'pid':os.getpid(),
         'started_at_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),
-        'ai_existed':existed,
-        'ai_hash':ai_hash,
+        'ai_existed':bool(primary['existed_before']) if primary else False,
+        'ai_hash':primary['tree_hash_before'] if primary else 'ABSENT',
+        'managed_governance_roots':records,
+        'managed_governance_root_hashes_before':{r['canonical_path']:r['tree_hash_before'] for r in records},
+        'executor_worktree_roots':[],
         'project_state_fingerprint':project_state,
         'permission_contract':HEADLESS_CONTRACT,
         'runtime_policy_sha256':headless_policy_hash,
@@ -369,6 +624,49 @@ def open_tx(tx,ai,ai_hash,existed,project_state,before):
     (tx/'meta.json').write_text(json.dumps(meta,separators=(',',':')),encoding='utf-8'); return backup
 def close_tx(tx):
     if tx.exists(): shutil.rmtree(tx)
+def explicit_recovery():
+    if not a.recover_transaction: return False
+    if not a.recovery_decision: raise SystemExit('RECOVERY_DECISION_REQUIRED')
+    if not a.task_id: raise SystemExit('RECOVERY_TASK_ID_REQUIRED')
+    tx=tx_dir(); meta_path=tx/'meta.json'
+    if not meta_path.is_file(): raise SystemExit(f'RECOVERY_TRANSACTION_NOT_FOUND: {tx}')
+    meta_text=meta_path.read_text(encoding='utf-8-sig')
+    meta=json.loads(meta_text)
+    if pid_alive(meta.get('pid')): raise SystemExit('ARCHITECT_TRANSACTION_ACTIVE')
+    tx_hash=hashlib.sha256(meta_text.encode()).hexdigest()
+    if a.expected_transaction_hash and tx_hash!=a.expected_transaction_hash.lower():
+        raise SystemExit(f'RECOVERY_TRANSACTION_HASH_MISMATCH: expected={a.expected_transaction_hash} actual={tx_hash}')
+    if str(meta.get('task_id'))!=a.task_id: raise SystemExit('RECOVERY_TASK_MISMATCH')
+    before_fp=str(meta.get('project_state_fingerprint'))
+    after_fp=project_state_fingerprint()
+    if a.recovery_decision=='rollback':
+        if meta.get('managed_governance_roots'): restore_managed_roots(meta['managed_governance_roots'])
+        else: restore_ai(project/'.ai',tx/'ai-snapshot',bool(meta.get('ai_existed')),str(meta.get('ai_hash')))
+        close_tx(tx)
+        print(f'ARCHITECT_RECOVERY_COMPLETE decision=rollback task={a.task_id} transaction_hash={tx_hash}', flush=True)
+        return True
+    if after_fp!=before_fp:
+        raise SystemExit('ARCHITECT_RECOVERY_BLOCKED: PROJECT_STATE_CHANGED (application or non-managed paths). HUMAN_RECOVERY_REQUIRED')
+    # Force command context for checkpoint read
+    a.command='ai-resume'
+    snap=task_snapshot()
+    receipt={
+        'schema':'ARCHITECT_RECOVERY_RECEIPT_V1','decision':'adopt-governance-only','task_id':a.task_id,
+        'workspace_root':str(project),'repository_root':str(repository),'transaction_hash':tx_hash,
+        'project_state_fingerprint':after_fp,'checkpoint_sha256':snap['hash'],'state':snap['state'],
+        'phase':snap['phase'],'next_required_phase':snap['next'],
+        'recovered_at_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'owner_authorized':True,
+    }
+    receipt_dir=project/'.ai'/'recovery'; receipt_dir.mkdir(parents=True, exist_ok=True)
+    receipt_path=receipt_dir/f"ARCHITECT_RECOVERY_{a.task_id}_{time.strftime('%Y%m%d%H%M%S')}.json"
+    receipt_path.write_text(json.dumps(receipt,indent=2),encoding='utf-8')
+    archive=config/'opencode-governance-architect-tx-archive'/hashlib.sha256(str(project).lower().encode()).hexdigest()/tx_hash
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    if archive.exists(): shutil.rmtree(archive)
+    shutil.copytree(tx, archive); close_tx(tx)
+    print(f'ARCHITECT_RECOVERY_COMPLETE decision=adopt-governance-only task={a.task_id} transaction_hash={tx_hash} receipt={receipt_path}', flush=True)
+    print(f"ARCHITECT_PHASE_ADVANCED STATE={snap['state']} NEXT_COMMAND=/ai-execute ATTEMPT_CONSUMED=false", flush=True)
+    return True
 def classify(text,timed,code):
     if timed:return 'BOUNDED_TIMEOUT'
     if permission_blocked(text): return 'ARCHITECT_PERMISSION_BLOCKED'
@@ -391,13 +689,22 @@ def candidate_allowed(route,failure,family,attempted):
     if failure=='MODEL_RETIRED' and route['candidate']['model_family']==family:return False
     return True
 def validate_postcondition(before,before_ai,text):
-    after=task_snapshot(); after_ai=tree_hash(project/'.ai')
+    after=task_snapshot(); after_ai=combined_governance_hash()
     if after['hash']==before['hash'] and after_ai==before_ai: raise RuntimeError('ARCHITECT_NO_PROGRESS: child exited zero but task checkpoint and .ai/** are byte-identical.')
     if 'GOVERNANCE_RESULT' not in text: raise RuntimeError('ARCHITECT_CHILD_RESULT_MISSING: child exited zero without GOVERNANCE_RESULT.')
     if not after['state'] and not after['phase']: raise RuntimeError('ARCHITECT_CHILD_RESULT_MISMATCH: resulting checkpoint has no state/phase.')
     return after,after_ai
+def write_phase_continuation(after):
+    if not after: return
+    state=after.get('state') or after.get('phase') or ''
+    if state=='READY_FOR_EXECUTION' or after.get('next')=='IMPLEMENTING':
+        print(f'ARCHITECT_PHASE_ADVANCED STATE={state} NEXT_COMMAND=/ai-execute ATTEMPT_CONSUMED=false', flush=True)
 
-ai=project/'.ai'; tx=tx_dir(); recover_orphan(tx,ai); before=task_snapshot()
+tx=tx_dir()
+if a.recover_transaction:
+    if explicit_recovery(): raise SystemExit(0)
+    raise SystemExit('RECOVERY_FAILED')
+recover_orphan(tx); before=task_snapshot()
 if a.command=='ai-resume':
     mode=resume_mode(); print(f'ARCHITECT_RESUME_MODE {mode} task={a.task_id}',flush=True)
     if mode=='POST_SIDE_EFFECT': raise SystemExit('RESUME_POST_SIDE_EFFECT')
@@ -406,11 +713,15 @@ external_roots=[str(config)]
 tools_root=config/'opencode-governance-tools'
 if tools_root.is_dir(): external_roots.append(str(tools_root))
 if a.arguments_file: external_roots.append(str(pathlib.Path(a.arguments_file).resolve().parent))
+if repository is not None and repository!=project: external_roots.append(str(repository))
 headless_config_content, headless_policy_hash = build_headless_config(
     architect['primary'].get('model'), architect['primary'].get('variant'), external_roots
 )
 print(f'HEADLESS_PERMISSION_CONTRACT version={HEADLESS_CONTRACT} runtime_policy_sha256={headless_policy_hash} auto=disabled', flush=True)
-existed=ai.exists(); ai_hash=tree_hash(ai); project_state=project_state_fingerprint(); backup=open_tx(tx,ai,ai_hash,existed,project_state,before)
+fingerprint_manifest_before=project_tree_manifest(project)
+project_state=project_state_fingerprint()
+before_combined=combined_governance_hash()
+backup=open_tx(tx,project_state,before)
 attempted=set(); failure=None; failed_family=''; attempt=0
 try:
     while True:
@@ -489,14 +800,17 @@ try:
             stderr_text=(e.stderr or b'').decode('utf-8', errors='replace') if isinstance(e.stderr,(bytes,bytearray)) else (e.stderr or '')
         (logs/f'attempt-{attempt}.stdout.log').write_text(stdout_text,encoding='utf-8')
         (logs/f'attempt-{attempt}.stderr.log').write_text(stderr_text,encoding='utf-8')
-        if project_state_fingerprint()!=project_state: raise RuntimeError('ARCHITECT_FAILOVER_BLOCKED: PROJECT_STATE_CHANGED. HUMAN_RECOVERY_REQUIRED')
+        assert_project_state_unchanged(project_state, fingerprint_manifest_before)
         text=stdout_text+'\n'+stderr_text
         if permission_blocked(text):
             raise RuntimeError(permission_blocked_error(text, route['route'], attempt, logs))
         if r.returncode==0 and not timed:
-            if a.command=='ai-resume': validate_postcondition(before,ai_hash,text)
+            post=None
+            if a.command=='ai-resume': post=validate_postcondition(before,before_combined,text)
             cooldowns.pop(c['model'],None);save_cooldowns(cooldowns)
-            print(f"ARCHITECT_FAILOVER_COMPLETE route={route['route']} attempts={attempt} task={a.task_id or ''} ai_tree={tree_hash(ai)} postcondition=PASS permission_contract={HEADLESS_CONTRACT} runtime_policy_sha256={headless_policy_hash}")
+            print(f"ARCHITECT_FAILOVER_COMPLETE route={route['route']} attempts={attempt} task={a.task_id or ''} ai_tree={combined_governance_hash()} postcondition=PASS permission_contract={HEADLESS_CONTRACT} runtime_policy_sha256={headless_policy_hash}")
+            if post: write_phase_continuation(post[0])
+            elif a.command=='ai-resume': write_phase_continuation(task_snapshot())
             if stdout_text: print(stdout_text.rstrip())
             if stderr_text: print(stderr_text.rstrip(),file=sys.stderr)
             close_tx(tx)
@@ -506,13 +820,16 @@ try:
         if failure=='ARCHITECT_PERMISSION_BLOCKED':
             raise RuntimeError(permission_blocked_error(text, route['route'], attempt, logs))
         if failure not in eligible: raise RuntimeError(f'ARCHITECT_FAILOVER_BLOCKED: ineligible failure {failure}. Logs: {logs}')
-        cooldowns[c['model']]=int(time.time())+cooldown;save_cooldowns(cooldowns);restore_ai(ai,backup,existed,ai_hash)
+        cooldowns[c['model']]=int(time.time())+cooldown;save_cooldowns(cooldowns);restore_managed_roots(managed_root_records)
 except SystemExit:raise
 except Exception as exc:
+    # MULTI_GOVERNANCE_ROOT_TRANSACTION_V1: always restore managed Governance roots on failure when possible.
+    # Never rewrite application source. Incomplete multi-root restore retains the orphan journal.
     restored=False
     try:
-        if project_state_fingerprint()==project_state:restore_ai(ai,backup,existed,ai_hash);restored=True
-    except Exception:pass
+        restore_managed_roots(managed_root_records); restored=True
+    except Exception as restore_exc:
+        print(str(restore_exc), file=sys.stderr)
     if restored:close_tx(tx)
     else:print(f'ARCHITECT_TRANSACTION_ORPHANED: {tx}',file=sys.stderr)
     headless_config_content=None

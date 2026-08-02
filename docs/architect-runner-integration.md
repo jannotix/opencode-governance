@@ -1,6 +1,6 @@
 # Architect Runner Integration
 
-OpenCode Governance installs deterministic Architect runners (`architect-attempt.ps1|.sh`) with transactional failover, PowerShell 7 host checks, content-aware project-state integrity, routing validation, durable transaction journals, headless permission contracts, stdin prompt transport and workflow-continuation gates. This document describes the current **3.7.4** surface.
+OpenCode Governance installs deterministic Architect runners (`architect-attempt.ps1|.sh`) with transactional failover, PowerShell 7 host checks, content-aware project-state integrity, multi-root nested workspace transactions, routing validation, durable transaction journals, headless permission contracts, stdin prompt transport and workflow-continuation gates. This document describes the current **3.7.5** surface.
 
 ## Scope
 
@@ -28,7 +28,7 @@ The runner is not used for `ai-workflow`, `ai-execute`, `ai-review` or `ai-relea
 
 ## Installed tools
 
-With routing and 3.7.4 capabilities enabled, the installation records fifteen managed tools, including:
+With routing and 3.7.5 capabilities enabled, the installation records fifteen managed tools, including:
 
 ```text
 opencode-governance-tools/architect-attempt.ps1
@@ -51,10 +51,10 @@ opencode-governance-tools/governance-pre-commit.py
 The routing manifest records:
 
 ```text
-governance_version: 3.7.4
-architect_runner_version: 3.7.4
-context_intelligence_version: 3.7.4
-workflow_continuation_version: 3.7.4
+governance_version: 3.7.5
+architect_runner_version: 3.7.5
+context_intelligence_version: 3.7.5
+workflow_continuation_version: 3.7.5
 ```
 
 Before replacing an existing routing installation, the wrapper validates the complete new profile. An invalid profile cannot remove the current manifest, aliases or managed tools. Every existing managed tool is copied into the timestamped installation backup before replacement.
@@ -115,6 +115,19 @@ OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE=1
 
 The environment marker identifies the child process. The argument marker is visible to the governed command gate. A marked child continues normally and never recursively launches another runner.
 
+## Workspace / repository roots (3.7.5)
+
+The runner implements `WORKSPACE_REPOSITORY_ROOT_CONTRACT_V1`:
+
+| Root | Meaning | Interface |
+|------|---------|-----------|
+| Workspace root | Outer working directory (may be non-Git) | `-WorkspaceDir` / `--workspace-dir` (`-ProjectDir` alias) |
+| Repository root | Application Git root (may be nested) | `-RepositoryDir` / `--repository-dir` or auto-resolved |
+| Managed Governance roots | Exact `workspace/.ai` and `repository/.ai` | Bound into every transaction |
+| Executor worktree roots | Isolated implementation trees when present | Recorded; not auto-excluded unless registered |
+
+Resolution never silently picks among multiple nested Git repositories (`REPOSITORY_ROOT_AMBIGUOUS`). A repository path outside the workspace fails closed (`REPOSITORY_ROOT_OUTSIDE_WORKSPACE`).
+
 ## Project-state integrity
 
 The runner uses:
@@ -123,7 +136,13 @@ The runner uses:
 PROJECT_STATE_FINGERPRINT_V1
 ```
 
-Before and after every routed attempt, it creates a canonical fingerprint for every project entry outside root `.ai/**` and Git metadata. Each entry includes, as applicable:
+with multi-root awareness. Before and after every routed attempt, it creates a canonical fingerprint for every project entry outside:
+
+- exact registered managed Governance roots;
+- `.git/**` metadata under the repository integrity contract;
+- exact registered Executor worktree roots when present.
+
+Unrelated nested `.ai` directories remain inside the fingerprint. Each entry includes, as applicable:
 
 - normalized relative path;
 - entry type;
@@ -132,24 +151,18 @@ Before and after every routed attempt, it creates a canonical fingerprint for ev
 - SHA-256 content digest;
 - symlink or reparse-point target.
 
-For Git workspaces the fingerprint also binds:
+For Git repositories the fingerprint also binds HEAD, the Git index digest, and recursive submodule status against the resolved **repository** root (not necessarily the workspace root).
 
-- current `HEAD`, including an unborn repository state;
-- the exact Git index file digest;
-- recursive submodule status and checked-out commits.
+When the fingerprint changes, `PROJECT_STATE_CHANGESET_DIAGNOSTIC_V1` reports a sanitised classification (`GOVERNANCE_ONLY_CHANGE`, `APPLICATION_SOURCE_CHANGE`, …) with relative paths only (no file contents).
 
-This detects content changes even when a file was already dirty, staged or untracked and the textual Git status classification remains unchanged.
-
-Non-Git project directories are supported through the same full-tree fingerprint. Git is not required merely to run the supported pre-execution commands. When Git metadata exists but the Git executable is unavailable, the runner fails closed because repository state cannot be verified safely.
-
-Any source or project-documentation delta, including a mutation during a nominally successful child attempt, stops with:
+Any application source or non-managed project delta stops with:
 
 ```text
 ARCHITECT_FAILOVER_BLOCKED: PROJECT_STATE_CHANGED
 HUMAN_RECOVERY_REQUIRED
 ```
 
-The runner does not restore or overwrite changed source content. It restores `.ai/**` only when the non-governance project fingerprint still matches the frozen state.
+The runner does not restore or overwrite changed application source. It restores **all** managed Governance roots only when the non-governance project fingerprint still matches the frozen state (`MULTI_GOVERNANCE_ROOT_TRANSACTION_V1`).
 
 ## Durable Architect transactions and orphan recovery
 
@@ -200,6 +213,25 @@ TOOL_EXECUTION_ABORTED
 ```
 
 Matched from phrases such as `tool execution aborted`, `tool call aborted`, `process killed`, `terminated by signal`, or abnormal exit codes (`< 0` or `>= 128`). Profiles may list `TOOL_EXECUTION_ABORTED` under `settings.eligible_failures` to allow bounded failover after an abort; otherwise the failure is ineligible but `.ai/**` is still restored when the project fingerprint is unchanged.
+
+New in 3.7.5:
+
+```text
+WORKSPACE_REPOSITORY_ROOT_CONTRACT_V1
+MULTI_GOVERNANCE_ROOT_TRANSACTION_V1
+PROJECT_STATE_CHANGESET_DIAGNOSTIC_V1
+ARCHITECT_PHASE_ADVANCED
+```
+
+Explicit orphan recovery (no auto-adopt):
+
+```text
+architect-attempt.ps1 -RecoverTransaction -WorkspaceDir <ws> -RepositoryDir <repo> `
+  -Command ai-resume -TaskId <task> -RecoveryDecision adopt-governance-only|rollback `
+  -ExpectedTransactionHash <hash>
+```
+
+When resume reaches `READY_FOR_EXECUTION`, the runner emits `ARCHITECT_PHASE_ADVANCED` with `NEXT_COMMAND=/ai-execute` and `ATTEMPT_CONSUMED=false`.
 
 New in 3.7.4:
 

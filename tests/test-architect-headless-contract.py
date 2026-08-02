@@ -40,6 +40,12 @@ class HeadlessContractTests(unittest.TestCase):
             "git worktree list",
             "git branch --show-current",
             "git remote -v",
+            "git -C /repo rev-parse HEAD",
+            "git -C /repo status --porcelain",
+            "git -C /repo branch --show-current",
+            "git -C /repo remote -v",
+            "git -C /repo rev-list --count HEAD",
+            "git -C /repo ls-files",
             "ls -la",
             "pwd",
             "cat README.md",
@@ -47,6 +53,7 @@ class HeadlessContractTests(unittest.TestCase):
             "Test-Path -LiteralPath .ai",
             "Get-ChildItem -LiteralPath . -Force",
             "Get-Content -LiteralPath README.md",
+            "Get-FileHash -LiteralPath .ai/STATUS.md",
         ):
             with self.subTest(command=command):
                 self.assertEqual(self.m.evaluate_bash_permission(command), "allow")
@@ -61,6 +68,9 @@ class HeadlessContractTests(unittest.TestCase):
             "git clean -fd",
             "git add .",
             "git commit -m x",
+            "git -C /repo push origin main",
+            "git -C /repo add .",
+            "git -C /repo commit -m x",
             "Set-Content -Path a -Value b",
             "Add-Content a b",
             "Out-File out.txt",
