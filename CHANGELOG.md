@@ -5,6 +5,16 @@ Dates use `YYYY-MM-DD`. Older micro-releases are summarized; see git history for
 ## Unreleased
 
 
+## 3.7.7 - 2026-08-02
+
+- Compatibility and evidence-integrity patch: `LEGACY_FORENSIC_BUNDLE_V1_ADAPTER` so evidence-bound recovery can consume the original Windows PowerShell forensic archive format produced before the 3.7.6 canonical schema existed.
+- Dual strict parsers: `CANONICAL_RECOVERY_EVIDENCE_V2` and `LEGACY_PROJECT_STATE_FORENSICS_V1` (unknown/ambiguous formats fail closed).
+- Legacy V1 MANIFEST contract: recognised headers, required `FILES:`, `path<TAB>size<TAB>sha256`, size+hash verification, ZIP-slip / absolute / drive / `..` / symlink rejection; `MANIFEST.txt` may omit itself.
+- Legacy TSV inventory parser for collector inventories; deterministic Governance-only allowlist derivation from ai-before/after, current-task, and live artifacts (optional owner allowlist is an additional hash-bound constraint only).
+- Temporary canonical adaptation binds original archive and manifest SHA-256; source archive is never mutated; temps deleted after success or failure.
+- `EVIDENCE_BOUND_RECOVERY_RECEIPT_V2` extended with `source_evidence_format`, source bundle/manifest hashes, adapter contract, canonicalization receipt, legacy inventory hash, and allowlist derivation evidence.
+- Faithful Windows V1 forensic fixture plus expanded validate/adopt lifecycle and negative tests; existing V2 fixture retained.
+
 ## 3.7.6 - 2026-08-02
 
 - Security/reliability patch: `LEGACY_ARCHITECT_ORPHAN_RECOVERY_CONTRACT_V1` for evidence-bound adoption of preserved 3.7.2–3.7.4 Architect transaction journals.

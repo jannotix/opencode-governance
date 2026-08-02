@@ -1,4 +1,4 @@
-# Workspace / repository root contract (3.7.6)
+# Workspace / repository root contract (3.7.7)
 
 Contract names:
 
@@ -72,7 +72,7 @@ workspace_root
 repository_root
 ```
 
-## Explicit recovery (3.7.6)
+## Explicit recovery (3.7.7)
 
 Nested multi-root journals (3.7.5+) and legacy 3.7.2–3.7.4 journals use **evidence-bound** recovery. Do not compare legacy fingerprints to multi-root fingerprints.
 
@@ -87,7 +87,7 @@ Nested multi-root journals (3.7.5+) and legacy 3.7.2–3.7.4 journals use **evid
 -WorkspaceDir / -RepositoryDir
 ```
 
-See [legacy orphan recovery](legacy-orphan-recovery.md). `validate-governance-only` is non-mutating. `adopt-governance-only` requires a forensic evidence bundle and writes `EVIDENCE_BOUND_RECOVERY_RECEIPT_V2` before archiving the transaction.
+See [legacy orphan recovery](legacy-orphan-recovery.md). `validate-governance-only` is non-mutating. `adopt-governance-only` requires a forensic evidence bundle and writes `EVIDENCE_BOUND_RECOVERY_RECEIPT_V2` before archiving the transaction. From 3.7.7 the evidence bundle may be either `CANONICAL_RECOVERY_EVIDENCE_V2` or `LEGACY_PROJECT_STATE_FORENSICS_V1` (via `LEGACY_FORENSIC_BUNDLE_V1_ADAPTER`).
 
 ## Phase continuation
 

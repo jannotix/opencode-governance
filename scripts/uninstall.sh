@@ -18,13 +18,13 @@ BASE_UNINSTALLER="$SCRIPT_DIR/uninstall-base.sh"
 
 if [[ -f "$MANIFEST" ]]; then
   version="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1],encoding="utf-8-sig")).get("governance_version",""))' "$MANIFEST")"
-  case "$version" in 3.6.0|3.7.0|3.7.1|3.7.2|3.7.3|3.7.4|3.7.5|3.7.6)
+  case "$version" in 3.6.0|3.7.0|3.7.1|3.7.2|3.7.3|3.7.4|3.7.5|3.7.6|3.7.7)
     [[ -f "$CAPABILITIES" ]] || { echo "Capability uninstaller not found: $CAPABILITIES" >&2; exit 1; }
     python3 "$CAPABILITIES" uninstall --config-dir "$CONFIG_DIR"
   ;; esac
 fi
 
 bash "$BASE_UNINSTALLER" --config-dir "$CONFIG_DIR"
-echo 'Removed OpenCode Governance 3.7.6 canonical agents, commands, managed routes and managed tools.'
+echo 'Removed OpenCode Governance 3.7.7 canonical agents, commands, managed routes and managed tools.'
 echo 'Provider authentication, project .ai state, project documentation, backups, governed memory and unrelated local files were preserved.'
 echo 'Any explicitly installed project pre-commit receipt gate must be removed from that project before deleting its referenced tool path.'
