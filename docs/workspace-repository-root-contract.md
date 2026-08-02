@@ -72,17 +72,22 @@ workspace_root
 repository_root
 ```
 
-## Explicit recovery
+## Explicit recovery (3.7.6)
+
+Nested multi-root journals (3.7.5+) and legacy 3.7.2–3.7.4 journals use **evidence-bound** recovery. Do not compare legacy fingerprints to multi-root fingerprints.
 
 ```text
 -RecoverTransaction
--RecoveryDecision adopt-governance-only|rollback
+-RecoveryDecision validate-governance-only|adopt-governance-only|rollback
 -ExpectedTransactionHash <sha256 of meta.json>
+-EvidenceBundlePath <bundle.zip>
+-ExpectedEvidenceBundleHash <sha256>
+-ExpectedRepositoryHead / -ExpectedPlanHash / -ExpectedExecutionPacketHash / -ExpectedCheckpointHash
 -TaskId <task>
 -WorkspaceDir / -RepositoryDir
 ```
 
-`adopt-governance-only` requires dead PID, matching roots, matching fingerprint (application unchanged), valid checkpoint, and writes a content-bound recovery receipt. It does not re-run planning.
+See [legacy orphan recovery](legacy-orphan-recovery.md). `validate-governance-only` is non-mutating. `adopt-governance-only` requires a forensic evidence bundle and writes `EVIDENCE_BOUND_RECOVERY_RECEIPT_V2` before archiving the transaction.
 
 ## Phase continuation
 

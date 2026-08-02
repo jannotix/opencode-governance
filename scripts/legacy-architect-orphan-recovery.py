@@ -531,11 +531,14 @@ def verify_inventory_and_allowlist(
         if captured.get(key) != current.get(key):
             drifts.append(key)
     if drifts:
-        # classify
-        for d in drifts[:50]:
-            if is_under_managed(d, prefixes):
-                continue  # should not appear in non-managed inventory
-            raise RecoveryError("WORKSPACE_INVENTORY_DRIFT", f"{d} (and {len(drifts)} total)")
+        # Non-managed inventory must be closed-set equal. Managed keys must not appear here.
+        managed_leaks = [d for d in drifts if is_under_managed(d, prefixes)]
+        if managed_leaks:
+            raise RecoveryError("WORKSPACE_INVENTORY_MANAGED_LEAK", "; ".join(managed_leaks[:20]))
+        raise RecoveryError(
+            "WORKSPACE_INVENTORY_DRIFT",
+            f"{drifts[0]} (and {len(drifts)} total)",
+        )
 
     # Allowlist files must exist and be under managed roots (already checked)
     for rel in allowlist:
@@ -624,12 +627,21 @@ def verify_repository_integrity(
 def write_receipt(path: pathlib.Path, receipt: dict[str, Any]) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     body = json.dumps(receipt, indent=2, sort_keys=True) + "\n"
-    path.write_text(body, encoding="utf-8")
-    # revalidate
-    again = path.read_text(encoding="utf-8")
-    if again != body:
-        raise RecoveryError("RECEIPT_WRITE_MISMATCH")
-    return sha256_text(body)
+    raw = body.encode("utf-8")
+    digest = sha256_bytes(raw)
+    tmp = path.with_suffix(path.suffix + ".pending")
+    with open(tmp, "wb") as handle:
+        handle.write(raw)
+    pending_hash = sha256_file(tmp)
+    if pending_hash != digest:
+        tmp.unlink(missing_ok=True)
+        raise RecoveryError("RECEIPT_REVALIDATE_FAILED", f"{pending_hash} != {digest}")
+    tmp.replace(path)
+    final_hash = sha256_file(path)
+    if final_hash != digest:
+        path.unlink(missing_ok=True)
+        raise RecoveryError("RECEIPT_REVALIDATE_FAILED", f"{final_hash} != {digest}")
+    return digest
 
 
 def run_recovery(args: argparse.Namespace) -> dict[str, Any]:
@@ -655,6 +667,16 @@ def run_recovery(args: argparse.Namespace) -> dict[str, Any]:
             raise RecoveryError("EVIDENCE_BUNDLE_HASH_REQUIRED")
         if not args.expected_transaction_hash:
             raise RecoveryError("RECOVERY_TRANSACTION_HASH_REQUIRED")
+        required = {
+            "EXPECTED_REPOSITORY_HEAD_REQUIRED": args.expected_repository_head,
+            "EXPECTED_PLAN_HASH_REQUIRED": args.expected_plan_hash,
+            "EXPECTED_EXECUTION_PACKET_HASH_REQUIRED": args.expected_execution_packet_hash,
+            "EXPECTED_CHECKPOINT_HASH_REQUIRED": args.expected_checkpoint_hash,
+            "EXPECTED_STDOUT_HASH_REQUIRED": args.expected_stdout_hash,
+        }
+        for code, value in required.items():
+            if not value:
+                raise RecoveryError(code)
 
     extract_root: pathlib.Path | None = None
     try:
@@ -678,7 +700,12 @@ def run_recovery(args: argparse.Namespace) -> dict[str, Any]:
         if decision == "rollback":
             # rollback does not require evidence bundle; restore snapshot(s)
             if kind == "multi_root" and live_meta.get("managed_governance_roots"):
-                _restore_multi(live_meta["managed_governance_roots"])
+                _restore_multi(
+                    live_meta["managed_governance_roots"],
+                    workspace=workspace,
+                    repository=repository,
+                    tx_dir=tx_dir,
+                )
             else:
                 _restore_legacy_ai(workspace, tx_dir, live_meta)
             if not args.keep_transaction:
@@ -813,12 +840,10 @@ def run_recovery(args: argparse.Namespace) -> dict[str, Any]:
         stamp = time.strftime("%Y%m%d%H%M%S", time.gmtime())
         receipt_path = workspace / ".ai" / "recovery" / f"EVIDENCE_BOUND_RECOVERY_{args.task_id}_{stamp}.json"
         receipt_hash = write_receipt(receipt_path, receipt)
-        # re-read and bind
-        if sha256_file(receipt_path) != receipt_hash and sha256_text(receipt_path.read_text(encoding="utf-8")) != receipt_hash:
-            # write_receipt returns content hash
-            pass
         # Archive transaction only after durable receipt
         # Short path segments avoid Windows MAX_PATH issues under deep temp trees.
+        if not args.config_dir and not args.archive_dir:
+            raise RecoveryError("ARCHIVE_DIR_REQUIRED", "pass --config-dir or --archive-dir")
         archive_root = pathlib.Path(args.archive_dir) if args.archive_dir else (
             pathlib.Path(args.config_dir)
             / "opencode-governance-architect-tx-archive"
@@ -830,11 +855,15 @@ def run_recovery(args: argparse.Namespace) -> dict[str, Any]:
         archive_root.parent.mkdir(parents=True, exist_ok=True)
         try:
             shutil.copytree(tx_dir, archive_root)
+            if not (archive_root / "meta.json").is_file():
+                raise RecoveryError("TRANSACTION_ARCHIVE_INCOMPLETE")
         except Exception as exc:
+            # Do not leave a success-shaped adopt receipt if archive failed.
+            receipt_path.unlink(missing_ok=True)
+            if archive_root.exists():
+                shutil.rmtree(archive_root, ignore_errors=True)
             raise RecoveryError("TRANSACTION_ARCHIVE_FAILED", str(exc)) from exc
         # Only remove live tx after archive verified
-        if not (archive_root / "meta.json").is_file():
-            raise RecoveryError("TRANSACTION_ARCHIVE_INCOMPLETE")
         shutil.rmtree(tx_dir)
 
         result["status"] = "ARCHITECT_RECOVERY_COMPLETE"
@@ -885,7 +914,14 @@ def _restore_legacy_ai(workspace: pathlib.Path, tx_dir: pathlib.Path, meta: dict
         raise RecoveryError("LEGACY_AI_RESTORE_HASH_MISMATCH", f"{actual} != {expected}")
 
 
-def _restore_multi(records: list[dict[str, Any]]) -> None:
+def _restore_multi(
+    records: list[dict[str, Any]],
+    *,
+    workspace: pathlib.Path,
+    repository: pathlib.Path,
+    tx_dir: pathlib.Path,
+) -> None:
+    prefixes = managed_prefixes(workspace, repository)
     errors: list[str] = []
     for rec in records:
         path = pathlib.Path(rec["canonical_path"])
@@ -893,6 +929,20 @@ def _restore_multi(records: list[dict[str, Any]]) -> None:
         expected = rec["tree_hash_before"]
         existed = bool(rec["existed_before"])
         try:
+            if path.is_symlink():
+                raise RecoveryError("RESTORE_TARGET_REPARSE_FORBIDDEN", str(path))
+            if not is_within(path, workspace):
+                raise RecoveryError("RESTORE_TARGET_OUTSIDE_WORKSPACE", str(path))
+            try:
+                rel = path.resolve().relative_to(workspace.resolve()).as_posix()
+            except Exception as exc:
+                raise RecoveryError("RESTORE_TARGET_OUTSIDE_WORKSPACE", str(path)) from exc
+            if not is_under_managed(rel, prefixes) and rel != ".ai" and not rel.endswith("/.ai"):
+                # Must be exactly a managed .ai root (rel equals a managed prefix).
+                if rel not in prefixes:
+                    raise RecoveryError("RESTORE_TARGET_NOT_MANAGED_GOVERNANCE_ROOT", rel)
+            if not is_within(snap, tx_dir):
+                raise RecoveryError("SNAPSHOT_OUTSIDE_TRANSACTION", str(snap))
             if path.exists():
                 shutil.rmtree(path) if path.is_dir() else path.unlink()
             if existed:
