@@ -1,0 +1,16 @@
+{
+  "name": "opencode-governance-effect-enforcement",
+  "version": "4.0.1",
+  "private": true,
+  "type": "module",
+  "main": "index.mjs",
+  "exports": {
+    ".": "./index.mjs"
+  },
+  "description": "OpenCode Governance ROLE_EFFECT_ENFORCEMENT_V1_1 plugin",
+  "opencode": {
+    "plugin_id": "opencode-governance-effect-enforcement",
+    "plugin_api_generation": "opencode-local-esm-named-export-v1",
+    "hook_contract": "tool.execute.before.throw_fail_closed"
+  }
+}

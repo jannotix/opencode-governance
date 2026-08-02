@@ -16,6 +16,8 @@ MANAGED_TOOLS = (
     "executor-attempt.ps1", "executor-attempt.sh",
     "context-intelligence.ps1", "context-intelligence.sh", "context-intelligence.py",
     "workflow-continuation.ps1", "workflow-continuation.py",
+    "governance-semantic.py", "opencode-compatibility.py", "governance-metrics.py",
+    "role-report-ingest.py", "install-effect-plugin.py", "governed-role-launch.py",
     "governance-authority.py", "governance-memory.py", "governance-evidence.py",
     "governance-simulation.py", "governance-pre-commit.py",
 )
@@ -34,8 +36,10 @@ def main() -> None:
         invoke(INSTALL, "--config-dir", config, "--routing-config", VALID_PROFILE)
         manifest_path = config / "opencode-governance-routing.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
-        assert manifest["governance_version"] == "4.0.0"
-        assert len(manifest["managed_tools"]) == 20
+        assert manifest["governance_version"] == "4.0.1"
+        assert len(manifest["managed_tools"]) == 22
+        assert manifest.get("effect_plugin_sha256")
+        assert manifest.get("effect_policy_sha256")
         assert not (config / "opencode-governance-runtime.json").exists()
         before_settings = manifest["settings"]
         before_roles = manifest["roles"]

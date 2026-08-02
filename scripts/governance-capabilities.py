@@ -14,7 +14,7 @@ import stat
 import sys
 from typing import Any
 
-VERSION = "4.0.0"
+VERSION = "4.0.1"
 BASE_VERSION = "3.4.4"
 CAPABILITY_TOOL_NAMES = (
     "governance-authority.py",
@@ -37,13 +37,16 @@ BASE_TOOL_NAMES = (
 )
 # Product 3.7.7+ managed recovery helper (inserted after headless contract in expected_tools).
 RECOVERY_TOOL_NAME = "legacy-architect-orphan-recovery.py"
-# Product 4.0.0+ semantic governance core tools.
+# Product 4.0.0+ semantic governance core tools; 4.0.1 adds effect plugin installer.
 SEMANTIC_TOOL_NAMES = (
     "governance-semantic.py",
     "opencode-compatibility.py",
     "governance-metrics.py",
     "role-report-ingest.py",
+    "install-effect-plugin.py",
+    "governed-role-launch.py",
 )
+EFFECT_PLUGIN_DIR_NAME = "opencode-governance-effect-enforcement"
 AGENT_NAMES = (
     "architect",
     "build",
@@ -389,6 +392,46 @@ def install(source: pathlib.Path, config: pathlib.Path) -> None:
         if gen_dest.exists():
             shutil.rmtree(gen_dest)
         shutil.copytree(gen_source, gen_dest)
+        # Stage effect-enforcement plugin package next to managed tools (4.0.1).
+        plugin_src = source.parent / "plugins" / EFFECT_PLUGIN_DIR_NAME
+        if not (plugin_src / "index.mjs").is_file():
+            plugin_src = pathlib.Path(__file__).resolve().parent.parent / "plugins" / EFFECT_PLUGIN_DIR_NAME
+        if not (plugin_src / "index.mjs").is_file():
+            fail("CAPABILITY_SOURCE_MISSING", f"plugins/{EFFECT_PLUGIN_DIR_NAME}/index.mjs")
+        plugin_stage = resolved["tools"] / EFFECT_PLUGIN_DIR_NAME
+        if plugin_stage.exists():
+            shutil.rmtree(plugin_stage)
+        shutil.copytree(plugin_src, plugin_stage)
+        # Install into OpenCode plugins dir with hash binding + self-test (rollback on fail).
+        install_plugin_helper = resolved["tools"] / "install-effect-plugin.py"
+        plugin_proc = __import__("subprocess").run(
+            [
+                sys.executable,
+                str(install_plugin_helper),
+                "--config-dir",
+                str(config),
+                "--source-dir",
+                str(resolved["tools"]),
+                "install",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if plugin_proc.returncode != 0:
+            fail(
+                "EFFECT_PLUGIN_INSTALL_FAILED",
+                (plugin_proc.stderr or plugin_proc.stdout or "")[:2000],
+            )
+        try:
+            plugin_result = json.loads((plugin_proc.stdout or "").strip().splitlines()[-1])
+        except Exception as exc:
+            fail("EFFECT_PLUGIN_INSTALL_PARSE", f"{exc}: {(plugin_proc.stdout or '')[:500]}")
+        manifest["effect_plugin_id"] = plugin_result.get("plugin_id")
+        manifest["effect_plugin_sha256"] = plugin_result.get("plugin_sha256")
+        manifest["effect_policy_sha256"] = plugin_result.get("policy_sha256")
+        manifest["effect_plugin_contract"] = "EFFECT_PLUGIN_INSTALLATION_CONTRACT_V1"
+        manifest["effect_plugin_api_generation"] = plugin_result.get("plugin_api_generation")
+        manifest["effect_plugin_export_contract"] = plugin_result.get("plugin_export_contract")
         tool_map = {
             "authority": destinations[0],
             "memory": destinations[1],
@@ -458,6 +501,25 @@ def verify(config: pathlib.Path, emit: bool = True) -> dict[str, Any]:
     for path in base_tools(config):
         if not path.is_file():
             fail("BASE_MANAGED_TOOL_MISSING", path.name)
+    # 4.0.1 effect plugin must remain installed and hash-bound.
+    if not manifest.get("effect_plugin_sha256") or not manifest.get("effect_policy_sha256"):
+        fail("EFFECT_PLUGIN_MANIFEST_MISSING")
+    install_plugin_helper = config_paths(config)["tools"] / "install-effect-plugin.py"
+    if not install_plugin_helper.is_file():
+        fail("EFFECT_PLUGIN_INSTALLER_MISSING")
+    plugin_verify = __import__("subprocess").run(
+        [
+            sys.executable,
+            str(install_plugin_helper),
+            "--config-dir",
+            str(config),
+            "verify",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if plugin_verify.returncode != 0:
+        fail("EFFECT_PLUGIN_VERIFY_FAILED", (plugin_verify.stderr or plugin_verify.stdout or "")[:2000])
     hashes = manifest.get("capability_tool_hashes")
     if not isinstance(hashes, dict) or set(hashes) != set(CAPABILITY_TOOL_NAMES):
         fail("CAPABILITY_TOOL_HASHES_INVALID")
@@ -516,6 +578,23 @@ def uninstall(config: pathlib.Path) -> None:
             path.write_text(text, encoding="utf-8")
         for path in capability_tools(config):
             path.unlink(missing_ok=True)
+        # Remove owned effect plugin only (4.0.1); never delete unrelated plugins.
+        install_plugin_helper = resolved["tools"] / "install-effect-plugin.py"
+        if install_plugin_helper.is_file():
+            __import__("subprocess").run(
+                [sys.executable, str(install_plugin_helper), "--config-dir", str(config), "uninstall"],
+                capture_output=True,
+                text=True,
+            )
+        for field in (
+            "effect_plugin_id",
+            "effect_plugin_sha256",
+            "effect_policy_sha256",
+            "effect_plugin_contract",
+            "effect_plugin_api_generation",
+            "effect_plugin_export_contract",
+        ):
+            manifest.pop(field, None)
         manifest["governance_version"] = BASE_VERSION
         manifest["architect_runner_version"] = BASE_VERSION
         manifest["context_intelligence_version"] = BASE_VERSION

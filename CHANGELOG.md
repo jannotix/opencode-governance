@@ -5,6 +5,34 @@ Dates use `YYYY-MM-DD`. Older micro-releases are summarized; see git history for
 ## Unreleased
 
 
+## 4.0.1 - 2026-08-02
+
+Security patch: make 4.0.0 role-effect enforcement **installed, runtime-bound, path-safe and evidence-bound**.
+
+### 4.0.0 activation defect (explicit)
+
+4.0.0 shipped `plugins/opencode-governance-effect-enforcement/index.js` and Node-only `_enforce` unit tests, but:
+
+- the installer did **not** copy/activate the plugin into the OpenCode config plugins directory (D-001);
+- runners did **not** authoritatively inject `OPENCODE_GOVERNANCE_*` role context (D-002);
+- CommonJS export compatibility with OpenCode was unproven (D-003);
+- Architect shell allowlisting used substring `includes()` (D-004);
+- governance path checks accepted any string containing `.ai` (D-005–D-006);
+- report ingestion allowed unsafe `task_id` path construction and weak chain integrity (D-008–D-009);
+- assurance over-claimed semantic effect enforcement without install/load evidence (D-010).
+
+### Fixes (4.0.1)
+
+- `ROLE_EFFECT_ENFORCEMENT_V1_1` ESM plugin (`index.mjs`) with named export + `tool.execute.before` fail-closed hook.
+- `EFFECT_PLUGIN_INSTALLATION_CONTRACT_V1`: atomic install into `<ConfigDir>/plugins/`, ownership marker, hash binding, unrelated plugin preservation, rollback on self-test failure.
+- `EFFECT_PLUGIN_RUNTIME_SELF_TEST_V1` after install; verifier re-runs non-mutating equivalent.
+- `GOVERNED_ROLE_LAUNCH_CONTRACT_V1`: `run-governed.ps1` / `run-governed.sh` inject runner-owned role env (`ACTIVE`, `ROLE`, workspace/repository, policy hashes). Plugin inert when `ACTIVE≠1`.
+- `STRICT_SHELL_EFFECT_CLASSIFICATION_V1`: no substring allowlists; control operators / nested interpreters → `SHELL_EFFECT_CLASSIFICATION_UNSUPPORTED`; Architect only exact `git -C <repository> …`.
+- `CANONICAL_ROLE_PATH_CONTAINMENT_V1`: exact registered governance / execution roots; reject traversal, symlinks/reparse, external `.ai` string tricks.
+- `DETERMINISTIC_ROLE_REPORT_INGESTION_V2` + `REVIEW_CHAIN_ATTESTATION_V2`: strict task_id grammar, atomic no-clobber, post-write rehash, candidate/evidence uniformity, family collision, order checks.
+- Managed tool: `install-effect-plugin.py`; inventory binds plugin/policy hashes.
+- Assurance until full runtime matrix green: `LOCAL_INTEGRITY`, `SEMANTIC_STATE_MACHINE_ENFORCED`, `EFFECT_POLICY_EXPERIMENTAL`. After install+self-test: may claim `ROLE_EFFECT_ENFORCEMENT_ACTIVE` (still not OS-sandboxed / externally attested).
+
 ## 4.0.0 - 2026-08-02
 
 - Breaking security architecture: `ROLE_EFFECT_ENFORCEMENT_V1` OpenCode plugin using documented `tool.execute.before` fail-closed hook.
@@ -13,6 +41,7 @@ Dates use `YYYY-MM-DD`. Older micro-releases are summarized; see git history for
 - Review-chain attestation binds role → route → model family → packet → candidate → report hash → permission policy.
 - Shell/path containment negatives and sibling-report isolation tests.
 - Managed tool: `role-report-ingest.py`.
+- **Known defect (corrected in 4.0.1):** plugin was not installed/activated by the product installer; role context was not runner-bound; tests only invoked Node `_enforce` and did not prove OpenCode load. See 4.0.1.
 
 ## 3.8.0 - 2026-08-02
 

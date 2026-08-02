@@ -45,7 +45,7 @@ for name in "${readonly_review_agents[@]}"; do
   grep -Eq '^  bash:[[:space:]]*$' "$file" || fail "$name missing bash permission block"
   # Effect-enforced reviewers must not retain open bash ask defaults (skill may still ask).
   if awk '/^  bash:/{f=1;next} f && /^  [a-zA-Z]/{exit} f && /"\*": ask/{found=1} END{exit found?0:1}' "$file"; then
-    fail "$name must not use bash ask default under 4.0.0"
+    fail "$name must not use bash ask default under 4.0.1"
   fi
 done
 for name in "${required_commands[@]}"; do [[ -s "$CONFIG_DIR/commands/$name.md" ]] || fail "Missing command: $name"; done
