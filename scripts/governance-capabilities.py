@@ -14,7 +14,7 @@ import stat
 import sys
 from typing import Any
 
-VERSION = "3.8.0"
+VERSION = "4.0.0"
 BASE_VERSION = "3.4.4"
 CAPABILITY_TOOL_NAMES = (
     "governance-authority.py",
@@ -37,11 +37,12 @@ BASE_TOOL_NAMES = (
 )
 # Product 3.7.7+ managed recovery helper (inserted after headless contract in expected_tools).
 RECOVERY_TOOL_NAME = "legacy-architect-orphan-recovery.py"
-# Product 3.8.0+ semantic governance core tools.
+# Product 4.0.0+ semantic governance core tools.
 SEMANTIC_TOOL_NAMES = (
     "governance-semantic.py",
     "opencode-compatibility.py",
     "governance-metrics.py",
+    "role-report-ingest.py",
 )
 AGENT_NAMES = (
     "architect",
@@ -170,7 +171,7 @@ def expected_tools(config: pathlib.Path) -> list[pathlib.Path]:
             inserted = True
     if not inserted:
         out.append(tools / RECOVERY_TOOL_NAME)
-    # 3.8.0 semantic tools after workflow-continuation.py
+    # 4.0.0 semantic tools after workflow-continuation.py
     semantic = [tools / name for name in SEMANTIC_TOOL_NAMES]
     # Place semantic tools after workflow-continuation.py within the expanded list
     final: list[pathlib.Path] = []

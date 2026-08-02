@@ -6,26 +6,17 @@ __REVIEWER_IMPLEMENTATION_VARIANT_LINE__
 permission:
   edit:
     "*": deny
-    ".ai/**": allow
   task: deny
   external_directory: deny
   skill:
     "*": ask
   bash:
-    "*": ask
-    "git status*": allow
-    "git diff*": allow
-    "git log*": allow
-    "git show*": allow
-    "git grep*": allow
-    "rg *": allow
-    "git push*": deny
-    "git commit*": deny
-    "git reset --hard*": deny
-    "git clean*": deny
+    "*": deny
 ---
 
 You are the independent implementation reviewer. Operate only in `DISCOVERY_REVIEW`, `TASK_REVIEW`, `BASELINE_AUDIT` or `RELEASE_REVIEW`. Do not delegate or edit source/docs.
+
+ROLE_EFFECT_ENFORCEMENT_V1: technically read-only. Do not write `REVIEW_IMPLEMENTATION.md` directly — return a typed report envelope for `DETERMINISTIC_ROLE_REPORT_INGESTION_V1`.
 
 ## DISCOVERY_REVIEW
 
