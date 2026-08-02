@@ -7,42 +7,45 @@ if(-not(Test-Path -LiteralPath $ManifestPath -PathType Leaf)){Write-Host 'PASS: 
 try{$Manifest=Get-Content -LiteralPath $ManifestPath -Raw|ConvertFrom-Json}catch{throw 'Routing manifest is invalid JSON.'}
 $Version=[string]$Manifest.governance_version
 if($Version-eq'3.3.0'){& (Join-Path $PSScriptRoot 'verify-routing-core.ps1') -ConfigDir $ConfigDir;return}
-$Supported=@('3.3.2','3.3.3','3.3.4','3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0')
+$Supported=@('3.3.2','3.3.3','3.3.4','3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0','4.0.1')
 if($Version-notin$Supported){throw "Unsupported routing manifest governance_version: $Version"}
 
 $ToolsDir=Join-Path $ConfigDir 'opencode-governance-tools'
 $BaseTools=@((Join-Path $ToolsDir 'architect-attempt.ps1'),(Join-Path $ToolsDir 'architect-attempt.sh'),(Join-Path $ToolsDir 'executor-attempt.ps1'),(Join-Path $ToolsDir 'executor-attempt.sh'))
 $ExpectedTools=@($BaseTools)
-if($Version-in@('3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0')){
+if($Version-in@('3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0','4.0.1')){
     # Insert headless contract after architect runners for base+ layers that install it.
     $ExpectedTools=@($BaseTools[0],$BaseTools[1],(Join-Path $ToolsDir 'architect-headless-contract.py'),$BaseTools[2],$BaseTools[3])
-    if($Version-in@('3.7.6','3.7.7','3.8.0','4.0.0')){
+    if($Version-in@('3.7.6','3.7.7','3.8.0','4.0.0','4.0.1')){
         # Insert evidence-bound recovery module after headless contract.
         $ExpectedTools=@($BaseTools[0],$BaseTools[1],(Join-Path $ToolsDir 'architect-headless-contract.py'),(Join-Path $ToolsDir 'legacy-architect-orphan-recovery.py'),$BaseTools[2],$BaseTools[3])
     }
 }
-$ContextVersions=@('3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0')
-$HardenedVersions=@('3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0')
-$FingerprintVersions=@('3.3.4','3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0')
-$PowerShell7Versions=@('3.3.3','3.3.4','3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0')
+$ContextVersions=@('3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0','4.0.1')
+$HardenedVersions=@('3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0','4.0.1')
+$FingerprintVersions=@('3.3.4','3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0','4.0.1')
+$PowerShell7Versions=@('3.3.3','3.3.4','3.4.0','3.4.1','3.4.2','3.4.3','3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0','4.0.1')
 if($Version-in$ContextVersions){
     $ExpectedRunner=if($Version-eq'3.4.0'){'3.3.4'}else{$Version}
     if([string]$Manifest.architect_runner_version-ne$ExpectedRunner){throw "architect_runner_version must be $ExpectedRunner for Governance $Version."}
     if([string]$Manifest.context_intelligence_version-ne$Version){throw "context_intelligence_version must be $Version for Governance $Version."}
     $ExpectedTools+=@((Join-Path $ToolsDir 'context-intelligence.ps1'),(Join-Path $ToolsDir 'context-intelligence.sh'),(Join-Path $ToolsDir 'context-intelligence.py'))
-    if($Version-in@('3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0')){
+    if($Version-in@('3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0','4.0.1')){
         if([string]$Manifest.workflow_continuation_version-ne$Version){throw "workflow_continuation_version must be $Version."}
         $ExpectedTools+=@((Join-Path $ToolsDir 'workflow-continuation.ps1'),(Join-Path $ToolsDir 'workflow-continuation.py'))
     }
-    if($Version-in@('3.8.0','4.0.0')){
+    if($Version-in@('3.8.0','4.0.0','4.0.1')){
         $ExpectedTools+=@(
             (Join-Path $ToolsDir 'governance-semantic.py'),
             (Join-Path $ToolsDir 'opencode-compatibility.py'),
             (Join-Path $ToolsDir 'governance-metrics.py'),
             (Join-Path $ToolsDir 'role-report-ingest.py')
         )
+        if($Version-eq'4.0.1'){
+            $ExpectedTools+=@((Join-Path $ToolsDir 'install-effect-plugin.py'))
+        }
     }
-    if($Version-in@('3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0')){
+    if($Version-in@('3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0','4.0.1')){
         $ExpectedTools+=@(
             (Join-Path $ToolsDir 'governance-authority.py'),
             (Join-Path $ToolsDir 'governance-memory.py'),
@@ -77,9 +80,9 @@ foreach($Name in @('architect','build','plan')){$Text=Get-Content -LiteralPath (
 $GateMarkers=@('ARCHITECT_RUNNER_ENTRY_GATE','ARCHITECT_RUNNER_REQUIRED',$Marker,$BaseTools[0],$BaseTools[1])
 if($Version-in$PowerShell7Versions){$GateMarkers+='pwsh -NoProfile -File'}
 if($Version-in$FingerprintVersions){$GateMarkers+='PROJECT_STATE_CHANGED'}
-if($Version-in@('3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0')){$GateMarkers+=@('WINDOWS_COMMAND:','UNIX_COMMAND:','-ProjectDir','--project-dir','<ORIGINAL_ARGUMENTS>')}
+if($Version-in@('3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0','4.0.1')){$GateMarkers+=@('WINDOWS_COMMAND:','UNIX_COMMAND:','-ProjectDir','--project-dir','<ORIGINAL_ARGUMENTS>')}
 foreach($Command in @('ai-init','ai-audit','ai-discover','ai-plan')){$Text=Get-Content -LiteralPath (Join-Path $ConfigDir "commands/$Command.md") -Raw;foreach($Value in $GateMarkers){if($Text-notlike"*$Value*"){throw "$Command missing Architect entry gate marker: $Value"}}}
-if($Version-in@('3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0')){
+if($Version-in@('3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0','4.0.1')){
     $ResumeMarkers=$GateMarkers+@('RESUME_MODE_V1','PRE_SIDE_EFFECT','POST_SIDE_EFFECT','TOOL_EXECUTION_ABORTED')
     $ResumeText=Get-Content -LiteralPath (Join-Path $ConfigDir 'commands/ai-resume.md') -Raw
     foreach($Value in $ResumeMarkers){if($ResumeText-notlike"*$Value*"){throw "ai-resume missing Architect entry gate marker: $Value"}}
@@ -90,22 +93,22 @@ if($Version-in$FingerprintVersions){
     $PowerShellRunner=Get-Content -LiteralPath $BaseTools[0] -Raw;$UnixRunner=Get-Content -LiteralPath $BaseTools[1] -Raw
     foreach($Value in @('PROJECT_STATE_FINGERPRINT_V1','PROJECT_STATE_CHANGED','Get-ProjectStateFingerprint')){if($PowerShellRunner-notlike"*$Value*"){throw "PowerShell Architect runner missing project-state marker: $Value"}}
     foreach($Value in @('PROJECT_STATE_FINGERPRINT_V1','PROJECT_STATE_CHANGED','project_state_fingerprint')){if($UnixRunner-notlike"*$Value*"){throw "Unix Architect runner missing project-state marker: $Value"}}
-    if($Version-in@('3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0')){foreach($Value in @('ai-resume','TOOL_EXECUTION_ABORTED','ARCHITECT_ORPHAN_RECOVERED','RESUME_POST_SIDE_EFFECT','ARCHITECT_TRANSACTION_V1','PRE_SIDE_EFFECT','POST_SIDE_EFFECT')){if($PowerShellRunner-notlike"*$Value*"-or$UnixRunner-notlike"*$Value*"){throw "Architect runner missing 3.7.2 reliability marker: $Value"}}}
-    if($Version-in@('3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0')){
+    if($Version-in@('3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0','4.0.1')){foreach($Value in @('ai-resume','TOOL_EXECUTION_ABORTED','ARCHITECT_ORPHAN_RECOVERED','RESUME_POST_SIDE_EFFECT','ARCHITECT_TRANSACTION_V1','PRE_SIDE_EFFECT','POST_SIDE_EFFECT')){if($PowerShellRunner-notlike"*$Value*"-or$UnixRunner-notlike"*$Value*"){throw "Architect runner missing 3.7.2 reliability marker: $Value"}}}
+    if($Version-in@('3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0','4.0.1')){
         foreach($Value in @('ARCHITECT_HEADLESS_PERMISSION_CONTRACT_V1','OPENCODE_CONFIG_CONTENT','ARCHITECT_PERMISSION_BLOCKED','HEADLESS_PERMISSION_CONTRACT','auto=disabled','ROUTING_MANIFEST_HASHES')){if($PowerShellRunner-notlike"*$Value*"-or$UnixRunner-notlike"*$Value*"){throw "Architect runner missing 3.7.3 headless permission marker: $Value"}}
         if(-not(Test-Path -LiteralPath $HeadlessContractTool -PathType Leaf)){throw "Managed headless contract tool missing: $HeadlessContractTool"}
     }
-    if($Version-in@('3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0')){
+    if($Version-in@('3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0','4.0.1')){
         foreach($Value in @('ARCHITECT_STDIN_PROMPT_TRANSPORT_V1','ARCHITECT_PROMPT_TRANSPORT','ARCHITECT_PROMPT_TRANSPORT_FAILED','argv_prompt_bytes','prompt_transport')){if($PowerShellRunner-notlike"*$Value*"-or$UnixRunner-notlike"*$Value*"){throw "Architect runner missing 3.7.4 stdin transport marker: $Value"}}
         if($PowerShellRunner-notlike"*RedirectStandardInput*"){throw "PowerShell Architect runner missing RedirectStandardInput"}
         if($UnixRunner-notlike"*input=prompt_utf8*"){throw "Unix Architect runner missing input=prompt_utf8 stdin transport"}
     }
-    if($Version-in@('3.7.5','3.7.6','3.7.7','3.8.0','4.0.0')){
+    if($Version-in@('3.7.5','3.7.6','3.7.7','3.8.0','4.0.0','4.0.1')){
         foreach($Value in @('WORKSPACE_REPOSITORY_ROOT_CONTRACT_V1','MULTI_GOVERNANCE_ROOT_TRANSACTION_V1','PROJECT_STATE_CHANGESET_DIAGNOSTIC_V1','REPOSITORY_ROOT_AMBIGUOUS','managed_governance_roots','ARCHITECT_PHASE_ADVANCED','WorkspaceDir','RepositoryDir')){
             if($PowerShellRunner-notlike"*$Value*"-or$UnixRunner-notlike"*$Value*"){throw "Architect runner missing 3.7.5 nested-root marker: $Value"}
         }
     }
-    if($Version-in@('3.7.6','3.7.7','3.8.0','4.0.0')){
+    if($Version-in@('3.7.6','3.7.7','3.8.0','4.0.0','4.0.1')){
         foreach($Value in @('LEGACY_ARCHITECT_ORPHAN_RECOVERY_CONTRACT_V1','EVIDENCE_BOUND_RECOVERY_RECEIPT_V2','validate-governance-only','legacy-architect-orphan-recovery')){
             if($PowerShellRunner-notlike"*$Value*"-or$UnixRunner-notlike"*$Value*"){throw "Architect runner missing 3.7.6 legacy recovery marker: $Value"}
         }
@@ -113,20 +116,39 @@ if($Version-in$FingerprintVersions){
         if($UnixRunner-notlike'*evidence-bundle-path*' -and $UnixRunner-notlike'*evidence_bundle*'){throw 'Unix runner missing evidence-bundle-path'}
         $LegacyRecoveryTool=Join-Path $ToolsDir 'legacy-architect-orphan-recovery.py'
         if(-not(Test-Path -LiteralPath $LegacyRecoveryTool -PathType Leaf)){throw "Managed legacy recovery tool missing: $LegacyRecoveryTool"}
-        if($Version-in@('3.7.7','3.8.0','4.0.0')){
+        if($Version-in@('3.7.7','3.8.0','4.0.0','4.0.1')){
             $RecoveryRaw=Get-Content -LiteralPath $LegacyRecoveryTool -Raw
             foreach($Value in @('LEGACY_FORENSIC_BUNDLE_V1_ADAPTER','LEGACY_PROJECT_STATE_FORENSICS_V1','CANONICAL_RECOVERY_EVIDENCE_V2')){
                 if($RecoveryRaw-notlike"*$Value*"){throw "legacy recovery module missing 3.7.7 adapter marker: $Value"}
             }
         }
     }
-    if($Version-in@('3.8.0','4.0.0')){
+    if($Version-in@('3.8.0','4.0.0','4.0.1')){
         $Sem=Join-Path $ToolsDir 'governance-semantic.py'
         if(-not(Test-Path -LiteralPath $Sem -PathType Leaf)){throw "Managed semantic tool missing: $Sem"}
         $SemRaw=Get-Content -LiteralPath $Sem -Raw
         foreach($Value in @('SEMANTIC_WORKFLOW_STATE_MACHINE_V1','TRANSITION_NOT_DEFINED')){
             if($SemRaw-notlike"*$Value*"){throw "semantic module missing 3.8.0 marker: $Value"}
         }
+    }
+    if($Version-eq'4.0.1'){
+        $EffectInstaller=Join-Path $ToolsDir 'install-effect-plugin.py'
+        if(-not(Test-Path -LiteralPath $EffectInstaller -PathType Leaf)){throw "Managed effect plugin installer missing: $EffectInstaller"}
+        $EffectRaw=Get-Content -LiteralPath $EffectInstaller -Raw
+        foreach($Value in @('EFFECT_PLUGIN_INSTALLATION_CONTRACT_V1','EFFECT_PLUGIN_RUNTIME_SELF_TEST_V1','ROLE_EFFECT_ENFORCEMENT_V1_1')){
+            if($EffectRaw-notlike"*$Value*"){throw "effect plugin installer missing 4.0.1 marker: $Value"}
+        }
+        foreach($Value in @('GOVERNED_ROLE_LAUNCH_CONTRACT_V1','OPENCODE_GOVERNANCE_EFFECT_ENFORCEMENT_ACTIVE','OPENCODE_GOVERNANCE_ROLE')){
+            if($PowerShellRunner-notlike"*$Value*"-and$Value-ne'GOVERNED_ROLE_LAUNCH_CONTRACT_V1'){throw "Architect runner missing 4.0.1 role-launch marker: $Value"}
+            if($Value-eq'GOVERNED_ROLE_LAUNCH_CONTRACT_V1'-and$PowerShellRunner-notlike'*GOVERNED_ROLE_LAUNCH_CONTRACT_V1*'){throw "Architect runner missing GOVERNED_ROLE_LAUNCH_CONTRACT_V1"}
+        }
+        if($UnixRunner-notlike'*OPENCODE_GOVERNANCE_EFFECT_ENFORCEMENT_ACTIVE*'-or$UnixRunner-notlike'*OPENCODE_GOVERNANCE_ROLE*'){throw 'Unix Architect runner missing 4.0.1 role-launch markers'}
+        $Ingest=Join-Path $ToolsDir 'role-report-ingest.py'
+        $IngestRaw=Get-Content -LiteralPath $Ingest -Raw
+        foreach($Value in @('DETERMINISTIC_ROLE_REPORT_INGESTION_V2','REVIEW_CHAIN_ATTESTATION_V2')){
+            if($IngestRaw-notlike"*$Value*"){throw "role-report-ingest missing 4.0.1 marker: $Value"}
+        }
+        if(-not $Manifest.effect_plugin_sha256 -or -not $Manifest.effect_policy_sha256){throw 'Routing manifest missing effect plugin hash bindings'}
     }
 
     if($Version-in$HardenedVersions-and$PowerShellRunner-notlike'*default cooldown must be an integer between 60 and 86400 seconds.*'){throw 'PowerShell Architect runner missing cooldown validation.'}
@@ -137,12 +159,12 @@ if($Version-in$ContextVersions){
     if($ShContext-notlike'*context-intelligence.py*'){throw 'Unix context wrapper does not invoke the managed Python core.'}
     if($Version-in$HardenedVersions){foreach($Value in @('GOVERNANCE_STATE_LINK_FORBIDDEN','REQUIRED_SECTION_UNAVAILABLE','TERMINAL_STATE_REQUIRED')){if($PsContext-notlike"*$Value*"-or$PyContext-notlike"*$Value*"){throw "Context hardening marker missing: $Value"}}}
 }
-if($Version-in@('3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0')){
+if($Version-in@('3.4.4','3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0','4.0.1')){
     $PsWorkflow=Get-Content -LiteralPath $WorkflowPs -Raw;$PyWorkflow=Get-Content -LiteralPath $WorkflowPy -Raw
     foreach($Value in @('WORKFLOW_CONTINUATION_GATE_V1','CONTINUE_REQUIRED','TERMINAL_ALLOWED','INVALID_RUN_STATE','AUDIT_PASS','LOCAL_COMMITTED')){if($PsWorkflow-notlike"*$Value*"-or$PyWorkflow-notlike"*$Value*"){throw "Workflow continuation helper missing marker: $Value"}}
     foreach($Command in @('ai-workflow','ai-resume')){$Text=Get-Content -LiteralPath (Join-Path $ConfigDir "commands/$Command.md") -Raw;foreach($Value in @('WORKFLOW_CONTINUATION_GATE_V1','WINDOWS_WORKFLOW_CONTINUATION_CORE','UNIX_WORKFLOW_CONTINUATION_CORE',$WorkflowPs,$WorkflowPy,'CONTINUE_REQUIRED','TERMINAL_ALLOWED')){if($Text-notlike"*$Value*"){throw "$Command missing workflow continuation marker: $Value"}}}
 }
-if($Version-in@('3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0')){
+if($Version-in@('3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0','4.0.1')){
     $Capabilities=Join-Path $PSScriptRoot 'governance-capabilities.py'
     if(-not(Test-Path -LiteralPath $Capabilities -PathType Leaf)){throw "Capability verifier not found: $Capabilities"}
     $Process=Start-Process -FilePath 'python' -ArgumentList @($Capabilities,'verify','--config-dir',$ConfigDir) -NoNewWindow -Wait -PassThru

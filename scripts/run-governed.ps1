@@ -875,6 +875,25 @@ function Invoke-Route([object]$Route,[int]$Attempt,[string]$Logs){
   $info.Environment['OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE'] = '1'
   $info.Environment['OPENCODE_GOVERNANCE_HEADLESS_CONTRACT'] = $script:HeadlessContractVersion
   $info.Environment['OPENCODE_CONFIG_CONTENT'] = $overlay.json
+  # GOVERNED_ROLE_LAUNCH_CONTRACT_V1 — runner-owned role context (not model output).
+  $info.Environment['OPENCODE_GOVERNANCE_EFFECT_ENFORCEMENT_ACTIVE'] = '1'
+  $info.Environment['OPENCODE_GOVERNANCE_ROLE'] = 'architect'
+  $info.Environment['OPENCODE_GOVERNANCE_EXPECTED_AGENT'] = 'architect'
+  $info.Environment['OPENCODE_GOVERNANCE_PHASE'] = [string]$Command
+  $info.Environment['OPENCODE_GOVERNANCE_WORKSPACE'] = [string]$ProjectDir
+  if($script:RepositoryDir){ $info.Environment['OPENCODE_GOVERNANCE_REPOSITORY'] = [string]$script:RepositoryDir }
+  elseif($RepositoryDir){ $info.Environment['OPENCODE_GOVERNANCE_REPOSITORY'] = [string]$RepositoryDir }
+  else { $info.Environment['OPENCODE_GOVERNANCE_REPOSITORY'] = [string]$ProjectDir }
+  if($TaskId){ $info.Environment['OPENCODE_GOVERNANCE_TASK_ID'] = [string]$TaskId }
+  if($script:HeadlessPolicyHash){ $info.Environment['OPENCODE_GOVERNANCE_PERMISSION_POLICY_SHA256'] = [string]$script:HeadlessPolicyHash }
+  $effectPolicy = Join-Path $ConfigDir 'plugins\opencode-governance-effect-enforcement\role-effect-policy.json'
+  if(Test-Path -LiteralPath $effectPolicy){
+    $info.Environment['OPENCODE_GOVERNANCE_EFFECT_POLICY'] = $effectPolicy
+    try{
+      $sha = [System.BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([IO.File]::ReadAllBytes($effectPolicy))).Replace('-','').ToLowerInvariant()
+      $info.Environment['OPENCODE_GOVERNANCE_EFFECT_POLICY_SHA256'] = $sha
+    }catch{}
+  }
   # Never place the governed prompt on argv, in environment variables, or via shell interpolation.
   # Never pass blanket --auto. Deny-by-default bash eliminates ask; residual asks fail closed.
   foreach($v in @($Launch.prefix)){ $null = $info.ArgumentList.Add([string]$v) }

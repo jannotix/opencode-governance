@@ -118,7 +118,7 @@ foreach ($Name in $ReadonlyReviewAgents) {
     $Text = Get-Content $Path -Raw
     if ($Text -notmatch '(?m)^  bash:\s*$') { throw "$Name missing bash permission block" }
     if ($Text -match '(?ms)^  bash:\s*\r?\n(?:    .*\r?\n)*?    "\*": ask\s*$') {
-        throw "$Name must not use bash ask default under 4.0.0"
+        throw "$Name must not use bash ask default under 4.0.1"
     }
 }
 

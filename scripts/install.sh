@@ -41,7 +41,7 @@ bash "$BASE_INSTALLER" "$@"
 if [[ -n "$ROUTING_CONFIG" ]]; then
   python3 "$CAPABILITIES" install --source-dir "$SCRIPT_DIR" --config-dir "$CONFIG_DIR"
   "$SCRIPT_DIR/verify-routing.sh" "$CONFIG_DIR"
-  echo 'Installed OpenCode Governance v4.0.0 — Effect-enforced role isolation.'
+  echo 'Installed OpenCode Governance v4.0.1 — Runtime effect enforcement.'
   echo 'Candidate receipts, actionable continuation, focused review lenses, governed memory, exact evidence reuse, staged commit validation and simulation are active.'
 else
   echo 'Installed OpenCode Governance base in single-model mode (no routing profile).'

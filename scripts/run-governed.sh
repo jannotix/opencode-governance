@@ -779,6 +779,20 @@ try:
         env['OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE']='1'
         env['OPENCODE_GOVERNANCE_HEADLESS_CONTRACT']=HEADLESS_CONTRACT
         env['OPENCODE_CONFIG_CONTENT']=payload
+        # GOVERNED_ROLE_LAUNCH_CONTRACT_V1 — runner-owned role context (not model output).
+        env['OPENCODE_GOVERNANCE_EFFECT_ENFORCEMENT_ACTIVE']='1'
+        env['OPENCODE_GOVERNANCE_ROLE']='architect'
+        env['OPENCODE_GOVERNANCE_EXPECTED_AGENT']='architect'
+        env['OPENCODE_GOVERNANCE_PHASE']=a.command
+        env['OPENCODE_GOVERNANCE_WORKSPACE']=str(project)
+        repo_for_env=str(repository) if repository is not None else str(project)
+        env['OPENCODE_GOVERNANCE_REPOSITORY']=repo_for_env
+        if a.task_id: env['OPENCODE_GOVERNANCE_TASK_ID']=str(a.task_id)
+        if policy_hash: env['OPENCODE_GOVERNANCE_PERMISSION_POLICY_SHA256']=str(policy_hash)
+        effect_policy=config/'plugins'/'opencode-governance-effect-enforcement'/'role-effect-policy.json'
+        if effect_policy.is_file():
+            env['OPENCODE_GOVERNANCE_EFFECT_POLICY']=str(effect_policy)
+            env['OPENCODE_GOVERNANCE_EFFECT_POLICY_SHA256']=hashlib.sha256(effect_policy.read_bytes()).hexdigest()
         timed=False
         stdout_text=''; stderr_text=''
         try:
