@@ -37,7 +37,9 @@ jobs:
             tests/test-context-intelligence.py \
             tests/test-architect-headless-contract.py \
             tests/test-nested-governance-roots.py \
+            tests/test-legacy-orphan-recovery.py \
             scripts/context-intelligence.py \
+            scripts/legacy-architect-orphan-recovery.py \
             scripts/normalize-jsonc.py \
             scripts/workflow-continuation.py \
             scripts/architect-headless-contract.py \
@@ -84,6 +86,7 @@ jobs:
           bash tests/test-nested-governance-roots.sh
           python3 tests/test-architect-headless-contract.py
           python3 tests/test-nested-governance-roots.py
+          python3 tests/test-legacy-orphan-recovery.py
           python3 tests/test-context-intelligence.py
           python3 tests/test-command-contracts.py
           python3 tests/test-release-publisher.py
@@ -109,7 +112,7 @@ jobs:
             [Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path),[ref]$null,[ref]$errors)|Out-Null
             if($errors.Count){throw "$path`n$($errors|Out-String)"}
           }
-          python -m py_compile tests/test-governance-authority-memory.py tests/test-governance-pre-commit.py tests/test-governance-capabilities.py tests/test-governance-simulation-fixture.py tests/test-governance-simulation-run.py tests/test-context-intelligence.py tests/test-architect-headless-contract.py tests/test-nested-governance-roots.py scripts/architect-headless-contract.py scripts/workspace-repository-root-contract.py scripts/governance-authority.py scripts/governance-memory.py scripts/governance-evidence.py scripts/governance-pre-commit.py scripts/governance-simulation.py scripts/governance-capabilities.py scripts/governance-install-transaction.py
+          python -m py_compile tests/test-governance-authority-memory.py tests/test-governance-pre-commit.py tests/test-governance-capabilities.py tests/test-governance-simulation-fixture.py tests/test-governance-simulation-run.py tests/test-context-intelligence.py tests/test-architect-headless-contract.py tests/test-nested-governance-roots.py tests/test-legacy-orphan-recovery.py scripts/architect-headless-contract.py scripts/workspace-repository-root-contract.py scripts/legacy-architect-orphan-recovery.py scripts/governance-authority.py scripts/governance-memory.py scripts/governance-evidence.py scripts/governance-pre-commit.py scripts/governance-simulation.py scripts/governance-capabilities.py scripts/governance-install-transaction.py
       - name: Run Windows hardening regressions
         shell: pwsh
         run: |

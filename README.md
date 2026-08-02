@@ -4,7 +4,7 @@ Provider- and model-agnostic product-lifecycle governance for [OpenCode](https:/
 
 > Community project. Not affiliated with the OpenCode team.
 
-Current release: **3.7.5 — Nested workspace transactions**.
+Current release: **3.7.6 — Evidence-bound legacy orphan recovery**.
 
 Installs seven specialized agents, twelve `/ai-*` commands, deterministic tooling and fail-closed contracts so planning, implementation, validation and review stay bound to approved requirements and current repository evidence.
 
@@ -188,6 +188,7 @@ Rerun the installer with the same local routing profile. Routing is preserved wh
 | [`docs/architect-headless-permission-contract.md`](docs/architect-headless-permission-contract.md) | Headless Architect permission contract (3.7.3+) |
 | [`docs/architect-stdin-prompt-transport.md`](docs/architect-stdin-prompt-transport.md) | Architect stdin prompt transport (3.7.4) |
 | [`docs/workspace-repository-root-contract.md`](docs/workspace-repository-root-contract.md) | Nested workspace / multi-root transactions (3.7.5) |
+| [docs/legacy-orphan-recovery.md](docs/legacy-orphan-recovery.md) | Evidence-bound legacy orphan recovery (3.7.6) |
 | [`docs/troubleshooting.md`](docs/troubleshooting.md) | Recovery |
 | [`CHANGELOG.md`](CHANGELOG.md) | Release history |
 

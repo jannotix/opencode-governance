@@ -5,6 +5,16 @@ Dates use `YYYY-MM-DD`. Older micro-releases are summarized; see git history for
 ## Unreleased
 
 
+## 3.7.6 - 2026-08-02
+
+- Security/reliability patch: `LEGACY_ARCHITECT_ORPHAN_RECOVERY_CONTRACT_V1` for evidence-bound adoption of preserved 3.7.2–3.7.4 Architect transaction journals.
+- Do not compare legacy single-root fingerprints with 3.7.5+ multi-root fingerprints; require a forensic evidence bundle with mandatory SHA-256, closed `MANIFEST.txt`, and ZIP-slip/symlink fail-closed extraction.
+- Recovery decisions: `validate-governance-only` (non-mutating), `adopt-governance-only`, `rollback`.
+- Mandatory evidence fields: transaction hash, evidence bundle path/hash, repository HEAD, PLAN/packet/checkpoint hashes, attempt log hashes, exact Governance path allowlist.
+- `EVIDENCE_BOUND_RECOVERY_RECEIPT_V2` is written and revalidated before the transaction is archived; archive failure retains the live orphan and fails closed.
+- Composite Governance-only proof: Git HEAD/index/status (managed paths filtered), workspace inventory drift, dependency hashes, and `GOVERNANCE_RESULT` evidence.
+- Sanitised 3.7.4 migration fixture and Python regressions (positive validate/adopt + negatives for hash/ZIP/source/unrelated `.ai` tamper).
+
 ## 3.7.5 - 2026-08-02
 
 - Reliability and transaction-integrity patch for nested workspace / repository layouts: `WORKSPACE_REPOSITORY_ROOT_CONTRACT_V1` and `MULTI_GOVERNANCE_ROOT_TRANSACTION_V1`.

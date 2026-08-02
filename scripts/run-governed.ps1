@@ -13,9 +13,17 @@ param(
     [int]$TimeoutSeconds = 3600,
     [switch]$KeepAttemptLogs,
     [switch]$RecoverTransaction,
-    [ValidateSet('adopt-governance-only','rollback')]$RecoveryDecision,
+    [ValidateSet('validate-governance-only','adopt-governance-only','rollback')]$RecoveryDecision,
     [string]$ExpectedTransactionHash,
-    [string]$ExpectedEvidenceBundleHash
+    [string]$EvidenceBundlePath,
+    [string]$ExpectedEvidenceBundleHash,
+    [string]$ExpectedRepositoryHead,
+    [string]$ExpectedPlanHash,
+    [string]$ExpectedExecutionPacketHash,
+    [string]$ExpectedCheckpointHash,
+    [string]$ExpectedArgumentsHash,
+    [string]$ExpectedStdoutHash,
+    [string]$ExpectedStderrHash
 )
 
 if ($PSVersionTable.PSVersion.Major -lt 7) {
@@ -770,74 +778,45 @@ function Open-Transaction([string]$Tx,[string]$ProjectState,[object]$Task){
   $legacyBackup
 }
 function Close-Transaction([string]$Tx){if(Test-Path $Tx){Remove-Item $Tx -Recurse -Force}}
+function Resolve-LegacyRecoveryModule(){
+  # LEGACY_ARCHITECT_ORPHAN_RECOVERY_CONTRACT_V1 + EVIDENCE_BOUND_RECOVERY_RECEIPT_V2
+  # validate-governance-only | adopt-governance-only | rollback via EvidenceBundlePath binding.
+  $candidates=@(
+    (Join-Path $PSScriptRoot 'legacy-architect-orphan-recovery.py'),
+    (Join-Path (Split-Path -Parent $PSCommandPath) 'legacy-architect-orphan-recovery.py'),
+    (Join-Path $ConfigDir 'opencode-governance-tools/legacy-architect-orphan-recovery.py')
+  )
+  foreach($path in $candidates){if($path-and(Test-Path -LiteralPath $path -PathType Leaf)){return $path}}
+  throw 'LEGACY_RECOVERY_MODULE_MISSING: legacy-architect-orphan-recovery.py is not installed next to the Architect runner.'
+}
 function Invoke-ExplicitTransactionRecovery(){
   if(-not $RecoverTransaction){return $false}
-  if([string]::IsNullOrWhiteSpace($RecoveryDecision)){throw 'RECOVERY_DECISION_REQUIRED: use -RecoveryDecision adopt-governance-only|rollback'}
+  if([string]::IsNullOrWhiteSpace($RecoveryDecision)){throw 'RECOVERY_DECISION_REQUIRED: use -RecoveryDecision validate-governance-only|adopt-governance-only|rollback'}
   if([string]::IsNullOrWhiteSpace($TaskId)){throw 'RECOVERY_TASK_ID_REQUIRED'}
   $tx=Get-TransactionDir $ProjectDir
-  $metaPath=Join-Path $tx 'meta.json'
-  if(-not(Test-Path -LiteralPath $metaPath -PathType Leaf)){throw "RECOVERY_TRANSACTION_NOT_FOUND: $tx"}
-  $meta=Get-Content -LiteralPath $metaPath -Raw|ConvertFrom-Json
-  if(Test-PidAlive ([int]$meta.pid)){throw 'ARCHITECT_TRANSACTION_ACTIVE'}
-  $metaText=Get-Content -LiteralPath $metaPath -Raw
-  $txHash=Get-TextHash $metaText
-  if($RecoveryDecision -eq 'adopt-governance-only' -and [string]::IsNullOrWhiteSpace($ExpectedTransactionHash)){
-    throw 'RECOVERY_TRANSACTION_HASH_REQUIRED: adopt-governance-only requires -ExpectedTransactionHash'
-  }
-  if(-not [string]::IsNullOrWhiteSpace($ExpectedTransactionHash) -and $txHash -ne $ExpectedTransactionHash.ToLowerInvariant()){
-    throw "RECOVERY_TRANSACTION_HASH_MISMATCH: expected=$ExpectedTransactionHash actual=$txHash"
-  }
-  if([string]$meta.task_id -ne $TaskId){throw "RECOVERY_TASK_MISMATCH: meta=$($meta.task_id) requested=$TaskId"}
-  if([string]$meta.workspace_root -and -not [string]::Equals([string]$meta.workspace_root,$ProjectDir,[StringComparison]::OrdinalIgnoreCase)){throw 'RECOVERY_WORKSPACE_MISMATCH'}
-  if($script:RepositoryDir -and $meta.repository_root -and -not [string]::Equals([string]$meta.repository_root,$script:RepositoryDir,[StringComparison]::OrdinalIgnoreCase)){throw 'RECOVERY_REPOSITORY_MISMATCH'}
-  $beforeFp=[string]$meta.project_state_fingerprint
-  $afterFp=Get-ProjectStateFingerprint
-  if($RecoveryDecision -eq 'rollback'){
-    if($meta.managed_governance_roots){Restore-ManagedGovernanceRoots @($meta.managed_governance_roots)}
-    else{
-      $ai=Join-Path $ProjectDir '.ai'
-      Restore-Ai $ai (Join-Path $tx 'ai-snapshot') ([bool]$meta.ai_existed) ([string]$meta.ai_hash)
-    }
-    Close-Transaction $tx
-    Write-Host "ARCHITECT_RECOVERY_COMPLETE decision=rollback task=$TaskId transaction_hash=$txHash"
-    return $true
-  }
-  # adopt-governance-only: require fingerprint match against transaction baseline (app source unchanged)
-  if($afterFp -ne $beforeFp){
-    throw 'ARCHITECT_RECOVERY_BLOCKED: PROJECT_STATE_CHANGED (application or non-managed paths). HUMAN_RECOVERY_REQUIRED'
-  }
-  $snap=Get-TaskSnapshot
-  if(-not $snap){throw 'RECOVERY_CHECKPOINT_MISSING'}
-  $state=[string]$snap.state; if([string]::IsNullOrWhiteSpace($state)){$state=[string]$snap.phase}
-  $receipt=[ordered]@{
-    schema='ARCHITECT_RECOVERY_RECEIPT_V1'
-    decision='adopt-governance-only'
-    task_id=$TaskId
-    workspace_root=$ProjectDir
-    repository_root=$script:RepositoryDir
-    transaction_hash=$txHash
-    project_state_fingerprint=$afterFp
-    checkpoint_sha256=$snap.hash
-    state=$snap.state
-    phase=$snap.phase
-    next_required_phase=$snap.next
-    recovered_at_utc=[DateTime]::UtcNow.ToString('o')
-    owner_authorized=$true
-  }
-  $receiptPath=Join-Path $ProjectDir ".ai/recovery/ARCHITECT_RECOVERY_$($TaskId)_$(Get-Date -Format 'yyyyMMddHHmmss').json"
-  $receiptDir=Split-Path -Parent $receiptPath
-  if(-not(Test-Path $receiptDir)){New-Item -ItemType Directory -Force -Path $receiptDir|Out-Null}
-  ($receipt|ConvertTo-Json -Depth 8)|Set-Content -LiteralPath $receiptPath -Encoding utf8
-  $archive=Join-Path $ConfigDir ("opencode-governance-architect-tx-archive/"+(Get-TextHash $ProjectDir.ToLowerInvariant())+"/$txHash")
-  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $archive)|Out-Null
-  if(Test-Path $archive){Remove-Item $archive -Recurse -Force}
-  Copy-Item -LiteralPath $tx -Destination $archive -Recurse -Force
-  Close-Transaction $tx
-  Write-Host "ARCHITECT_RECOVERY_COMPLETE decision=adopt-governance-only task=$TaskId transaction_hash=$txHash receipt=$receiptPath state=$state next_required_phase=$($snap.next)"
-  # Only advertise /ai-execute when the adopted checkpoint is actually READY_FOR_EXECUTION.
-  if($state -eq 'READY_FOR_EXECUTION' -or [string]$snap.next -eq 'IMPLEMENTING'){
-    Write-Host "ARCHITECT_PHASE_ADVANCED STATE=$state NEXT_COMMAND=/ai-execute ATTEMPT_CONSUMED=false"
-  }
+  if(-not(Test-Path -LiteralPath $tx -PathType Container)){throw "RECOVERY_TRANSACTION_NOT_FOUND: $tx"}
+  $module=Resolve-LegacyRecoveryModule
+  $py=Get-Command python -ErrorAction SilentlyContinue
+  if(-not$py){$py=Get-Command python3 -ErrorAction SilentlyContinue}
+  if(-not$py){throw 'LEGACY_RECOVERY_PYTHON_MISSING: python is required for evidence-bound recovery.'}
+  $repo=if($script:RepositoryDir){$script:RepositoryDir}else{$ProjectDir}
+  $argv=[System.Collections.Generic.List[string]]::new()
+  foreach($v in @($module,'--decision',$RecoveryDecision,'--workspace',$ProjectDir,'--repository',$repo,'--task-id',$TaskId,'--transaction-dir',$tx,'--config-dir',$ConfigDir)){ $argv.Add([string]$v) }
+  if(-not [string]::IsNullOrWhiteSpace($EvidenceBundlePath)){ $argv.Add('--evidence-bundle'); $argv.Add($EvidenceBundlePath) }
+  if(-not [string]::IsNullOrWhiteSpace($ExpectedTransactionHash)){ $argv.Add('--expected-transaction-hash'); $argv.Add($ExpectedTransactionHash) }
+  if(-not [string]::IsNullOrWhiteSpace($ExpectedEvidenceBundleHash)){ $argv.Add('--expected-evidence-bundle-hash'); $argv.Add($ExpectedEvidenceBundleHash) }
+  if(-not [string]::IsNullOrWhiteSpace($ExpectedRepositoryHead)){ $argv.Add('--expected-repository-head'); $argv.Add($ExpectedRepositoryHead) }
+  if(-not [string]::IsNullOrWhiteSpace($ExpectedPlanHash)){ $argv.Add('--expected-plan-hash'); $argv.Add($ExpectedPlanHash) }
+  if(-not [string]::IsNullOrWhiteSpace($ExpectedExecutionPacketHash)){ $argv.Add('--expected-execution-packet-hash'); $argv.Add($ExpectedExecutionPacketHash) }
+  if(-not [string]::IsNullOrWhiteSpace($ExpectedCheckpointHash)){ $argv.Add('--expected-checkpoint-hash'); $argv.Add($ExpectedCheckpointHash) }
+  if(-not [string]::IsNullOrWhiteSpace($ExpectedArgumentsHash)){ $argv.Add('--expected-arguments-hash'); $argv.Add($ExpectedArgumentsHash) }
+  if(-not [string]::IsNullOrWhiteSpace($ExpectedStdoutHash)){ $argv.Add('--expected-stdout-hash'); $argv.Add($ExpectedStdoutHash) }
+  if(-not [string]::IsNullOrWhiteSpace($ExpectedStderrHash)){ $argv.Add('--expected-stderr-hash'); $argv.Add($ExpectedStderrHash) }
+  $output=& $py.Source @($argv) 2>&1
+  $code=$LASTEXITCODE
+  $text=(($output|ForEach-Object{[string]$_})-join"`n")
+  if($code -ne 0){ throw $text }
+  if($text){ Write-Host $text }
   return $true
 }
 function Classify-Failure([string]$Text,[bool]$TimedOut,[int]$ExitCode=1){
