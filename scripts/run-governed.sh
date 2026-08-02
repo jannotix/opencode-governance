@@ -826,7 +826,7 @@ try:
             env['OPENCODE_GOVERNANCE_HANDSHAKE_PATH']=str(hs)
             if a.task_id: env['OPENCODE_GOVERNANCE_TASK_ID']=str(a.task_id)
             if policy_hash: env['OPENCODE_GOVERNANCE_PERMISSION_POLICY_SHA256']=str(policy_hash)
-                timed=False
+        timed=False
         stdout_text=''; stderr_text=''
         try:
             # Binary-safe UTF-8 stdin; preserve child exit code (no shell pipeline).
