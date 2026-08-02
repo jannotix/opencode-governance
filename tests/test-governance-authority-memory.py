@@ -246,13 +246,17 @@ class AuthorityTests(unittest.TestCase):
         state.write_text(json.dumps({
             "top_level_command": "ai-workflow",
             "current_phase": "TASK_REVIEW",
-            "next_required_phase": "PRODUCT_COMPLETENESS_RECONCILIATION",
+            "next_required_phase": "DUAL_REVIEW",
             "terminal_reason": None,
+            "lifecycle_mode": "STANDARD",
+            "candidate_state": "FROZEN",
+            "frozen_candidate": "cand-test",
+            "present_artifacts": ["EXECUTION_PACKET"],
             "next_action": {
                 "kind": "execute",
-                "command": "/ai-resume",
+                "command": "/ai-review",
                 "arguments": ["T1"],
-                "expected_postcondition": "PRODUCT_COMPLETENESS_RECONCILIATION",
+                "expected_postcondition": "DUAL_REVIEW",
             },
         }), encoding="utf-8")
         self.assertIn("ACTIONABLE_CONTINUATION_VALID", run(AUTHORITY, "continuation", "validate", "--run-state", state).stdout)
