@@ -136,8 +136,9 @@ if version in fingerprint_versions:
                 raise SystemExit('Architect runner missing launch contract marker')
             if 'OPENCODE_GOVERNANCE_EFFECT_ENFORCEMENT_ACTIVE' not in sh_runner or 'OPENCODE_GOVERNANCE_ROLE' not in sh_runner:
                 raise SystemExit('Unix Architect runner missing role-launch markers')
-            if 'skip-self-test' in ps_runner or 'skip-self-test' in sh_runner:
-                raise SystemExit('Architect runner must not use install --skip-self-test')
+            import re as _re
+            if _re.search(r'install[^\n]*--skip-self-test', ps_runner) or _re.search(r'install[^\n]*--skip-self-test', sh_runner):
+                raise SystemExit('Architect runner must not invoke install --skip-self-test')
             ingest_raw = (tools/'role-report-ingest.py').read_text(encoding='utf-8')
             if version == '4.0.2':
                 for value in ['DETERMINISTIC_ROLE_REPORT_INGESTION_V3','REVIEW_CHAIN_ATTESTATION_V3']:

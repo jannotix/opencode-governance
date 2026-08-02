@@ -883,7 +883,7 @@ function Invoke-Route([object]$Route,[int]$Attempt,[string]$Logs){
   if(-not (Test-Path -LiteralPath $launchHelper -PathType Leaf)){
     throw 'EFFECT_PLUGIN_NOT_ACTIVE: governed-role-launch.py missing (install 4.0.1 capabilities).'
   }
-  # R-008: non-mutating preflight only — never install --skip-self-test from a governed runner.
+  # R-008: non-mutating preflight only — never auto-heal with skipped self testing from a governed runner.
   $pre = & python $launchHelper preflight-plugin --config-dir $ConfigDir 2>&1
   if($LASTEXITCODE -ne 0){ throw "EFFECT_PLUGIN_NOT_ACTIVE: $pre" }
   $repoRoot = if($script:RepositoryDir){ [string]$script:RepositoryDir } elseif($RepositoryDir){ [string]$RepositoryDir } else { [string]$ProjectDir }

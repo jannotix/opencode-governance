@@ -152,8 +152,9 @@ if($Version-in$FingerprintVersions){
         }
         if($PowerShellRunner-notlike'*GOVERNED_ROLE_LAUNCH_CONTRACT_V2*'-and$PowerShellRunner-notlike'*GOVERNED_ROLE_LAUNCH_CONTRACT_V1*'){throw 'Architect runner missing launch contract marker'}
         if($UnixRunner-notlike'*OPENCODE_GOVERNANCE_EFFECT_ENFORCEMENT_ACTIVE*'-or$UnixRunner-notlike'*OPENCODE_GOVERNANCE_ROLE*'){throw 'Unix Architect runner missing role-launch markers'}
-        if($PowerShellRunner-like'*skip-self-test*'){throw 'Architect runner must not use install --skip-self-test'}
-        if($UnixRunner-like'*skip-self-test*'){throw 'Unix Architect runner must not use install --skip-self-test'}
+        # Ban live heal invocation, not documentation comments about the ban.
+        if($PowerShellRunner-match 'install[^\n]*--skip-self-test'){throw 'Architect runner must not invoke install --skip-self-test'}
+        if($UnixRunner-match 'install[^\n]*--skip-self-test'){throw 'Unix Architect runner must not invoke install --skip-self-test'}
         $Ingest=Join-Path $ToolsDir 'role-report-ingest.py'
         $IngestRaw=Get-Content -LiteralPath $Ingest -Raw
         if($Version-eq'4.0.2'){

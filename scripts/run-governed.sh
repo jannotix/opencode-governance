@@ -784,7 +784,7 @@ try:
         launch_helper=tools_dir/'governed-role-launch.py'
         if not launch_helper.is_file():
             raise RuntimeError('EFFECT_PLUGIN_NOT_ACTIVE: governed-role-launch.py missing')
-        # R-008: non-mutating preflight only — never install --skip-self-test from a governed runner.
+        # R-008: non-mutating preflight only — never auto-heal with skipped self testing from a governed runner.
         pre=subprocess.run([sys.executable,str(launch_helper),'preflight-plugin','--config-dir',str(config)],capture_output=True,text=True)
         if pre.returncode!=0:
             raise RuntimeError(f'EFFECT_PLUGIN_NOT_ACTIVE: {(pre.stderr or pre.stdout).strip()}')
