@@ -40,6 +40,22 @@ The staged tree no longer matches the receipt candidate identity. Re-freeze the 
 
 The Architect runner detected unexpected project mutation outside allowed `.ai/**` writes, or a host/runner contract failure. Discard the failed attempt, restore from safepoint if needed, and restart the full role from the same packet.
 
+## `ARCHITECT_PERMISSION_BLOCKED` / headless shell auto-reject
+
+A headless external Architect child requested a shell or tool permission that could not be approved non-interactively, or that violates `ARCHITECT_HEADLESS_PERMISSION_CONTRACT_V1`.
+
+- This is **not** a provider/model failure and does **not** trigger model fallback.
+- The runner restores `.ai/**` when the project fingerprint is unchanged and preserves attempt logs.
+- Prefer native OpenCode tools (`read`/`list`/`glob`/`grep`/LSP) for discovery.
+- Upgrade to Governance 3.7.3+, reinstall, run `verify` / `verify-routing`, then retry.
+- Do not enable blanket `bash: "*": allow` or unrestricted `--auto`.
+
+See [Architect Headless Permission Contract](architect-headless-permission-contract.md).
+
+## Routing profile is invalid JSON (JSONC comments)
+
+Installed routing may be JSONC. Governance 3.7.3+ loads routing through the official JSONC normaliser in memory and does not require a manual strict-JSON copy. If load still fails, the file is malformed—repair comments/commas without removing intentional documentation.
+
 ## `CAPABILITY_*` / routing verify failure
 
 Capability tools and managed prompt sections are hash-checked. Re-run the unified installer with the routing profile; do not hand-edit installed agent sections.

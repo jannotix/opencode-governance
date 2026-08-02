@@ -21,7 +21,7 @@ COMMANDS = (
     "ai-metrics", "ai-release",
 )
 BASE_TOOLS = (
-    "architect-attempt.ps1", "architect-attempt.sh",
+    "architect-attempt.ps1", "architect-attempt.sh", "architect-headless-contract.py",
     "executor-attempt.ps1", "executor-attempt.sh",
     "context-intelligence.ps1", "context-intelligence.sh",
     "context-intelligence.py", "workflow-continuation.ps1",
@@ -91,10 +91,10 @@ class GovernanceCapabilitiesTests(unittest.TestCase):
     def test_install_uses_one_canonical_manifest_and_preserves_routing(self) -> None:
         manifest = self.install()
         self.assertFalse((self.config / "opencode-governance-runtime.json").exists())
-        self.assertEqual("3.7.2", manifest["governance_version"])
-        self.assertEqual("3.7.2", manifest["architect_runner_version"])
-        self.assertEqual("3.7.2", manifest["context_intelligence_version"])
-        self.assertEqual("3.7.2", manifest["workflow_continuation_version"])
+        self.assertEqual("3.7.3", manifest["governance_version"])
+        self.assertEqual("3.7.3", manifest["architect_runner_version"])
+        self.assertEqual("3.7.3", manifest["context_intelligence_version"])
+        self.assertEqual("3.7.3", manifest["workflow_continuation_version"])
         self.assertEqual("1.0", manifest["candidate_authority_version"])
         self.assertEqual("2.0", manifest["governed_memory_version"])
         self.assertEqual("1.0", manifest["evidence_reuse_version"])
@@ -102,7 +102,7 @@ class GovernanceCapabilitiesTests(unittest.TestCase):
         self.assertEqual("1.0", manifest["pre_commit_receipt_gate_version"])
         self.assertEqual(self.routing["settings"], manifest["settings"])
         self.assertEqual(self.routing["roles"], manifest["roles"])
-        self.assertEqual(14, len(manifest["managed_tools"]))
+        self.assertEqual(15, len(manifest["managed_tools"]))
         self.assertEqual(set(CAPABILITY_TOOLS), set(manifest["capability_tool_hashes"]))
         self.assertTrue(manifest["capability_section_hashes"])
         run("verify", "--config-dir", self.config)

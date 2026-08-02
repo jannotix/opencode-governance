@@ -21,13 +21,16 @@ Failure returns `GOVERNANCE_PERMISSION_BLOCKED` and initialization stops. After 
 
 - application source/project-documentation writes: denied;
 - project-local `.ai/**`: allowed through portable relative/absolute matching;
-- `question`: allowed;
+- `question`: allowed in interactive Desktop sessions;
 - governed delegation: Executor, both Reviewers and Final Reviewer;
 - read-only discovery: `Explore` and `Scout` allowed;
 - writable `General` is not enabled as a governance discovery worker;
 - skills: ask/authorize under `GOVERNED_SKILL_ROUTING`;
 - destructive shell/Git operations: denied or confirmation-gated;
-- push: denied.
+- push: denied;
+- ordinary discovery prefers native OpenCode tools (`read`/`list`/`glob`/`grep`/LSP) before shell.
+
+Interactive Desktop keeps `bash: "*": ask` with limited allow/deny overrides. External headless Architect runner executions apply `ARCHITECT_HEADLESS_PERMISSION_CONTRACT_V1` (deny-by-default temporary `OPENCODE_CONFIG_CONTENT` overlay). See [Architect Headless Permission Contract](architect-headless-permission-contract.md).
 
 Architect may persist `.ai/GOVERNANCE_MEMORY.md` only after Final Reviewer approves the exact reusable lesson.
 

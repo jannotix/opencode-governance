@@ -16,6 +16,7 @@ INVALID_PROFILE = ROOT / "tests" / "fixtures" / "routing" / "unresolved-variant.
 MANAGED_TOOLS = [
     "architect-attempt.ps1",
     "architect-attempt.sh",
+    "architect-headless-contract.py",
     "executor-attempt.ps1",
     "executor-attempt.sh",
     "context-intelligence.ps1",

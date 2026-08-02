@@ -1,6 +1,6 @@
 # Architect Runner Integration
 
-OpenCode Governance installs deterministic Architect runners (`architect-attempt.ps1|.sh`) with transactional failover, PowerShell 7 host checks, content-aware project-state integrity, routing validation, durable transaction journals and workflow-continuation gates. This document describes the current **3.7.2** surface.
+OpenCode Governance installs deterministic Architect runners (`architect-attempt.ps1|.sh`) with transactional failover, PowerShell 7 host checks, content-aware project-state integrity, routing validation, durable transaction journals, headless permission contracts and workflow-continuation gates. This document describes the current **3.7.3** surface.
 
 ## Scope
 
@@ -28,11 +28,12 @@ The runner is not used for `ai-workflow`, `ai-execute`, `ai-review` or `ai-relea
 
 ## Installed tools
 
-With routing and 3.7.2 capabilities enabled, the installation records fourteen managed tools, including:
+With routing and 3.7.3 capabilities enabled, the installation records fifteen managed tools, including:
 
 ```text
 opencode-governance-tools/architect-attempt.ps1
 opencode-governance-tools/architect-attempt.sh
+opencode-governance-tools/architect-headless-contract.py
 opencode-governance-tools/executor-attempt.ps1
 opencode-governance-tools/executor-attempt.sh
 opencode-governance-tools/context-intelligence.ps1
@@ -50,10 +51,10 @@ opencode-governance-tools/governance-pre-commit.py
 The routing manifest records:
 
 ```text
-governance_version: 3.7.2
-architect_runner_version: 3.7.2
-context_intelligence_version: 3.7.2
-workflow_continuation_version: 3.7.2
+governance_version: 3.7.3
+architect_runner_version: 3.7.3
+context_intelligence_version: 3.7.3
+workflow_continuation_version: 3.7.3
 ```
 
 Before replacing an existing routing installation, the wrapper validates the complete new profile. An invalid profile cannot remove the current manifest, aliases or managed tools. Every existing managed tool is copied into the timestamped installation backup before replacement.
@@ -200,6 +201,15 @@ TOOL_EXECUTION_ABORTED
 
 Matched from phrases such as `tool execution aborted`, `tool call aborted`, `process killed`, `terminated by signal`, or abnormal exit codes (`< 0` or `>= 128`). Profiles may list `TOOL_EXECUTION_ABORTED` under `settings.eligible_failures` to allow bounded failover after an abort; otherwise the failure is ineligible but `.ai/**` is still restored when the project fingerprint is unchanged.
 
+New in 3.7.3:
+
+```text
+ARCHITECT_PERMISSION_BLOCKED
+HEADLESS_PERMISSION_CONTRACT_VIOLATION
+```
+
+Matched from non-interactive permission auto-rejection (`permission requested`, `auto-rejecting`, `The user rejected permission`). This class is never eligible for model fallback, does not consume implementation/review cycles, rolls back `.ai/**` when safe, and requires a Governance correction. External children always receive temporary `OPENCODE_CONFIG_CONTENT` with `ARCHITECT_HEADLESS_PERMISSION_CONTRACT_V1` (deny-by-default bash, no blanket `--auto`). See [Architect Headless Permission Contract](architect-headless-permission-contract.md).
+
 ## Windows example
 
 ```powershell
@@ -224,7 +234,7 @@ pwsh -NoProfile -File `
 bash ./scripts/verify-routing.sh <config-dir>
 ```
 
-The routing verifier checks exact managed tool paths, installed files, Architect/Build/Plan policy markers, command entry gates (including pre-side-effect `/ai-resume` on 3.7.2), project-state fingerprint markers, cooldown validation, Context Intelligence hardening, workflow-continuation helpers, hidden-route consistency and the preserved Executor routing contract. PowerShell wrappers rely on terminating errors from PowerShell child scripts and never infer their outcome from a pre-existing native `$LASTEXITCODE` value.
+The routing verifier checks exact managed tool paths, installed files, Architect/Build/Plan policy markers, command entry gates (including pre-side-effect `/ai-resume` on 3.7.2+), headless permission markers on 3.7.3, project-state fingerprint markers, cooldown validation, Context Intelligence hardening, workflow-continuation helpers, hidden-route consistency and the preserved Executor routing contract. PowerShell wrappers rely on terminating errors from PowerShell child scripts and never infer their outcome from a pre-existing native `$LASTEXITCODE` value.
 
 ## Distinguishing workspace errors
 
