@@ -40,7 +40,7 @@ if version in context_versions:
     if version in {'3.8.0','4.0.0','4.0.1'}:
         expected += [tools/name for name in ['governance-semantic.py','opencode-compatibility.py','governance-metrics.py','role-report-ingest.py']]
         if version == '4.0.1':
-            expected += [tools/'install-effect-plugin.py']
+            expected += [tools/'install-effect-plugin.py', tools/'governed-role-launch.py']
     if version in capability_versions:
         expected += [tools/name for name in ['governance-authority.py','governance-memory.py','governance-evidence.py','governance-simulation.py','governance-pre-commit.py']]
 else:

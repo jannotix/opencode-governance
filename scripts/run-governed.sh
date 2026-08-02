@@ -779,20 +779,40 @@ try:
         env['OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE']='1'
         env['OPENCODE_GOVERNANCE_HEADLESS_CONTRACT']=HEADLESS_CONTRACT
         env['OPENCODE_CONFIG_CONTENT']=payload
-        # GOVERNED_ROLE_LAUNCH_CONTRACT_V1 — runner-owned role context (not model output).
+        # GOVERNED_ROLE_LAUNCH_CONTRACT_V1 — fail closed if effect plugin missing/hash mismatch.
+        tools_dir=pathlib.Path(os.environ.get('OPENCODE_GOVERNANCE_TOOLS_DIR') or (config/'opencode-governance-tools'))
+        launch_helper=tools_dir/'governed-role-launch.py'
+        if not launch_helper.is_file():
+            raise RuntimeError('EFFECT_PLUGIN_NOT_ACTIVE: governed-role-launch.py missing')
+        pre=subprocess.run([sys.executable,str(launch_helper),'preflight-plugin','--config-dir',str(config)],capture_output=True,text=True)
+        if pre.returncode!=0:
+            raise RuntimeError(f'EFFECT_PLUGIN_NOT_ACTIVE: {(pre.stderr or pre.stdout).strip()}')
+        repo_for_env=str(repository) if repository is not None else str(project)
+        effect_policy=config/'plugins'/'opencode-governance-effect-enforcement'/'role-effect-policy.json'
+        if not effect_policy.is_file():
+            raise RuntimeError('EFFECT_PLUGIN_NOT_ACTIVE: effect policy missing')
+        effect_sha=hashlib.sha256(effect_policy.read_bytes()).hexdigest()
+        launch_path=logs/f'governed-role-launch-architect-{attempt}.json'
+        wcmd=[sys.executable,str(launch_helper),'write','--out',str(launch_path),'--role','architect','--expected-agent','architect',
+              '--workspace',str(project),'--repository',repo_for_env,'--phase',a.command,
+              '--effect-policy',str(effect_policy),'--effect-policy-sha256',effect_sha,
+              '--config-dir',str(config),'--require-plugin']
+        if a.task_id: wcmd+=['--task-id',str(a.task_id)]
+        if policy_hash: wcmd+=['--permission-policy-sha256',str(policy_hash)]
+        wr=subprocess.run(wcmd,capture_output=True,text=True)
+        if wr.returncode!=0:
+            raise RuntimeError(f'GOVERNED_ROLE_LAUNCH_REQUIRED: {(wr.stderr or wr.stdout).strip()}')
         env['OPENCODE_GOVERNANCE_EFFECT_ENFORCEMENT_ACTIVE']='1'
         env['OPENCODE_GOVERNANCE_ROLE']='architect'
         env['OPENCODE_GOVERNANCE_EXPECTED_AGENT']='architect'
         env['OPENCODE_GOVERNANCE_PHASE']=a.command
         env['OPENCODE_GOVERNANCE_WORKSPACE']=str(project)
-        repo_for_env=str(repository) if repository is not None else str(project)
         env['OPENCODE_GOVERNANCE_REPOSITORY']=repo_for_env
+        env['OPENCODE_GOVERNANCE_LAUNCH_FILE']=str(launch_path)
+        env['OPENCODE_GOVERNANCE_EFFECT_POLICY']=str(effect_policy)
+        env['OPENCODE_GOVERNANCE_EFFECT_POLICY_SHA256']=effect_sha
         if a.task_id: env['OPENCODE_GOVERNANCE_TASK_ID']=str(a.task_id)
         if policy_hash: env['OPENCODE_GOVERNANCE_PERMISSION_POLICY_SHA256']=str(policy_hash)
-        effect_policy=config/'plugins'/'opencode-governance-effect-enforcement'/'role-effect-policy.json'
-        if effect_policy.is_file():
-            env['OPENCODE_GOVERNANCE_EFFECT_POLICY']=str(effect_policy)
-            env['OPENCODE_GOVERNANCE_EFFECT_POLICY_SHA256']=hashlib.sha256(effect_policy.read_bytes()).hexdigest()
         timed=False
         stdout_text=''; stderr_text=''
         try:

@@ -44,6 +44,7 @@ SEMANTIC_TOOL_NAMES = (
     "governance-metrics.py",
     "role-report-ingest.py",
     "install-effect-plugin.py",
+    "governed-role-launch.py",
 )
 EFFECT_PLUGIN_DIR_NAME = "opencode-governance-effect-enforcement"
 AGENT_NAMES = (

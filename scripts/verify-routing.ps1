@@ -42,7 +42,10 @@ if($Version-in$ContextVersions){
             (Join-Path $ToolsDir 'role-report-ingest.py')
         )
         if($Version-eq'4.0.1'){
-            $ExpectedTools+=@((Join-Path $ToolsDir 'install-effect-plugin.py'))
+            $ExpectedTools+=@(
+                (Join-Path $ToolsDir 'install-effect-plugin.py'),
+                (Join-Path $ToolsDir 'governed-role-launch.py')
+            )
         }
     }
     if($Version-in@('3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0','4.0.1')){

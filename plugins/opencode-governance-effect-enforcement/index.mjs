@@ -95,13 +95,76 @@ function sha256File(p) {
   return h.digest("hex");
 }
 
-/** Authoritative role: only OPENCODE_GOVERNANCE_ROLE (not OPENCODE_AGENT). */
+/** Authoritative role: OPENCODE_GOVERNANCE_ROLE only (not OPENCODE_AGENT). */
 function resolveRole() {
   return String(process.env.OPENCODE_GOVERNANCE_ROLE || "").trim();
 }
 
+/** Optional host agent name from tool hook input (not model-supplied env). */
+function resolveAgentHint(input) {
+  if (!input || typeof input !== "object") return "";
+  return String(
+    input.agent ||
+      input.agentName ||
+      (input.metadata && input.metadata.agent) ||
+      ""
+  ).trim();
+}
+
 function isActive() {
   return String(process.env.OPENCODE_GOVERNANCE_EFFECT_ENFORCEMENT_ACTIVE || "") === "1";
+}
+
+/**
+ * GOVERNED_ROLE_LAUNCH_CONTRACT_V1 — optional runner-owned launch file.
+ * When present, values override process env for role/roots (not model-writable paths).
+ */
+function loadLaunch() {
+  const p = process.env.OPENCODE_GOVERNANCE_LAUNCH_FILE || "";
+  if (!p) return null;
+  try {
+    if (!fs.existsSync(p)) {
+      throw new Error(`GOVERNED_ROLE_LAUNCH_REQUIRED: launch file missing: ${p}`);
+    }
+    const st = fs.lstatSync(p);
+    if (st.isSymbolicLink()) {
+      throw new Error("GOVERNED_ROLE_LAUNCH_REQUIRED: launch file is symlink");
+    }
+    const body = JSON.parse(fs.readFileSync(p, "utf8"));
+    if (body.schema !== "GOVERNED_ROLE_LAUNCH_CONTRACT_V1" && body.contract !== "GOVERNED_ROLE_LAUNCH_CONTRACT_V1") {
+      throw new Error(`GOVERNED_ROLE_LAUNCH_REQUIRED: invalid launch schema ${body.schema || body.contract}`);
+    }
+    return body;
+  } catch (e) {
+    if (String(e.message || e).includes("GOVERNED_ROLE_LAUNCH")) throw e;
+    throw new Error(`GOVERNED_ROLE_LAUNCH_REQUIRED: ${e.message || e}`);
+  }
+}
+
+function applyLaunchToEnv(launch) {
+  if (!launch) return;
+  const map = {
+    role: "OPENCODE_GOVERNANCE_ROLE",
+    phase: "OPENCODE_GOVERNANCE_PHASE",
+    task_id: "OPENCODE_GOVERNANCE_TASK_ID",
+    workspace: "OPENCODE_GOVERNANCE_WORKSPACE",
+    repository: "OPENCODE_GOVERNANCE_REPOSITORY",
+    execution_root: "OPENCODE_GOVERNANCE_EXECUTION_ROOT",
+    packet_sha256: "OPENCODE_GOVERNANCE_PACKET_SHA256",
+    candidate_identity: "OPENCODE_GOVERNANCE_CANDIDATE_IDENTITY",
+    permission_policy_sha256: "OPENCODE_GOVERNANCE_PERMISSION_POLICY_SHA256",
+    effect_policy_sha256: "OPENCODE_GOVERNANCE_EFFECT_POLICY_SHA256",
+    effect_policy: "OPENCODE_GOVERNANCE_EFFECT_POLICY",
+    expected_agent: "OPENCODE_GOVERNANCE_EXPECTED_AGENT",
+  };
+  for (const [k, envName] of Object.entries(map)) {
+    if (launch[k] != null && String(launch[k]).length) {
+      process.env[envName] = String(launch[k]);
+    }
+  }
+  if (launch.active != null) {
+    process.env.OPENCODE_GOVERNANCE_EFFECT_ENFORCEMENT_ACTIVE = String(launch.active) === "0" ? "0" : "1";
+  }
 }
 
 function looksLikeSecret(filePath) {
@@ -394,18 +457,30 @@ function buildRoots() {
 }
 
 export function enforce(policy, input, output) {
-  if (!isActive()) {
+  if (!isActive() && !process.env.OPENCODE_GOVERNANCE_LAUNCH_FILE) {
     // Ungoverned OpenCode sessions: plugin is inert.
+    return { status: "INACTIVE" };
+  }
+  // Runner-owned launch file overrides env (fail closed if unreadable).
+  const launch = loadLaunch();
+  if (launch) {
+    applyLaunchToEnv(launch);
+  }
+  if (!isActive()) {
     return { status: "INACTIVE" };
   }
   const role = resolveRole();
   if (!role) {
     throw new Error("GOVERNED_ROLE_LAUNCH_REQUIRED: OPENCODE_GOVERNANCE_ROLE missing");
   }
-  // Optional agent agreement: if OPENCODE_GOVERNANCE_EXPECTED_AGENT set, must match role mapping.
+  // Optional agent agreement: EXPECTED_AGENT or host agent hint must match role when present.
   const expectedAgent = String(process.env.OPENCODE_GOVERNANCE_EXPECTED_AGENT || "").trim();
+  const agentHint = resolveAgentHint(input);
   if (expectedAgent && expectedAgent !== role) {
     throw new Error(`GOVERNED_ROLE_LAUNCH_REQUIRED: role/agent mismatch role=${role} agent=${expectedAgent}`);
+  }
+  if (agentHint && agentHint !== role) {
+    throw new Error(`GOVERNED_ROLE_LAUNCH_REQUIRED: role/agent mismatch role=${role} agent=${agentHint}`);
   }
 
   const rolePolicy = policy.roles[role];
@@ -472,7 +547,8 @@ export function enforce(policy, input, output) {
       throw new Error(`EFFECT_ENFORCEMENT_WRITE_OUTSIDE_EXECUTION_ROOT: ${filePath} (${c.reason})`);
     }
     const n = normalizeSep(c.abs);
-    if (n.includes("/.ai/") || n.endsWith("/.ai") || n.includes("/.git/") || n.endsWith("/.git")) {
+    const nl = process.platform === "win32" ? n.toLowerCase() : n;
+    if (nl.includes("/.ai/") || nl.endsWith("/.ai") || nl.includes("/.git/") || nl.endsWith("/.git")) {
       throw new Error(`EFFECT_ENFORCEMENT_FORBIDDEN_ROOT: ${filePath}`);
     }
   }

@@ -67,7 +67,19 @@ OPENCODE_GOVERNANCE_EFFECT_POLICY_SHA256
 OPENCODE_GOVERNANCE_EFFECT_POLICY
 ```
 
-Values are runner-owned, not model output. Only `OPENCODE_GOVERNANCE_ROLE` is authoritative (not `OPENCODE_AGENT`). When `ACTIVE≠1`, the plugin is **inert** so normal OpenCode use is not blocked. Governed agents without launch context fail closed with `GOVERNED_ROLE_LAUNCH_REQUIRED`.
+Values are runner-owned, not model output. Only `OPENCODE_GOVERNANCE_ROLE` is authoritative (not `OPENCODE_AGENT`).
+
+Optional runner-owned launch file:
+
+```text
+OPENCODE_GOVERNANCE_LAUNCH_FILE=<path to GOVERNED_ROLE_LAUNCH_CONTRACT_V1 JSON>
+```
+
+Architect runners (`run-governed`) **preflight** the installed plugin (entry + ownership hashes) and write a launch file before spawn; missing plugin → `EFFECT_PLUGIN_NOT_ACTIVE`.
+
+Executor `prepare` writes `governed-role-launch-executor.json` with `role=executor` and exact `execution_root`. Delegate OpenCode sessions for Executor **must** set `OPENCODE_GOVERNANCE_LAUNCH_FILE` (or the equivalent env keys) to that path.
+
+When `ACTIVE≠1` and no launch file is set, the plugin is **inert** so normal OpenCode use is not blocked. When `ACTIVE=1` (or a launch file is present), missing role fails closed with `GOVERNED_ROLE_LAUNCH_REQUIRED`.
 
 ## Shell and path policy
 

@@ -875,25 +875,45 @@ function Invoke-Route([object]$Route,[int]$Attempt,[string]$Logs){
   $info.Environment['OPENCODE_GOVERNANCE_ARCHITECT_RUNNER_ACTIVE'] = '1'
   $info.Environment['OPENCODE_GOVERNANCE_HEADLESS_CONTRACT'] = $script:HeadlessContractVersion
   $info.Environment['OPENCODE_CONFIG_CONTENT'] = $overlay.json
-  # GOVERNED_ROLE_LAUNCH_CONTRACT_V1 — runner-owned role context (not model output).
+  # GOVERNED_ROLE_LAUNCH_CONTRACT_V1 — fail closed if effect plugin is not installed/hash-bound.
+  $launchHelper = Join-Path $ConfigDir 'opencode-governance-tools\governed-role-launch.py'
+  if(-not (Test-Path -LiteralPath $launchHelper -PathType Leaf)){
+    $launchHelper = Join-Path $PSScriptRoot 'governed-role-launch.py'
+  }
+  if(-not (Test-Path -LiteralPath $launchHelper -PathType Leaf)){
+    throw 'EFFECT_PLUGIN_NOT_ACTIVE: governed-role-launch.py missing (install 4.0.1 capabilities).'
+  }
+  $pre = & python $launchHelper preflight-plugin --config-dir $ConfigDir 2>&1
+  if($LASTEXITCODE -ne 0){ throw "EFFECT_PLUGIN_NOT_ACTIVE: $pre" }
+  $repoRoot = if($script:RepositoryDir){ [string]$script:RepositoryDir } elseif($RepositoryDir){ [string]$RepositoryDir } else { [string]$ProjectDir }
+  $effectPolicy = Join-Path $ConfigDir 'plugins\opencode-governance-effect-enforcement\role-effect-policy.json'
+  $effectSha = ''
+  if(Test-Path -LiteralPath $effectPolicy){
+    $effectSha = [System.BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([IO.File]::ReadAllBytes($effectPolicy))).Replace('-','').ToLowerInvariant()
+  } else {
+    throw 'EFFECT_PLUGIN_NOT_ACTIVE: effect policy missing under plugins/'
+  }
+  $launchPath = Join-Path $Logs "governed-role-launch-architect-$Attempt.json"
+  $writeArgs = @(
+    $launchHelper,'write','--out',$launchPath,'--role','architect','--expected-agent','architect',
+    '--workspace',[string]$ProjectDir,'--repository',$repoRoot,'--phase',[string]$Command,
+    '--effect-policy',$effectPolicy,'--effect-policy-sha256',$effectSha,'--config-dir',$ConfigDir,'--require-plugin'
+  )
+  if($TaskId){ $writeArgs += @('--task-id',[string]$TaskId) }
+  if($script:HeadlessPolicyHash){ $writeArgs += @('--permission-policy-sha256',[string]$script:HeadlessPolicyHash) }
+  $written = & python @writeArgs 2>&1
+  if($LASTEXITCODE -ne 0){ throw "GOVERNED_ROLE_LAUNCH_REQUIRED: $written" }
   $info.Environment['OPENCODE_GOVERNANCE_EFFECT_ENFORCEMENT_ACTIVE'] = '1'
   $info.Environment['OPENCODE_GOVERNANCE_ROLE'] = 'architect'
   $info.Environment['OPENCODE_GOVERNANCE_EXPECTED_AGENT'] = 'architect'
   $info.Environment['OPENCODE_GOVERNANCE_PHASE'] = [string]$Command
   $info.Environment['OPENCODE_GOVERNANCE_WORKSPACE'] = [string]$ProjectDir
-  if($script:RepositoryDir){ $info.Environment['OPENCODE_GOVERNANCE_REPOSITORY'] = [string]$script:RepositoryDir }
-  elseif($RepositoryDir){ $info.Environment['OPENCODE_GOVERNANCE_REPOSITORY'] = [string]$RepositoryDir }
-  else { $info.Environment['OPENCODE_GOVERNANCE_REPOSITORY'] = [string]$ProjectDir }
+  $info.Environment['OPENCODE_GOVERNANCE_REPOSITORY'] = $repoRoot
+  $info.Environment['OPENCODE_GOVERNANCE_LAUNCH_FILE'] = $launchPath
+  $info.Environment['OPENCODE_GOVERNANCE_EFFECT_POLICY'] = $effectPolicy
+  $info.Environment['OPENCODE_GOVERNANCE_EFFECT_POLICY_SHA256'] = $effectSha
   if($TaskId){ $info.Environment['OPENCODE_GOVERNANCE_TASK_ID'] = [string]$TaskId }
   if($script:HeadlessPolicyHash){ $info.Environment['OPENCODE_GOVERNANCE_PERMISSION_POLICY_SHA256'] = [string]$script:HeadlessPolicyHash }
-  $effectPolicy = Join-Path $ConfigDir 'plugins\opencode-governance-effect-enforcement\role-effect-policy.json'
-  if(Test-Path -LiteralPath $effectPolicy){
-    $info.Environment['OPENCODE_GOVERNANCE_EFFECT_POLICY'] = $effectPolicy
-    try{
-      $sha = [System.BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([IO.File]::ReadAllBytes($effectPolicy))).Replace('-','').ToLowerInvariant()
-      $info.Environment['OPENCODE_GOVERNANCE_EFFECT_POLICY_SHA256'] = $sha
-    }catch{}
-  }
   # Never place the governed prompt on argv, in environment variables, or via shell interpolation.
   # Never pass blanket --auto. Deny-by-default bash eliminates ask; residual asks fail closed.
   foreach($v in @($Launch.prefix)){ $null = $info.ArgumentList.Add([string]$v) }
