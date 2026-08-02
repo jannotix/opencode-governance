@@ -1,8 +1,14 @@
 # Workflow
 
+Canonical machine-readable contract: [`governance-spec/governance-contract.json`](../governance-spec/governance-contract.json).
+
+Generated tables: [`docs/generated/semantic-contract-tables.md`](generated/semantic-contract-tables.md).
+
+Gate schema: `SEMANTIC_WORKFLOW_STATE_MACHINE_V1` (compatibility: `WORKFLOW_CONTINUATION_GATE_V1`).
+
 ## Canonical lifecycle
 
-Phase names used in `RUN_STATE.json` and `WORKFLOW_CONTINUATION_GATE_V1`:
+Phase names used in `RUN_STATE.json` and the semantic continuation gate:
 
 ```text
 BASELINE_VALIDATED

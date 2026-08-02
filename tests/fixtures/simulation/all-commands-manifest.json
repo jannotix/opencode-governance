@@ -1,0 +1,95 @@
+{
+  "DO_NOT_EDIT_MANUALLY": true,
+  "GENERATED_FROM": "governance-spec/governance-contract.json",
+  "GENERATOR_VERSION": "1.0.0",
+  "SOURCE_SPEC_SHA256": "76e941a91b0df9b8a3c4ed5fcc2da0d5782e513b30ef447b9ca82f51549ea5bc",
+  "required_commands": [
+    "ai-init",
+    "ai-audit",
+    "ai-docs",
+    "ai-discover",
+    "ai-plan",
+    "ai-execute",
+    "ai-review",
+    "ai-workflow",
+    "ai-status",
+    "ai-resume",
+    "ai-metrics",
+    "ai-release"
+  ],
+  "scenarios": [
+    {
+      "command": "ai-init",
+      "fixture": "tests/fixtures/simulation/ai-init.json",
+      "forbids_external_action": true,
+      "required_terminal_class": "SUCCESS"
+    },
+    {
+      "command": "ai-audit",
+      "fixture": "tests/fixtures/simulation/ai-audit.json",
+      "forbids_external_action": true,
+      "required_terminal_class": "SUCCESS"
+    },
+    {
+      "command": "ai-docs",
+      "fixture": "tests/fixtures/simulation/ai-docs.json",
+      "forbids_external_action": true,
+      "required_terminal_class": "SUCCESS"
+    },
+    {
+      "command": "ai-discover",
+      "fixture": "tests/fixtures/simulation/ai-discover.json",
+      "forbids_external_action": true,
+      "required_terminal_class": "NON_TERMINAL"
+    },
+    {
+      "command": "ai-plan",
+      "fixture": "tests/fixtures/simulation/ai-plan.json",
+      "forbids_external_action": true,
+      "required_terminal_class": "NON_TERMINAL"
+    },
+    {
+      "command": "ai-execute",
+      "fixture": "tests/fixtures/simulation/ai-execute.json",
+      "forbids_external_action": true,
+      "required_terminal_class": "NON_TERMINAL"
+    },
+    {
+      "command": "ai-review",
+      "fixture": "tests/fixtures/simulation/ai-review.json",
+      "forbids_external_action": true,
+      "required_terminal_class": "NON_TERMINAL"
+    },
+    {
+      "command": "ai-workflow",
+      "fixture": "tests/fixtures/simulation/ai-workflow.json",
+      "forbids_external_action": true,
+      "required_terminal_class": "SUCCESS"
+    },
+    {
+      "command": "ai-status",
+      "fixture": "tests/fixtures/simulation/ai-status.json",
+      "forbids_external_action": true,
+      "required_terminal_class": "SUCCESS"
+    },
+    {
+      "command": "ai-resume",
+      "fixture": "tests/fixtures/simulation/ai-resume.json",
+      "forbids_external_action": true,
+      "required_terminal_class": "SUCCESS"
+    },
+    {
+      "command": "ai-metrics",
+      "fixture": "tests/fixtures/simulation/ai-metrics.json",
+      "forbids_external_action": true,
+      "required_terminal_class": "SUCCESS"
+    },
+    {
+      "command": "ai-release",
+      "fixture": "tests/fixtures/simulation/ai-release.json",
+      "forbids_external_action": true,
+      "required_terminal_class": "SUCCESS"
+    }
+  ],
+  "schema": "ALL_COMMANDS_SIMULATION_CONTRACT_V1"
+}

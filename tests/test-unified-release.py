@@ -34,7 +34,7 @@ def main() -> None:
         invoke(INSTALL, "--config-dir", config, "--routing-config", VALID_PROFILE)
         manifest_path = config / "opencode-governance-routing.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
-        assert manifest["governance_version"] == "3.7.7"
+        assert manifest["governance_version"] == "3.8.0"
         assert len(manifest["managed_tools"]) == 16
         assert not (config / "opencode-governance-runtime.json").exists()
         before_settings = manifest["settings"]

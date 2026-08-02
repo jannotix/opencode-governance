@@ -14,7 +14,7 @@ import stat
 import sys
 from typing import Any
 
-VERSION = "3.7.7"
+VERSION = "3.8.0"
 BASE_VERSION = "3.4.4"
 CAPABILITY_TOOL_NAMES = (
     "governance-authority.py",
@@ -37,6 +37,12 @@ BASE_TOOL_NAMES = (
 )
 # Product 3.7.7+ managed recovery helper (inserted after headless contract in expected_tools).
 RECOVERY_TOOL_NAME = "legacy-architect-orphan-recovery.py"
+# Product 3.8.0+ semantic governance core tools.
+SEMANTIC_TOOL_NAMES = (
+    "governance-semantic.py",
+    "opencode-compatibility.py",
+    "governance-metrics.py",
+)
 AGENT_NAMES = (
     "architect",
     "build",
@@ -164,7 +170,17 @@ def expected_tools(config: pathlib.Path) -> list[pathlib.Path]:
             inserted = True
     if not inserted:
         out.append(tools / RECOVERY_TOOL_NAME)
-    return [*out, *capability_tools(config)]
+    # 3.8.0 semantic tools after workflow-continuation.py
+    semantic = [tools / name for name in SEMANTIC_TOOL_NAMES]
+    # Place semantic tools after workflow-continuation.py within the expanded list
+    final: list[pathlib.Path] = []
+    for path in out:
+        final.append(path)
+        if path.name == "workflow-continuation.py":
+            final.extend(semantic)
+    if not any(p.name == SEMANTIC_TOOL_NAMES[0] for p in final):
+        final.extend(semantic)
+    return [*final, *capability_tools(config)]
 
 
 def section_key(path: pathlib.Path, config: pathlib.Path, heading: str) -> str:
@@ -339,11 +355,26 @@ def install(source: pathlib.Path, config: pathlib.Path) -> None:
             fail("CAPABILITY_SOURCE_MISSING", str(path))
     if not recovery_source.is_file():
         fail("CAPABILITY_SOURCE_MISSING", RECOVERY_TOOL_NAME)
+    semantic_sources = []
+    for name in SEMANTIC_TOOL_NAMES:
+        path = source / name
+        if not path.is_file():
+            path = pathlib.Path(__file__).resolve().parent / name
+        if not path.is_file():
+            fail("CAPABILITY_SOURCE_MISSING", name)
+        semantic_sources.append(path)
+    gen_source = source / "generated"
+    if not (gen_source / "governance_contract_data.py").is_file():
+        gen_source = pathlib.Path(__file__).resolve().parent / "generated"
+    if not (gen_source / "governance_contract_data.py").is_file():
+        fail("CAPABILITY_SOURCE_MISSING", "generated/governance_contract_data.py")
     destinations = capability_tools(config)
     recovery_dest = resolved["tools"] / RECOVERY_TOOL_NAME
+    semantic_dests = [resolved["tools"] / name for name in SEMANTIC_TOOL_NAMES]
+    gen_dest = resolved["tools"] / "generated"
     section_files = [config / "agents" / f"{name}.md" for name in AGENT_NAMES]
     section_files += [config / "commands" / f"{name}.md" for name in ("ai-review", "ai-workflow", "ai-resume", "ai-release", "ai-status", "ai-metrics")]
-    affected = [*destinations, recovery_dest, *section_files, resolved["manifest"], resolved["legacy_manifest"]]
+    affected = [*destinations, recovery_dest, *semantic_dests, *section_files, resolved["manifest"], resolved["legacy_manifest"]]
     backup_dir, existed = backup(config, affected)
     try:
         for source_tool, destination in zip(source_tools, destinations):
@@ -351,6 +382,12 @@ def install(source: pathlib.Path, config: pathlib.Path) -> None:
             destination.chmod(destination.stat().st_mode | stat.S_IXUSR)
         shutil.copy2(recovery_source, recovery_dest)
         recovery_dest.chmod(recovery_dest.stat().st_mode | stat.S_IXUSR)
+        for src, dest in zip(semantic_sources, semantic_dests):
+            shutil.copy2(src, dest)
+            dest.chmod(dest.stat().st_mode | stat.S_IXUSR)
+        if gen_dest.exists():
+            shutil.rmtree(gen_dest)
+        shutil.copytree(gen_source, gen_dest)
         tool_map = {
             "authority": destinations[0],
             "memory": destinations[1],

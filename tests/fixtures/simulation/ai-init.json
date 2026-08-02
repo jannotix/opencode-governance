@@ -1,0 +1,16 @@
+{
+  "name": "ai-init-protocol-contract",
+  "request": "Exercise the ai-init command contract locally without external actions.",
+  "covers_commands": [
+    "ai-init"
+  ],
+  "steps": [
+    {
+      "assistant_text": "LOCAL_COMMITTED",
+      "command": "ai-init"
+    }
+  ],
+  "terminal": "LOCAL_COMMITTED",
+  "forbids_external_action": true,
+  "schema": "ALL_COMMANDS_SIMULATION_CONTRACT_V1"
+}

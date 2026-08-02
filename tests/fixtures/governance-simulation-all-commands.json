@@ -1,5 +1,5 @@
 {
-  "name": "status-terminal-contract",
+  "name": "status-terminal-protocol-only",
   "request": "Report governance status and end at LOCAL_COMMITTED without external actions.",
   "covers_commands": [
     "ai-status"
@@ -9,5 +9,7 @@
       "assistant_text": "LOCAL_COMMITTED"
     }
   ],
-  "terminal": "LOCAL_COMMITTED"
+  "terminal": "LOCAL_COMMITTED",
+  "coverage_claim": "PROTOCOL_ONLY_PARTIAL",
+  "note": "Not a complete twelve-command suite; see tests/fixtures/simulation/all-commands-manifest.json"
 }

@@ -5,6 +5,19 @@ Dates use `YYYY-MM-DD`. Older micro-releases are summarized; see git history for
 ## Unreleased
 
 
+## 3.8.0 - 2026-08-02
+
+- Semantic governance core: canonical `governance-spec/governance-contract.json` and deterministic generator (`scripts/generate-governance-contract.py`).
+- `SEMANTIC_WORKFLOW_STATE_MACHINE_V1` replaces shape-only continuation checks with exact transition validation (command, postcondition, artifacts, receipts, owner decisions, attempt consumption, lifecycle mode).
+- Single semantic authority: `workflow-continuation.py` and `governance-authority.py` consume the same generated contract module (no independent handwritten phase/command lists).
+- Complete positive transition matrix tests plus required negatives; generator freshness gate.
+- Honest twelve-command simulation contract and fixtures; partial fixtures may no longer claim complete coverage.
+- OpenCode runtime compatibility probe (`OPENCODE_RUNTIME_COMPATIBILITY_CONTRACT_V1`) with fail-closed missing/unparsable/incompatible classes.
+- Windows Executor transaction scenario manifest and hardening parity hook for `tests/test-executor-transaction.ps1`.
+- Local opt-in governance tax metrics foundation (no secrets, no external telemetry, never approval authority).
+- Assurance level declarations (`LOCAL_INTEGRITY`, `SEMANTICALLY_ENFORCED`; no false external/signed claims).
+- Neutral FSL-1.1-MIT adoption note (no automatic relicensing).
+
 ## 3.7.7 - 2026-08-02
 
 - Compatibility and evidence-integrity patch: `LEGACY_FORENSIC_BUNDLE_V1_ADAPTER` so evidence-bound recovery can consume the original Windows PowerShell forensic archive format produced before the 3.7.6 canonical schema existed.

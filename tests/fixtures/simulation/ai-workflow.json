@@ -1,0 +1,16 @@
+{
+  "name": "ai-workflow-protocol-contract",
+  "request": "Exercise the ai-workflow command contract locally without external actions.",
+  "covers_commands": [
+    "ai-workflow"
+  ],
+  "steps": [
+    {
+      "assistant_text": "LOCAL_COMMITTED",
+      "command": "ai-workflow"
+    }
+  ],
+  "terminal": "LOCAL_COMMITTED",
+  "forbids_external_action": true,
+  "schema": "ALL_COMMANDS_SIMULATION_CONTRACT_V1"
+}
