@@ -1,66 +1,89 @@
 # OpenCode Governance
 
-Provider- and model-agnostic product-lifecycle governance for [OpenCode](https://github.com/anomalyco/opencode) projects.
+**Deterministic product-lifecycle governance for [OpenCode](https://github.com/anomalyco/opencode).**
+Provider- and model-agnostic. Fail-closed by design.
 
 > Community project. Not affiliated with the OpenCode team.
 
-Current release: **4.1.0 — Hardened review orchestration and command-broker containment** (process-per-role + real OpenCode hook evidence).
+---
 
-Installs seven specialized agents, twelve `/ai-*` commands, deterministic tooling and fail-closed contracts so planning, implementation, validation and review stay bound to approved requirements and current repository evidence.
+## Why
 
-> **Scope of guarantees.** Enforcement is **logical**, not an OS-level sandbox: it relies on path containment, hash binding, effect-policy allow/deny lists and semantic state-machine contracts enforced inside the OpenCode plugin and Python tooling. It is not an external attestation, a process sandbox, or a capability-bound kernel boundary. Treat the `LOCAL_INTEGRITY` / `SEMANTIC_STATE_MACHINE_ENFORCED` / `EFFECT_POLICY_EXPERIMENTAL` assurance declarations in `role-effect-policy.json` as the authoritative statement of what is and is not guaranteed.
+AI coding agents are fast, but they operate without guardrails: they write source
+without independent review, lose track of approved requirements, drift from the
+frozen target, and skip verification when it is inconvenient. **OpenCode
+Governance** turns an unconstrained agent into a governed engineering process
+where every side effect is bound to approved evidence.
 
-## Requirements
+| Without governance | With OpenCode Governance |
+|---|---|
+| Agent writes source directly | Only `executor` writes source, inside an isolated worktree |
+| No independent review | Two independent reviewers + Final Reviewer adjudication |
+| Requirements drift silently | Requirement Provenance blocks execution when the trail is broken |
+| Failed partial output becomes authoritative | Failed output is rejected; the role restarts from the same packet |
+| Model claims outrank evidence | Primary repository evidence always wins |
+| No external-action boundary | Push, merge, deploy and publish require explicit owner authorization |
+| Handoff leaks on the command line | Prompt transported over stdin (`argv_prompt_bytes=0`) |
 
-- OpenCode
-- Git
-- Python 3
-- PowerShell 7+ on Windows
+## What it gives you
 
-Provider IDs, credentials and personal routing preferences stay local and untracked.
+- **Seven specialized agents** — Architect, Build, Plan, Executor, Implementation
+  Reviewer, Architecture Reviewer, Final Reviewer — each with a strict write
+  authority and an effect policy that denies tools and paths outside its scope.
+- **Twelve `/ai-*` commands** that enforce a deterministic lifecycle from
+  baseline validation through release.
+- **Pre-side-effect READY gate** — no tool runs before the plugin has proven it
+  loaded correctly and the host has acknowledged it.
+- **Executor command brokerage** — explicit allow/deny classification of every
+  shell command; destructive operations (rm, git push, npm install, interpreters)
+  fail closed.
+- **Transactional report commit** — staged journal with a single COMMIT marker;
+  a crash never leaves a partial authoritative state.
+- **Review Chain V4 attestation** — live-revalidates every receipt (ingestion,
+  route, launch, process, handshake) before the chain passes.
+- **Model failover** with reviewer independence — implementation and
+  architecture reviewers must use distinct model families.
 
-## Install
+## Quickstart
 
-### Windows
+```bash
+git clone https://github.com/jannotix/opencode-governance.git
+cd opencode-governance
+export OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+
+bash ./scripts/install.sh \
+  --config-dir "$OPENCODE_CONFIG_DIR" \
+  --routing-config "examples/routing/continuous-coding.template.json"
+```
+
+Windows:
 
 ```powershell
 $env:OPENCODE_CONFIG_DIR = "$env:USERPROFILE\.config\opencode"
 
 pwsh -NoProfile -File .\scripts\install.ps1 `
   -ConfigDir $env:OPENCODE_CONFIG_DIR `
-  -RoutingConfigPath "C:\path\to\local-routing-profile.json" `
+  -RoutingConfigPath "examples\routing\continuous-coding.template.json" `
   -NonInteractive
 ```
 
-### Linux and macOS
-
-```bash
-export OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
-
-bash ./scripts/install.sh \
-  --config-dir "$OPENCODE_CONFIG_DIR" \
-  --routing-config "/path/to/local-routing-profile.json"
-```
-
-The installer takes a full pre-install snapshot and rolls back on failure. See `examples/routing/continuous-coding.template.json` for a valid profile shape (resolve `highest_supported` variants locally before install).
-
-## Verify
-
-### Windows
-
-```powershell
-pwsh -NoProfile -File .\scripts\verify.ps1 -ConfigDir $env:OPENCODE_CONFIG_DIR
-pwsh -NoProfile -File .\scripts\verify-routing.ps1 -ConfigDir $env:OPENCODE_CONFIG_DIR
-python .\scripts\governance-capabilities.py verify --config-dir $env:OPENCODE_CONFIG_DIR
-```
-
-### Linux and macOS
+Verify:
 
 ```bash
 bash ./scripts/verify.sh "$OPENCODE_CONFIG_DIR"
 bash ./scripts/verify-routing.sh "$OPENCODE_CONFIG_DIR"
-python3 ./scripts/governance-capabilities.py verify --config-dir "$OPENCODE_CONFIG_DIR"
 ```
+
+Provider IDs, credentials and personal routing preferences stay local and
+untracked. The installer takes a full pre-install snapshot and rolls back on
+failure.
+
+## Requirements
+
+- OpenCode
+- Git
+- Python 3.9+
+- PowerShell 7+ on Windows
 
 ## Agents
 
@@ -69,10 +92,13 @@ python3 ./scripts/governance-capabilities.py verify --config-dir "$OPENCODE_CONF
 | `architect` | Intake, discovery, planning, orchestration | `.ai/**` only |
 | `build` | Full governed lifecycle entry | `.ai/**` only |
 | `plan` | Planning only | `.ai/**` only |
-| `executor` | Implements the approved packet | Application source and approved docs |
+| `executor` | Implements the approved packet | Application source (isolated worktree) |
 | `reviewer` | Independent implementation review | Review output only |
 | `reviewer-architecture` | Architecture/security review | Review output only |
 | `final-reviewer` | Adjudication, memory, release verdict | Final review output only |
+
+Only `executor` writes application source. Reviewers are read-only by policy.
+Every role runs in its own dedicated OpenCode process.
 
 ## Commands
 
@@ -93,49 +119,73 @@ python3 ./scripts/governance-capabilities.py verify --config-dir "$OPENCODE_CONF
 
 ## Lifecycle
 
-```text
+```
 BASELINE_VALIDATED
-→ IDEA_INTAKE → PRODUCT_CLASSIFICATION → ADAPTIVE_PRODUCT_DISCOVERY
-→ GOVERNED_DOMAIN_RESEARCH → CONSTRUCTIVE_CHALLENGE → PRODUCT_DEFINITION
-→ DISCOVERY_DUAL_REVIEW → DISCOVERY_ADJUDICATION → PRODUCT_SCOPE_APPROVAL
-→ CONTEXT_ROUTING → DELIVERY_ARCHITECTURE → VERTICAL_MILESTONE_PLANNING
-→ EVIDENCE_PLANNING → OPERATIONAL_PLANNING → READY_FOR_EXECUTION
-→ PRE_CHANGE_SAFEPOINT_WHEN_REQUIRED → IMPLEMENTING → DOCUMENTATION_SYNC
-→ EVIDENCE_VALIDATION → OPERATIONAL_VALIDATION → TASK_VALIDATED
-→ DUAL_REVIEW → FINAL_ADJUDICATION
-→ PRODUCT_COMPLETENESS_RECONCILIATION → RELEASE_READINESS
-→ VALIDATED_LEARNING → LOCAL_COMMITTED
+  → IDEA_INTAKE → PRODUCT_CLASSIFICATION → ADAPTIVE_PRODUCT_DISCOVERY
+  → GOVERNED_DOMAIN_RESEARCH → CONSTRUCTIVE_CHALLENGE → PRODUCT_DEFINITION
+  → DISCOVERY_DUAL_REVIEW → DISCOVERY_ADJUDICATION → PRODUCT_SCOPE_APPROVAL
+  → CONTEXT_ROUTING → DELIVERY_ARCHITECTURE → VERTICAL_MILESTONE_PLANNING
+  → EVIDENCE_PLANNING → OPERATIONAL_PLANNING → READY_FOR_EXECUTION
+  → PRE_CHANGE_SAFEPOINT_WHEN_REQUIRED → IMPLEMENTING → DOCUMENTATION_SYNC
+  → EVIDENCE_VALIDATION → OPERATIONAL_VALIDATION → TASK_VALIDATED
+  → DUAL_REVIEW → FINAL_ADJUDICATION
+  → PRODUCT_COMPLETENESS_RECONCILIATION → RELEASE_READINESS
+  → VALIDATED_LEARNING → LOCAL_COMMITTED
 ```
 
-Small patches may use lighter discovery. They still require requirement provenance, frozen-target evidence, independent review and explicit owner authorization for push, merge, deploy or publication.
+Small patches may use lighter discovery but still require requirement
+provenance, frozen-target evidence, independent review and explicit owner
+authorization for push, merge, deploy or publication.
 
 ## Trust model
 
 - Exactly seven public governance agents.
 - Only `executor` writes application source.
 - Independent reviewers; Final Reviewer adjudicates.
-- Original requirements and primary repository evidence outrank summaries, cache, skills and model claims.
+- Original requirements and primary repository evidence outrank summaries,
+  cache, skills and model claims.
 - Failed partial output is never authoritative.
 - Fallbacks restart the full role from the same packet and frozen target.
 - Required unavailable evidence cannot become `PASS`.
+
+## Effect plugin
+
+The effect-enforcement plugin is the runtime guard. It hooks
+`tool.execute.before`, classifies every tool call against the role's effect
+policy, and throws to fail closed when a tool, path or command is outside scope.
+
+```bash
+# standalone install / self-test (the umbrella installer does this automatically)
+python ./scripts/install-effect-plugin.py --config-dir "$OPENCODE_CONFIG_DIR" install
+python ./scripts/install-effect-plugin.py --config-dir "$OPENCODE_CONFIG_DIR" self-test --non-mutating
+```
+
+> **Scope.** Enforcement is logical (path containment, hash binding, effect
+> policy, semantic state machine), not an OS-level sandbox or external
+> attestation. See the `LOCAL_INTEGRITY` / `SEMANTIC_STATE_MACHINE_ENFORCED` /
+> `EFFECT_POLICY_EXPERIMENTAL` declarations in `role-effect-policy.json` for the
+> authoritative statement.
 
 ## Capabilities (routing profile required)
 
 With a local routing profile the installer adds:
 
-- Candidate projections (`workspace`, `staged`, `commit`, `base-diff`) and approval receipts (`opencode-governance.approval-receipt/v1`)
+- Candidate projections (`workspace`, `staged`, `commit`, `base-diff`) and
+  approval receipts
 - Typed actionable continuation on non-terminal `RUN_STATE.json`
-- Risk-focused review lenses (both independent reviewers retained)
+- Risk-focused review lenses
 - Final-Reviewer-governed local engineering memory (advisory SQLite store)
 - Exact dependency-bound evidence reuse
-- Optional staged pre-commit receipt gate (never auto-installed)
-- Optional loopback simulation harness (orchestration fixture, not model QA)
+- Optional staged pre-commit receipt gate
+- Optional loopback simulation harness
 
-Without a routing profile only the base agents and commands install. Details: [`docs/governance-authority-memory.md`](docs/governance-authority-memory.md).
+Without a routing profile only the base agents and commands install.
 
 ## Configuration durability (Windows)
 
-`config-durability.ps1` and `update-opencode-safely.ps1` snapshot and restore the OpenCode config directory across owner-triggered app updates. Credentials are never copied into diagnostic output. Durability does not authorize updates by itself.
+`config-durability.ps1` and `update-opencode-safely.ps1` snapshot and restore
+the OpenCode config directory across owner-triggered app updates. Credentials
+are never copied into diagnostic output.
 
 ## Pre-commit receipt gate
 
@@ -151,47 +201,27 @@ python3 "$OPENCODE_CONFIG_DIR/opencode-governance-tools/governance-pre-commit.py
   --authority-tool "$OPENCODE_CONFIG_DIR/opencode-governance-tools/governance-authority.py"
 ```
 
-Remove the project hook before uninstalling the referenced tools.
-
-## Uninstall
-
-### Windows
-
-```powershell
-pwsh -NoProfile -File .\scripts\uninstall.ps1 -ConfigDir $env:OPENCODE_CONFIG_DIR
-```
-
-### Linux and macOS
-
-```bash
-bash ./scripts/uninstall.sh --config-dir "$OPENCODE_CONFIG_DIR"
-```
-
-Removes only manifest-owned agents, commands, aliases and tools. Provider auth, project `.ai/**`, backups and memory stay intact.
-
 ## Update
 
 ```bash
 git pull --ff-only
 ```
 
-Rerun the installer with the same local routing profile. Routing is preserved when the profile remains valid.
+Rerun the installer with the same local routing profile. Routing is preserved
+when the profile remains valid.
 
-### Effect plugin (standalone install / self-test)
-
-The effect-enforcement plugin is normally installed by the umbrella installer,
-but it can be managed directly. `--config-dir` is a top-level option and must
-precede the subcommand (S-019):
-
-```powershell
-python .\scripts\install-effect-plugin.py --config-dir $env:OPENCODE_CONFIG_DIR install
-python .\scripts\install-effect-plugin.py --config-dir $env:OPENCODE_CONFIG_DIR self-test --non-mutating
-```
+## Uninstall
 
 ```bash
-python3 ./scripts/install-effect-plugin.py --config-dir "$OPENCODE_CONFIG_DIR" install
-python3 ./scripts/install-effect-plugin.py --config-dir "$OPENCODE_CONFIG_DIR" self-test --non-mutating
+bash ./scripts/uninstall.sh --config-dir "$OPENCODE_CONFIG_DIR"
 ```
+
+```powershell
+pwsh -NoProfile -File .\scripts\uninstall.ps1 -ConfigDir $env:OPENCODE_CONFIG_DIR
+```
+
+Removes only manifest-owned agents, commands, aliases and tools. Provider auth,
+project `.ai/**`, backups and memory stay intact.
 
 ## Documentation
 
@@ -203,10 +233,10 @@ python3 ./scripts/install-effect-plugin.py --config-dir "$OPENCODE_CONFIG_DIR" s
 | [`docs/governance-authority-memory.md`](docs/governance-authority-memory.md) | Receipts, memory, evidence, simulation |
 | [`docs/context-intelligence-skill-routing.md`](docs/context-intelligence-skill-routing.md) | Context and skills |
 | [`docs/permissions.md`](docs/permissions.md) | Write and external-action boundaries |
-| [`docs/architect-headless-permission-contract.md`](docs/architect-headless-permission-contract.md) | Headless Architect permission contract (3.7.3+) |
-| [`docs/architect-stdin-prompt-transport.md`](docs/architect-stdin-prompt-transport.md) | Architect stdin prompt transport (3.7.4) |
-| [`docs/workspace-repository-root-contract.md`](docs/workspace-repository-root-contract.md) | Nested workspace / multi-root transactions (3.7.5) |
-| [docs/legacy-orphan-recovery.md](docs/legacy-orphan-recovery.md) | Evidence-bound legacy orphan recovery + V1 forensic adapter (3.8.0) |
+| [`docs/architect-headless-permission-contract.md`](docs/architect-headless-permission-contract.md) | Headless Architect permission contract |
+| [`docs/architect-stdin-prompt-transport.md`](docs/architect-stdin-prompt-transport.md) | Architect stdin prompt transport |
+| [`docs/workspace-repository-root-contract.md`](docs/workspace-repository-root-contract.md) | Nested workspace / multi-root transactions |
+| [`docs/legacy-orphan-recovery.md`](docs/legacy-orphan-recovery.md) | Evidence-bound legacy orphan recovery |
 | [`docs/troubleshooting.md`](docs/troubleshooting.md) | Recovery |
 | [`CHANGELOG.md`](CHANGELOG.md) | Release history |
 
