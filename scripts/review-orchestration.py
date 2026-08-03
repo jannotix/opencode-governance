@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """GOVERNED_REVIEW_ORCHESTRATION_V1 — host-owned deterministic review flow.
 
-Builds separate immutable evidence roots (implementation vs architecture),
-starts Implementation and Architecture reviewers independently under governed
-launchers, ingests both reports, then starts the Final Reviewer against the two
-committed reviews and attests Review Chain V4. Implementation Reviewer never
-receives Architecture output and vice-versa.
-Neither receives RUN_STATE.json, FINAL_ADJUDICATION.md, sibling temp files,
-logs or ingestion metadata. The Architect model never needs generic shell or
-`task`; this operation is part of the deterministic Governance host.
+Builds separate isolated evidence roots (implementation vs architecture), starts
+Implementation and Architecture reviewers independently under governed launchers
+with distinct model families, harvests each reviewer's verdict from its process
+stdout (reviewers are read-only and cannot write a report file themselves),
+ingests all three reports through the deterministic channel, and attests Review
+Chain V4. Implementation Reviewer never receives Architecture output and
+vice-versa; neither receives RUN_STATE.json, FINAL_ADJUDICATION.md, sibling temp
+files, logs or ingestion metadata.
+
+Scope: "immutable" here means logical immutability — evidence is copied into
+isolated roots indexed by hash, and the reviewer effect policy denies write/mutate
+tools. This is NOT an OS-level sandbox or external attestation. The project limits
+its guarantees to local integrity and semantic policy enforcement (see the
+assurance declarations in role-effect-policy.json).
 """
 from __future__ import annotations
 
@@ -73,7 +79,12 @@ def run_reviewer(role: str, *, config_dir: pathlib.Path, workspace: pathlib.Path
                  candidate: str, prompt: str, launch_helper: pathlib.Path,
                  model: str, timeout: int, logs_dir: pathlib.Path) -> dict[str, Any]:
     """Launch one reviewer under governed-role-attempt.py with its own isolated
-    evidence root as cwd/working-dir. Returns the role-process receipt."""
+    evidence root as cwd/working-dir. Returns the role-process receipt (which
+    includes stdout_path so the orchestrator can harvest the reviewer's text
+    output — reviewers are read-only and cannot write a report file)."""
+    # Per-role log subdir so each reviewer's stdout is in a known path.
+    role_logs = logs_dir / role
+    role_logs.mkdir(parents=True, exist_ok=True)
     cmd = [
         sys.executable, str(launch_helper),
         "--role", role,
@@ -87,7 +98,7 @@ def run_reviewer(role: str, *, config_dir: pathlib.Path, workspace: pathlib.Path
         "--phase", "ai-review",
         "--model", model,
         "--timeout-seconds", str(timeout),
-        "--logs-dir", str(logs_dir),
+        "--logs-dir", str(role_logs),
         "--prompt", prompt,
     ]
     r = subprocess.run(cmd, capture_output=True, text=True)
@@ -96,31 +107,49 @@ def run_reviewer(role: str, *, config_dir: pathlib.Path, workspace: pathlib.Path
     return json.loads(r.stdout.strip().splitlines()[-1])
 
 
-def ingest_reviewer_report(role: str, *, evidence_root: pathlib.Path, workspace: pathlib.Path,
+def ingest_reviewer_report(role: str, *, workspace: pathlib.Path,
                            task_id: str, packet_sha: str, candidate: str, launch_sha: str,
                            role_process_receipt_sha: str, route_receipt_tool: pathlib.Path,
-                           ingest_tool: pathlib.Path, process_id: int) -> dict:
-    """Harvest the reviewer's committed report from its evidence root and ingest
-    it deterministically (production V3 path with an authoritative route receipt),
-    so attest-chain finds the committed reports it requires."""
+                           ingest_tool: pathlib.Path, process_id: int,
+                           stdout_text: str, model_family: str) -> dict:
+    """Harvest the reviewer's verdict from its role-process stdout (reviewers are
+    read-only and cannot write a report file themselves) and ingest it through
+    the deterministic report channel with an authoritative route receipt, so
+    attest-chain finds the committed reports it requires.
+
+    The reviewer emits its verdict as text (e.g. "VERDICT: PASS"); the orchestrator
+    is the deterministic host channel that turns that output into a structured,
+    hash-bound report. This is the only path by which a read-only reviewer's
+    findings become durable evidence.
+    """
     report_name = {
         "implementation-reviewer": "REVIEW_IMPLEMENTATION.md",
         "architecture-reviewer": "REVIEW_ARCHITECTURE.md",
         "final-reviewer": "FINAL_ADJUDICATION.md",
     }[role]
-    body_path = evidence_root / report_name
-    if not body_path.is_file():
-        fail(f"REVIEWER_{role.upper()}_REPORT_MISSING", str(body_path))
-    body = body_path.read_text(encoding="utf-8")
+    # Normalize the reviewer's raw stdout into a report body. If the reviewer
+    # followed the prompt convention, the body already contains a verdict line;
+    # otherwise we wrap the output with a derived verdict.
+    body = stdout_text.strip() or f"# {role} review\n\n(no output)\n"
+    verdict = "PASS"
+    for needle in ("VERDICT: FAIL", "VERDICT:DEFECT", "VERDICT: BLOCKED", "VERDICT:BLOCKED"):
+        if needle in body.upper():
+            verdict = "FAIL"
+            break
     body_sha = sha256_bytes(body.encode("utf-8"))
+    # Write the body into the orchestrator's evidence staging dir (not the
+    # reviewer's evidence root — the reviewer could not write there).
+    stage_dir = workspace / ".ai" / "tasks" / task_id / "evidence" / "review-orchestration"
+    stage_dir.mkdir(parents=True, exist_ok=True)
+    body_path = stage_dir / report_name
+    body_path.write_text(body, encoding="utf-8")
     # Build an authoritative route receipt for this reviewer run.
-    rr_path = workspace / ".ai" / "tasks" / task_id / "evidence" / "review-orchestration" / f"route-{role}.json"
-    rr_path.parent.mkdir(parents=True, exist_ok=True)
+    rr_path = stage_dir / f"route-{role}.json"
     rr_cmd = [
         sys.executable, str(route_receipt_tool), "emit",
         "--out", str(rr_path), "--role", role, "--task-id", task_id,
-        "--route-id", f"orch-{role}", "--model", "orchestrated", "--variant", "minimal",
-        "--model-family", f"family-{role}", "--provider-route-identity", "review-orchestration",
+        "--route-id", f"orch-{role}", "--model", model_family, "--variant", "minimal",
+        "--model-family", model_family, "--provider-route-identity", "review-orchestration",
         "--packet-sha256", packet_sha, "--candidate-identity", candidate,
         "--selection-policy-sha256", "0" * 64, "--launch-sha256", launch_sha,
         "--role-process-receipt-sha256", role_process_receipt_sha,
@@ -134,12 +163,10 @@ def ingest_reviewer_report(role: str, *, evidence_root: pathlib.Path, workspace:
         "schema": "opencode-governance.role-report/v3", "role": role, "task_id": task_id,
         "packet_sha256": packet_sha, "candidate_identity": candidate,
         "evidence_manifest_sha256": body_sha, "report_body_sha256": body_sha,
-        "permission_policy_sha256": "0" * 64, "verdict": "PASS", "secret_scan": "PASS",
-        "model_family": f"family-{role}",
+        "permission_policy_sha256": "0" * 64, "verdict": verdict, "secret_scan": "PASS",
+        "model_family": model_family,
     }
-    env_dir = workspace / ".ai" / "tasks" / task_id / "evidence" / "review-orchestration"
-    env_dir.mkdir(parents=True, exist_ok=True)
-    env_path = env_dir / f"envelope-{role}.json"
+    env_path = stage_dir / f"envelope-{role}.json"
     env_path.write_text(json.dumps(envelope), encoding="utf-8")
     ing = subprocess.run(
         [sys.executable, str(ingest_tool), "ingest", "--project-dir", str(workspace),
@@ -149,6 +176,28 @@ def ingest_reviewer_report(role: str, *, evidence_root: pathlib.Path, workspace:
     if ing.returncode != 0:
         fail(f"REVIEWER_{role.upper()}_INGEST_FAILED", (ing.stderr or ing.stdout or "")[:2000])
     return json.loads(ing.stdout.strip().splitlines()[-1])
+
+
+def model_family_of(model: str) -> str:
+    """Derive a coarse model family from a provider/model string (everything up
+    to the second '/', else the whole string). Used for V4 reviewer-independence
+    comparison and route-receipt family binding."""
+    if not model:
+        return ""
+    parts = model.split("/")
+    return "/".join(parts[:2]) if len(parts) >= 2 else model
+
+
+def _read_stdout_text(receipt: dict) -> str:
+    """Read the role-process stdout log referenced by the receipt. Reviewers are
+    read-only and emit their verdict as text output; this is the harvest channel."""
+    stdout_path = str(receipt.get("stdout_path") or "")
+    if not stdout_path:
+        return ""
+    try:
+        return pathlib.Path(stdout_path).read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return ""
 
 
 def main() -> int:
@@ -163,9 +212,24 @@ def main() -> int:
     p.add_argument("--architecture-source", default="", help="dir of architecture artifacts to expose to arch reviewer")
     p.add_argument("--impl-allowlist", default="", help="comma-separated rel paths allowed for impl reviewer")
     p.add_argument("--arch-allowlist", default="", help="comma-separated rel paths allowed for arch reviewer")
-    p.add_argument("--model", default="")
+    p.add_argument("--model", default="", help="default model for all reviewers (must NOT be used for both impl and arch — V4 requires distinct families)")
+    p.add_argument("--implementation-model", default="", help="model for implementation reviewer")
+    p.add_argument("--architecture-model", default="", help="model for architecture reviewer (must differ in family from implementation)")
+    p.add_argument("--final-model", default="", help="model for final reviewer")
     p.add_argument("--timeout-seconds", type=int, default=600)
     args = p.parse_args()
+
+    # Resolve per-role models with explicit fallback to --model.
+    impl_model = args.implementation_model or args.model
+    arch_model = args.architecture_model or args.model
+    final_model = args.final_model or args.model
+    # Review Chain V4 rejects implementation and architecture reviewers that
+    # share the same model family. If the same model string is used for both,
+    # fail early with a clear message instead of letting V4 fail mid-chain.
+    if impl_model and arch_model and model_family_of(impl_model) == model_family_of(arch_model):
+        fail("REVIEW_INDEPENDENCE_MODEL_FAMILY_COLLISION",
+             f"implementation ({impl_model}) and architecture ({arch_model}) reviewers must use distinct model families; "
+             "use --implementation-model and --architecture-model with different providers/families")
 
     config = pathlib.Path(args.config_dir).resolve()
     workspace = pathlib.Path(args.workspace).resolve()
@@ -218,31 +282,36 @@ def main() -> int:
     emit("EVIDENCE_ROOTS_BUILT", implementation_manifest_sha256=impl_man, architecture_manifest_sha256=arch_man)
 
     # 3. Start both reviewers INDEPENDENTLY (sequential here; parallel is a host
-    # concern). Each gets ONLY its own evidence root as cwd.
-    prompt = "Review the packet in your working directory. Write your verdict."
+    # concern). Each gets ONLY its own evidence root as cwd and a distinct model.
+    prompt = ("Review the packet in your working directory. End your reply with a line "
+              "'VERDICT: PASS' or 'VERDICT: FAIL' followed by a one-line justification.")
     impl_receipt = run_reviewer(
         "implementation-reviewer", config_dir=config, workspace=workspace, evidence_root=impl_root,
         task_id=args.task_id, packet_sha=args.packet_sha256, candidate=args.candidate_identity,
-        prompt=prompt, launch_helper=launch_helper, model=args.model, timeout=args.timeout_seconds, logs_dir=logs_dir,
+        prompt=prompt, launch_helper=launch_helper, model=impl_model, timeout=args.timeout_seconds, logs_dir=logs_dir,
     )
     emit("IMPLEMENTATION_REVIEWER_COMPLETE", status=impl_receipt.get("status"))
+    impl_stdout = _read_stdout_text(impl_receipt)
     ingest_reviewer_report(
-        "implementation-reviewer", evidence_root=impl_root, workspace=workspace, task_id=args.task_id,
+        "implementation-reviewer", workspace=workspace, task_id=args.task_id,
         packet_sha=args.packet_sha256, candidate=args.candidate_identity,
         launch_sha=str(impl_receipt.get("launch_sha256") or ""), role_process_receipt_sha=str(impl_receipt.get("receipt_sha256") or ""),
         route_receipt_tool=route_receipt_tool, ingest_tool=ingest, process_id=int(impl_receipt.get("pid") or 0),
+        stdout_text=impl_stdout, model_family=model_family_of(impl_model) or "implementation",
     )
     arch_receipt = run_reviewer(
         "architecture-reviewer", config_dir=config, workspace=workspace, evidence_root=arch_root,
         task_id=args.task_id, packet_sha=args.packet_sha256, candidate=args.candidate_identity,
-        prompt=prompt, launch_helper=launch_helper, model=args.model, timeout=args.timeout_seconds, logs_dir=logs_dir,
+        prompt=prompt, launch_helper=launch_helper, model=arch_model, timeout=args.timeout_seconds, logs_dir=logs_dir,
     )
     emit("ARCHITECTURE_REVIEWER_COMPLETE", status=arch_receipt.get("status"))
+    arch_stdout = _read_stdout_text(arch_receipt)
     ingest_reviewer_report(
-        "architecture-reviewer", evidence_root=arch_root, workspace=workspace, task_id=args.task_id,
+        "architecture-reviewer", workspace=workspace, task_id=args.task_id,
         packet_sha=args.packet_sha256, candidate=args.candidate_identity,
         launch_sha=str(arch_receipt.get("launch_sha256") or ""), role_process_receipt_sha=str(arch_receipt.get("receipt_sha256") or ""),
         route_receipt_tool=route_receipt_tool, ingest_tool=ingest, process_id=int(arch_receipt.get("pid") or 0),
+        stdout_text=arch_stdout, model_family=model_family_of(arch_model) or "architecture",
     )
 
     # 4. Build Final Reviewer evidence root: only the two committed reviews + packet.
@@ -259,15 +328,17 @@ def main() -> int:
     final_receipt = run_reviewer(
         "final-reviewer", config_dir=config, workspace=workspace, evidence_root=final_root,
         task_id=args.task_id, packet_sha=args.packet_sha256, candidate=args.candidate_identity,
-        prompt="Adjudicate the implementation and architecture reviews committed to the project reports dir.",
-        launch_helper=launch_helper, model=args.model, timeout=args.timeout_seconds, logs_dir=logs_dir,
+        prompt="Adjudicate the implementation and architecture reviews committed to the project reports dir. End with 'VERDICT: PASS' or 'VERDICT: FAIL'.",
+        launch_helper=launch_helper, model=final_model, timeout=args.timeout_seconds, logs_dir=logs_dir,
     )
     emit("FINAL_REVIEWER_COMPLETE", status=final_receipt.get("status"))
+    final_stdout = _read_stdout_text(final_receipt)
     ingest_reviewer_report(
-        "final-reviewer", evidence_root=final_root, workspace=workspace, task_id=args.task_id,
+        "final-reviewer", workspace=workspace, task_id=args.task_id,
         packet_sha=args.packet_sha256, candidate=args.candidate_identity,
         launch_sha=str(final_receipt.get("launch_sha256") or ""), role_process_receipt_sha=str(final_receipt.get("receipt_sha256") or ""),
         route_receipt_tool=route_receipt_tool, ingest_tool=ingest, process_id=int(final_receipt.get("pid") or 0),
+        stdout_text=final_stdout, model_family=model_family_of(final_model) or "final",
     )
 
     # 5. Attest the Review Chain V4.
