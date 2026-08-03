@@ -20,6 +20,7 @@ from typing import Any
 
 CONTRACT = "GOVERNED_ROLE_LAUNCH_CONTRACT_V3"
 CONTRACT_V2 = "GOVERNED_ROLE_LAUNCH_CONTRACT_V2"
+VERSION = "4.0.4"
 PLUGIN_ID = "opencode-governance-effect-enforcement"
 OWNED = ".opencode-governance-ownership.json"
 PLUGIN_DIR = "opencode-governance-effect-enforcement"
@@ -116,7 +117,7 @@ def write_launch_v2(
     expires = now + timedelta(seconds=max(60, ttl_seconds))
     body = {
         "schema": CONTRACT,
-        "version": "4.0.3",
+        "version": VERSION,
         "launch_id": str(uuid.uuid4()),
         "nonce": secrets.token_hex(16),
         "issued_at_utc": now.strftime("%Y-%m-%dT%H:%M:%SZ"),

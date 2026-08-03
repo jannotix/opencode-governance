@@ -12,7 +12,7 @@ MANIFEST="$CONFIG/opencode-governance-routing.json"
 python3 - "$MANIFEST" <<'PY'
 import json,sys
 m=json.load(open(sys.argv[1],encoding='utf-8-sig'))
-assert m.get('governance_version')=='4.0.3', m.get('governance_version')
+assert m.get('governance_version')=='4.0.4', m.get('governance_version')
 print('installed governance_version', m['governance_version'])
 PY
 
