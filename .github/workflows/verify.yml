@@ -133,3 +133,53 @@ jobs:
           Remove-Item $state,(Join-Path $project '.ai/success.txt');$env:MOCK_MODE='auth';$failed=$false
           try{./scripts/run-governed.ps1 -ProjectDir $project -Command ai-plan -Arguments test -RoutingConfigPath (Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/routing/architect-failover.valid.json') -ConfigDir $config -OpenCodeCommand pwsh -OpenCodePrefixArguments @('-NoProfile','-File',$mock)}catch{$failed=$true}
           if(-not$failed){throw 'Authentication failure unexpectedly fell back'};if([int](Get-Content $state)-ne 1){throw 'Ineligible failure attempted fallback'};if(Test-Path (Join-Path $project '.ai/partial.txt')){throw 'Partial state not restored'}
+
+  python-unit-tests:
+    # 4.0.3: CI-gated deterministic Python + Node test matrix (Linux).
+    # Covers the pre-side-effect gate, command broker, patch-path parsing,
+    # authoritative route receipts, transactional report commit, Review Chain V4
+    # and the executor transaction finalization contract.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          show-progress: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install pytest
+        run: python -m pip install --quiet pytest
+      - name: Run deterministic Python unit + negative matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pytest \
+            tests/test-governance-403-negatives.py \
+            tests/test-role-effect-enforcement.py \
+            tests/test-semantic-transition-matrix.py \
+            tests/test-command-contracts.py \
+            tests/test-all-commands-simulation.py \
+            tests/test-nested-governance-roots.py \
+            tests/test-governance-authority-memory.py \
+            tests/test-governance-pre-commit.py \
+            tests/test-release-publisher.py \
+            tests/test-jsonc-readable.py \
+            tests/test-jsonc-preservation.py \
+            tests/test-workflow-continuation.py \
+            tests/test-governance-simulation-fixture.py \
+            tests/test-governance-simulation-run.py \
+            -p no:cacheprovider
+      - name: Run executor transaction finalization contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tests/test-executor-transaction.sh
+      - name: Verify plugin and helper scripts compile
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check plugins/opencode-governance-effect-enforcement/index.mjs
+          python -c "import ast; [ast.parse(open(f).read()) for f in ['scripts/governed-role-attempt.py','scripts/governed-role-launch.py','scripts/role-report-ingest.py','scripts/route-receipt.py','scripts/tool-capability-manifest.py','scripts/review-orchestration.py','scripts/install-effect-plugin.py','scripts/executor-attempt.sh'.replace('.sh','.py') if False else 'scripts/governance-authority.py']]"

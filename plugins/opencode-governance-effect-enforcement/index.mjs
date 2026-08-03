@@ -1,10 +1,23 @@
 /**
- * ROLE_EFFECT_ENFORCEMENT_V1_2 — OpenCode effect-enforcement plugin (4.0.2).
+ * ROLE_EFFECT_ENFORCEMENT_V1_3 — OpenCode effect-enforcement plugin (4.0.3).
+ *
+ * 4.0.3 corrects the residual runtime/launch/transport/Executor-containment
+ * defects in 4.0.2. The plugin is now a TRUE PRE-SIDE-EFFECT READY GATE:
+ *
+ *   - READY is emitted only AFTER launch V3 + plugin self-hash + policy hash +
+ *     policy schema + tool registry + capability manifest + hook object are all
+ *     validated. A handshake is never written in an exception/setup path.
+ *   - A host acknowledgement (bound to READY) is required before ANY tool effect
+ *     is permitted; no tool runs ungoverned even if plugin load partially fails.
+ *   - Launch single-use is SESSION-level (one authorised process/session), not
+ *     per-tool-call; the consumed launch is cached in-process and never re-read.
+ *   - The handshake echoes and binds the launch nonce (not a fresh random).
  *
  * Contracts:
- *   ROLE_EFFECT_ENFORCEMENT_V1_2
- *   EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1
- *   GOVERNED_ROLE_LAUNCH_CONTRACT_V2
+ *   ROLE_EFFECT_ENFORCEMENT_V1_3
+ *   EFFECT_PLUGIN_RUNTIME_READY_GATE_V2
+ *   GOVERNED_ROLE_LAUNCH_CONTRACT_V3
+ *   ROLE_SESSION_CLAIM_CONTRACT_V1
  *   STRICT_TOOL_EFFECT_REGISTRY_V1
  *   STRICT_SHELL_EFFECT_CLASSIFICATION_V1
  *   CANONICAL_ROLE_PATH_CONTAINMENT_V1
@@ -17,20 +30,25 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
 import os from "node:os";
+import { execFileSync } from "node:child_process";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// NOTE: OpenCode treats every named export as a plugin entry. Only export
-// the plugin function (and default). Surface constants for tests via default meta.
 const HOOK = "tool.execute.before";
-const SCHEMA = "ROLE_EFFECT_ENFORCEMENT_V1_2";
+const SCHEMA = "ROLE_EFFECT_ENFORCEMENT_V1_3";
 const PLUGIN_ID = "opencode-governance-effect-enforcement";
 const PLUGIN_API_GENERATION = "opencode-local-esm-named-export-v1";
 const PLUGIN_EXPORT_CONTRACT = "named_async_function_returns_hooks";
 const HOOK_CONTRACT = "tool.execute.before.throw_fail_closed";
-const HANDSHAKE_SCHEMA = "EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1";
+const READY_SCHEMA = "EFFECT_PLUGIN_RUNTIME_READY_GATE_V2";
+const HANDSHAKE_SCHEMA = "EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V2";
+// Back-compat: 4.0.2 launch/handshake schemas are accepted on read for an
+// in-flight upgrade window, but new launches are V3.
+const LAUNCH_SCHEMA_V3 = "GOVERNED_ROLE_LAUNCH_CONTRACT_V3";
 const LAUNCH_SCHEMA_V2 = "GOVERNED_ROLE_LAUNCH_CONTRACT_V2";
+const LAUNCH_SCHEMA_V1 = "GOVERNED_ROLE_LAUNCH_CONTRACT_V1";
+const SESSION_CLAIM_SCHEMA = "ROLE_SESSION_CLAIM_CONTRACT_V1";
 
 /** STRICT_TOOL_EFFECT_REGISTRY_V1 — unknown tools fail closed. */
 const TOOL_REGISTRY = {
@@ -41,7 +59,7 @@ const TOOL_REGISTRY = {
   edit: { effects: ["WRITE"], pathKeys: ["filePath", "path", "file", "target"] },
   write: { effects: ["WRITE", "CREATE"], pathKeys: ["filePath", "path", "file", "target"] },
   multiedit: { effects: ["WRITE"], pathKeys: ["filePath", "path", "file", "target"] },
-  apply_patch: { effects: ["WRITE", "CREATE"], pathKeys: [] },
+  apply_patch: { effects: ["WRITE", "CREATE"], pathKeys: ["patch", "diff"] },
   // Shell is classified as EXECUTE at the tool level; Architect policy may still permit
   // parser-validated read-only git forms via bash_mode deny_default_allowlist.
   bash: { effects: ["EXECUTE"], pathKeys: [] },
@@ -64,6 +82,10 @@ const GIT_DENIED_OPTS = [
   "--work-tree", "--git-dir", "--exec-path", "--upload-pack", "--receive-pack",
   "--namespace", "--literal-pathspecs",
 ];
+
+// In-process session claim state (S-003/S-012). One claimed launch per
+// process/session; subsequent tool calls reuse it without re-reading the file.
+let claimedLaunch = null; // { body, sha256, claimedAt, pid, ppid, sessionId }
 
 function sha256Bytes(buf) {
   return crypto.createHash("sha256").update(buf).digest("hex");
@@ -297,59 +319,194 @@ function classifyShell(command, rolePolicy, roots) {
   }
 
   if (rolePolicy.bash_mode === "execution_root_only") {
-    const execRoot = roots.execution_root;
-    if (!execRoot) return { allow: false, reason: "EXECUTION_ROOT_REQUIRED" };
-    if (head === "git") {
-      if (tokens.includes("-c") || tokens[1] === "config" || tokens[1] === "alias") {
-        return { allow: false, reason: "SHELL_EFFECT_CLASSIFICATION_UNSUPPORTED", detail: "git_alias_or_config" };
-      }
-      for (const t of tokens) {
-        const tl = t.toLowerCase();
-        for (const bad of GIT_DENIED_OPTS) {
-          if (tl === bad || tl.startsWith(bad + "=")) {
-            return { allow: false, reason: "SHELL_EFFECT_CLASSIFICATION_UNSUPPORTED", detail: `git_opt_${bad}` };
-          }
+    // EXECUTOR_COMMAND_BROKER_V1 — deterministic command classification.
+    // Unknown commands and explicitly denied destructive ops fail closed.
+    return classifyExecutorBroker(head, tokens, roots);
+  }
+  return { allow: false, reason: "SHELL_EFFECT_CLASSIFICATION_UNSUPPORTED", detail: "unknown_bash_mode" };
+}
+
+/** EXECUTOR_COMMAND_BROKER_V1 — explicit command classes for the Executor role. */
+const EXECUTOR_DENY_HEADS = new Set([
+  // destructive filesystem
+  "rm", "rmdir", "del", "erase", "rd", "remove-item", "shred", "unlink",
+  // shell interpreters (also caught earlier, but defensive)
+  "sh", "bash", "zsh", "dash", "pwsh", "powershell", "powershell_ise",
+  "cmd", "csh", "tcsh", "fish",
+  // package publication / deployment
+  "npm", "npx", "yarn", "pnpm", "publish", "deploy", "docker", "kubectl",
+  "helm", "terraform", "ansible-playbook", "cap", "mvn", "gradle", "cargo",
+  "twine", "gem", "push", "upload",
+  // misc dangerous
+  "curl", "wget", "nc", "netcat", "ssh", "scp", "rsync", "chmod", "chown",
+  "mkfs", "dd", "shutdown", "reboot", "kill", "killall", "pkill", "systemctl",
+  "launchctl",
+]);
+const EXECUTOR_GIT_DENY_SUBCMDS = new Set([
+  "commit", "push", "reset", "clean", "checkout", "switch", "merge", "rebase",
+  "cherry-pick", "revert", "stash", "tag", "fetch", "pull", "clone", "init",
+  "mv", "rm", "update-ref", "notes", "worktree", "submodule", "bundle",
+  "am", "apply", "filter-branch", "reflog", "gc", "prune",
+]);
+const EXECUTOR_GIT_ALLOW_SUBCMDS = new Set([
+  "status", "diff", "log", "show", "grep", "ls-files", "rev-parse", "branch",
+  "blame", "shortlog", "describe", "name-rev", "range-diff", "fsck", "cat-file",
+]);
+
+function classifyExecutorBroker(head, tokens, roots) {
+  const execRoot = roots.execution_root;
+  if (!execRoot) return { allow: false, reason: "EXECUTION_ROOT_REQUIRED" };
+  // Explicit deny list.
+  if (EXECUTOR_DENY_HEADS.has(head)) {
+    return { allow: false, reason: "EXECUTOR_BROKER_DENIED_COMMAND", detail: head };
+  }
+  // Git: only an explicit read-only allowlist subcommand set.
+  if (head === "git") {
+    if (tokens.includes("-c") || tokens[1] === "config" || tokens[1] === "alias") {
+      return { allow: false, reason: "SHELL_EFFECT_CLASSIFICATION_UNSUPPORTED", detail: "git_alias_or_config" };
+    }
+    for (const t of tokens) {
+      const tl = t.toLowerCase();
+      for (const bad of GIT_DENIED_OPTS) {
+        if (tl === bad || tl.startsWith(bad + "=")) {
+          return { allow: false, reason: "SHELL_EFFECT_CLASSIFICATION_UNSUPPORTED", detail: `git_opt_${bad}` };
         }
       }
     }
-    for (const t of tokens.slice(1)) {
-      if (t.startsWith("-")) continue;
-      if (!(path.isAbsolute(t) || t.includes("/") || t.includes("\\") || t.includes(".."))) continue;
-      const c = isContainedPath(execRoot, t, execRoot);
-      if (!c.ok) return { allow: false, reason: "BASH_PATH_OUTSIDE_EXECUTION_ROOT", detail: c.reason };
-      const n = normalizeSep(c.abs);
-      const nl = process.platform === "win32" ? n.toLowerCase() : n;
-      if (nl.includes("/.ai/") || nl.endsWith("/.ai") || nl.includes("/.git/") || nl.endsWith("/.git")) {
-        return { allow: false, reason: "BASH_FORBIDDEN_ROOT" };
+    const sub = tokens[1] ? tokens[1].toLowerCase() : "";
+    if (sub && EXECUTOR_GIT_DENY_SUBCMDS.has(sub)) {
+      return { allow: false, reason: "EXECUTOR_BROKER_DENIED_GIT", detail: sub };
+    }
+    if (sub && !EXECUTOR_GIT_ALLOW_SUBCMDS.has(sub)) {
+      return { allow: false, reason: "EXECUTOR_BROKER_UNKNOWN_GIT_SUBCMD", detail: sub };
+    }
+    return { allow: true, class: "executor_readonly_git" };
+  }
+  // Containment for every path-like argument.
+  for (const t of tokens.slice(1)) {
+    if (t.startsWith("-")) continue;
+    if (!(path.isAbsolute(t) || t.includes("/") || t.includes("\\") || t.includes(".."))) continue;
+    const c = isContainedPath(execRoot, t, execRoot);
+    if (!c.ok) return { allow: false, reason: "BASH_PATH_OUTSIDE_EXECUTION_ROOT", detail: c.reason };
+    const n = normalizeSep(c.abs);
+    const nl = process.platform === "win32" ? n.toLowerCase() : n;
+    if (nl.includes("/.ai/") || nl.endsWith("/.ai") || nl.includes("/.git/") || nl.endsWith("/.git")) {
+      return { allow: false, reason: "BASH_FORBIDDEN_ROOT" };
+    }
+  }
+  return { allow: true, class: "executor_execution_root" };
+}
+
+/**
+ * STRICT_PATCH_PATH_CONTRACT_V1 — parse apply_patch / multiedit / diff forms and
+ * extract every file path so containment can be enforced for all targets.
+ * Returns { paths: [...], ok: bool, reason }. Fails closed on unknown shapes.
+ */
+function _stripGitPathQuoting(s) {
+  // Git quotes paths containing spaces/special chars: +++ "b/weird path.js"
+  let v = String(s);
+  if (v.startsWith('"') && v.endsWith('"') && v.length >= 2) {
+    v = v.slice(1, -1);
+    // unescape \" and \\ (best-effort, sufficient for path containment)
+    v = v.replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+  }
+  return v;
+}
+
+function extractPatchPaths(args, { tool } = {}) {
+  const out = { paths: [], ok: true, reason: "" };
+  if (!args || typeof args !== "object") return out;
+  // Direct path keys (write/edit-like invocation)
+  for (const k of ["filePath", "path", "file", "target"]) {
+    if (typeof args[k] === "string" && args[k]) out.paths.push(args[k]);
+  }
+  // apply_patch with a unified-diff payload in patch/diff/content/input.
+  let sawPatchPayload = false;
+  for (const key of ["patch", "diff", "content", "input"]) {
+    let raw = args[key];
+    if (typeof raw !== "string" || !raw) continue;
+    sawPatchPayload = true;
+    const lines = raw.split(/\r?\n/);
+    for (const line of lines) {
+      if (line.startsWith("diff --git a/") && line.includes(" b/")) {
+        const m = line.match(/^diff --git a\/(.*) b\/(.*)$/);
+        if (m) {
+          out.paths.push(_stripGitPathQuoting(m[1]));
+          out.paths.push(_stripGitPathQuoting(m[2]));
+        }
+      } else if (/^diff --cc /.test(line) || /^diff --combined /.test(line)) {
+        // Combined/merge diff header: "diff --cc <path>"
+        const m = line.match(/^diff --(?:cc|combined) (\S.*)$/);
+        if (m) out.paths.push(_stripGitPathQuoting(m[1]));
+      } else if (line.startsWith("+++ ") || line.startsWith("--- ")) {
+        const rest = _stripGitPathQuoting(line.slice(4).trimEnd());
+        if (rest === "/dev/null") continue;
+        // strip optional "b/" or "a/" prefix
+        const stripped = rest.replace(/^[ab]\//, "");
+        if (stripped && !stripped.startsWith("+++ ") && !stripped.startsWith("--- ")) {
+          out.paths.push(stripped);
+        }
+      } else if (/^rename from |^rename to |^copy from |^copy to /.test(line)) {
+        const v = line.split(" ", 3)[2];
+        if (v) out.paths.push(_stripGitPathQuoting(v));
+      } else if (line.startsWith("new file mode") || line.startsWith("deleted file mode")) {
+        // path follows on next +++/--- line; captured above
       }
     }
-    return { allow: true, class: "executor_execution_root" };
   }
-  return { allow: false, reason: "SHELL_EFFECT_CLASSIFICATION_UNSUPPORTED", detail: "unknown_bash_mode" };
+  // multiedit with array of edits each having filePath/path
+  for (const arrKey of ["edits", "operations", "changes"]) {
+    const arr = args[arrKey];
+    if (Array.isArray(arr)) {
+      for (const item of arr) {
+        if (!item || typeof item !== "object") continue;
+        for (const k of ["filePath", "path", "file", "target"]) {
+          if (typeof item[k] === "string" && item[k]) out.paths.push(item[k]);
+        }
+        if (typeof item.target === "string") out.paths.push(item.target);
+      }
+    }
+  }
+  // S-008 fail-closed: an edit/apply_patch/multiedit tool carrying a string
+  // patch-like payload from which NO path could be extracted is ambiguous; we
+  // must not silently skip path/secret/containment checks while the write
+  // proceeds. Mark ok=false so callers can reject.
+  const editLike = ["apply_patch", "multiedit", "edit", "write"];
+  if (tool && editLike.includes(String(tool).toLowerCase()) && sawPatchPayload && out.paths.length === 0) {
+    out.ok = false;
+    out.reason = "PATCH_PATHS_UNEXTRACTED";
+  }
+  // Dedupe while preserving order
+  const seen = new Set();
+  out.paths = out.paths.filter((p) => {
+    if (seen.has(p)) return false;
+    seen.add(p);
+    return true;
+  });
+  return out;
 }
 
 function classifyTool(tool, args) {
   const t = String(tool || "").toLowerCase();
   const reg = TOOL_REGISTRY[t];
   if (!reg) {
-    // MCP / custom: require capability manifest binding
+    // MCP / custom: require capability manifest binding (hash-bound at launch).
     const manifestRaw = process.env.OPENCODE_GOVERNANCE_TOOL_CAPABILITY_MANIFEST || "";
     if (manifestRaw && fs.existsSync(manifestRaw)) {
       try {
         const man = JSON.parse(fs.readFileSync(manifestRaw, "utf8"));
         const entry = (man.tools || []).find((x) => String(x.name || "").toLowerCase() === t);
         if (entry && Array.isArray(entry.effects) && entry.effects.length) {
-          return {
-            effects: entry.effects,
-            path: args.filePath || args.path || args.file || args.target || null,
-            registered: true,
-            custom: true,
-          };
+          const pe = extractPatchPaths(args, { tool: t });
+          const filePath = pe.paths[0] || args.filePath || args.path || args.file || args.target || null;
+          return { effects: entry.effects, path: filePath, paths: pe.paths, patchOk: pe.ok, patchReason: pe.reason, registered: true, custom: true };
         }
       } catch { /* fall through */ }
     }
-    return { effects: null, path: null, unknown: true };
+    return { effects: null, path: null, paths: [], patchOk: true, unknown: true };
   }
+  // Registry entry may carry patch diff keys (apply_patch).
+  const pe = extractPatchPaths(args, { tool: t });
   let filePath = null;
   for (const k of reg.pathKeys) {
     if (args && args[k] != null) {
@@ -357,7 +514,9 @@ function classifyTool(tool, args) {
       break;
     }
   }
-  return { effects: reg.effects, path: filePath, registered: true };
+  // For apply_patch/multiedit, prefer the extracted path list as authoritative.
+  const paths = pe.paths.length ? pe.paths : filePath ? [filePath] : [];
+  return { effects: reg.effects, path: paths[0] || filePath, paths, patchOk: pe.ok, patchReason: pe.reason, registered: true };
 }
 
 function buildRoots() {
@@ -372,9 +531,51 @@ function buildRoots() {
 }
 
 /**
- * GOVERNED_ROLE_LAUNCH_CONTRACT_V2 — content-bound, expiring, single-use.
+ * Derive the real OpenCode version from the actual binary, not an env var (S-011).
+ * Falls back to env only when the binary cannot be executed.
  */
-function loadLaunchV2() {
+function deriveOpencodeVersion() {
+  const candidates = [];
+  if (process.env.OPENCODE_GOVERNANCE_OPENCODE_BINARY) {
+    candidates.push(process.env.OPENCODE_GOVERNANCE_OPENCODE_BINARY);
+  }
+  if (process.env.OPENCODE_BINARY) candidates.push(process.env.OPENCODE_BINARY);
+  // PATH lookup
+  try {
+    const which = process.platform === "win32" ? "where opencode" : "which opencode";
+    // best-effort; ignore failures
+  } catch { /* ignore */ }
+  const fromEnv = process.env.OPENCODE_VERSION || process.env.OPENCODE_GOVERNANCE_OPENCODE_VERSION || "";
+  // Try common binary paths.
+  const binPaths = [
+    process.env.OPENCODE_GOVERNANCE_OPENCODE_BINARY,
+    process.env.OPENCODE_BINARY,
+    process.platform === "win32"
+      ? path.join(process.env.APPDATA || "", "npm", "node_modules", "opencode-ai", "bin", "opencode.exe")
+      : path.join((process.env.HOME || ""), ".opencode", "bin", "opencode"),
+    process.platform === "win32" ? path.join((process.env.HOME || ""), ".opencode", "bin", "opencode.exe") : "",
+  ].filter(Boolean);
+  for (const bp of binPaths) {
+    if (!fs.existsSync(bp)) continue;
+    try {
+      const ver = execFileSync(bp, ["--version"], { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"] }).trim();
+      if (ver && /\d+\.\d+/.test(ver)) return ver;
+    } catch { /* try next */ }
+  }
+  // PATH fallback
+  try {
+    const exe = process.platform === "win32" ? "opencode.exe" : "opencode";
+    const ver = execFileSync(exe, ["--version"], { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"], shell: process.platform === "win32" }).trim();
+    if (ver && /\d+\.\d+/.test(ver)) return ver;
+  } catch { /* ignore */ }
+  return fromEnv;
+}
+
+/**
+ * GOVERNED_ROLE_LAUNCH_CONTRACT_V3 — content-bound, expiring, SESSION-single-use.
+ * Accepted on read: V3, V2 (in-flight upgrade), V1 (legacy).
+ */
+function loadLaunchV3() {
   const p = process.env.OPENCODE_GOVERNANCE_LAUNCH_FILE || "";
   if (!p) return null;
   if (!fs.existsSync(p)) throw new Error(`GOVERNED_ROLE_LAUNCH_REQUIRED: launch file missing: ${p}`);
@@ -393,10 +594,10 @@ function loadLaunchV2() {
     throw new Error(`GOVERNED_ROLE_LAUNCH_REQUIRED: launch JSON invalid: ${e.message}`);
   }
   const schema = body.schema || body.contract;
-  if (schema !== LAUNCH_SCHEMA_V2 && schema !== "GOVERNED_ROLE_LAUNCH_CONTRACT_V1") {
+  if (schema !== LAUNCH_SCHEMA_V3 && schema !== LAUNCH_SCHEMA_V2 && schema !== LAUNCH_SCHEMA_V1) {
     throw new Error(`GOVERNED_ROLE_LAUNCH_REQUIRED: invalid launch schema ${schema}`);
   }
-  if (schema === LAUNCH_SCHEMA_V2) {
+  if (schema === LAUNCH_SCHEMA_V3 || schema === LAUNCH_SCHEMA_V2) {
     for (const f of ["launch_id", "nonce", "issued_at_utc", "expires_at_utc", "role", "workspace_root", "repository_root"]) {
       if (!body[f]) throw new Error(`GOVERNED_ROLE_LAUNCH_REQUIRED: missing ${f}`);
     }
@@ -404,9 +605,6 @@ function loadLaunchV2() {
     const exp = Date.parse(body.expires_at_utc);
     if (!Number.isFinite(exp) || exp < now) {
       throw new Error("GOVERNED_ROLE_LAUNCH_REQUIRED: launch expired");
-    }
-    if (body.single_use && body.consumed_at_utc) {
-      throw new Error("GOVERNED_ROLE_LAUNCH_REQUIRED: launch already consumed");
     }
     // Apply receipt as authoritative (env cannot override role after load).
     process.env.OPENCODE_GOVERNANCE_EFFECT_ENFORCEMENT_ACTIVE = "1";
@@ -425,6 +623,9 @@ function loadLaunchV2() {
     if (body.permission_policy_sha256) process.env.OPENCODE_GOVERNANCE_PERMISSION_POLICY_SHA256 = String(body.permission_policy_sha256);
     if (body.effect_policy_sha256) process.env.OPENCODE_GOVERNANCE_EFFECT_POLICY_SHA256 = String(body.effect_policy_sha256);
     if (body.plugin_sha256) process.env.OPENCODE_GOVERNANCE_PLUGIN_SHA256 = String(body.plugin_sha256);
+    if (body.route_receipt_sha256) process.env.OPENCODE_GOVERNANCE_ROUTE_RECEIPT_SHA256 = String(body.route_receipt_sha256);
+    if (body.tool_capability_manifest_sha256) process.env.OPENCODE_GOVERNANCE_TOOL_CAPABILITY_MANIFEST_SHA256 = String(body.tool_capability_manifest_sha256);
+    if (body.tool_capability_manifest) process.env.OPENCODE_GOVERNANCE_TOOL_CAPABILITY_MANIFEST = String(body.tool_capability_manifest);
     body._launch_sha256 = actualSha;
     body._path = p;
   } else {
@@ -436,25 +637,102 @@ function loadLaunchV2() {
     if (body.active != null) {
       process.env.OPENCODE_GOVERNANCE_EFFECT_ENFORCEMENT_ACTIVE = String(body.active) === "0" ? "0" : "1";
     }
+    body._launch_sha256 = actualSha;
+    body._path = p;
   }
   return body;
 }
 
-function markLaunchConsumed(launch) {
-  if (!launch || launch.schema !== LAUNCH_SCHEMA_V2 || !launch.single_use || !launch._path) return;
-  if (launch.consumed_at_utc) return;
-  try {
-    const next = { ...launch };
-    delete next._launch_sha256;
-    delete next._path;
-    next.consumed_at_utc = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-    const tmp = launch._path + ".consume.tmp";
-    fs.writeFileSync(tmp, JSON.stringify(next, null, 2) + "\n", "utf8");
-    fs.renameSync(tmp, launch._path);
-  } catch { /* best-effort consume marker */ }
+/**
+ * ROLE_SESSION_CLAIM_CONTRACT_V1 — claim the launch for THIS process/session
+ * exactly once. Subsequent tool calls in the same session reuse the cached claim
+ * WITHOUT re-reading the (possibly consumed) launch file from disk (S-003).
+ * Replays from another process or session are rejected (S-012).
+ */
+function claimSession(launch, ctx) {
+  if (!launch) return null;
+  if (launch.schema !== LAUNCH_SCHEMA_V3 && launch.schema !== LAUNCH_SCHEMA_V2) {
+    return { body: launch, claimedAt: new Date().toISOString(), pid: process.pid, ppid: process.ppid, sessionId: sessionId(ctx) };
+  }
+  const sid = sessionId(ctx);
+  const myPid = process.pid;
+  // Replay-from-another-process/session detection against an on-disk claim file.
+  const claimPath = launch._path ? launch._path + ".session-claim.json" : "";
+  const claimBody = {
+    schema: SESSION_CLAIM_SCHEMA,
+    launch_id: launch.launch_id,
+    nonce: launch.nonce,
+    process_id: myPid,
+    parent_process_id: process.ppid,
+    session_id: sid,
+    hostname: os.hostname(),
+    claimed_at_utc: new Date().toISOString(),
+  };
+  if (claimPath) {
+    try {
+      if (fs.lstatSync(claimPath || "").isSymbolicLink()) {
+        const err = new Error(`ROLE_SESSION_CLAIM_REJECTED: claim path is symlink: ${claimPath}`);
+        err.code = "ROLE_SESSION_CLAIM_REJECTED";
+        throw err;
+      }
+    } catch (e) {
+      if (e && e.code === "ROLE_SESSION_CLAIM_REJECTED") throw e;
+      // non-existent path is fine; other stat errors fall through to the atomic claim.
+    }
+    // S-012: atomic exclusive claim. O_EXCL ("wx") ensures two processes cannot
+    // both observe "no claim" and both write — the second openSync fails with
+    // EEXIST, which we treat as a replay rejection. This closes the TOCTOU race
+    // that a check-then-write rename window left open.
+    let fd = -1;
+    try {
+      try {
+        fd = fs.openSync(claimPath, "wx", 0o600);
+      } catch (e) {
+        if (e && (e.code === "EEXIST" || e.code === "EPERM")) {
+          // Claim file exists — another process/session already claimed this launch.
+          let existing = null;
+          try { existing = JSON.parse(fs.readFileSync(claimPath, "utf8")); } catch { /* unreadable */ }
+          const sameProc = existing && Number(existing.process_id) === myPid;
+          const sameSession = !sid || !existing || !existing.session_id || existing.session_id === sid;
+          if (!sameProc || !sameSession) {
+            const err = new Error(
+              `ROLE_SESSION_CLAIM_REJECTED: launch ${launch.launch_id} already claimed by pid=${existing && existing.process_id} session=${existing && existing.session_id}; this pid=${myPid} session=${sid}`
+            );
+            err.code = "ROLE_SESSION_CLAIM_REJECTED";
+            throw err;
+          }
+          // Same process/session re-claiming is allowed (idempotent within the session).
+        } else {
+          throw e;
+        }
+      }
+      if (fd >= 0) {
+        fs.writeFileSync(fd, JSON.stringify(claimBody, null, 2) + "\n", "utf8");
+        fs.closeSync(fd);
+      }
+    } catch (e) {
+      if (e && e.code === "ROLE_SESSION_CLAIM_REJECTED") throw e;
+      // claim write failure is non-fatal for same-process reuse; proceed.
+      try { if (fd >= 0) fs.closeSync(fd); } catch { /* ignore */ }
+    }
+  }
+  claimedLaunch = { body: launch, claimedAt: claimBody.claimed_utc || claimBody.claimed_at_utc, pid: myPid, ppid: process.ppid, sessionId: sid };
+  return claimedLaunch;
 }
 
-function writeHandshake(ctx, launch) {
+function sessionId(ctx) {
+  if (!ctx) return process.env.OPENCODE_GOVERNANCE_SESSION_ID || "";
+  const sid = (ctx && (ctx.sessionID || ctx.sessionId)) || process.env.OPENCODE_GOVERNANCE_SESSION_ID || "";
+  return sid;
+}
+
+/**
+ * EFFECT_PLUGIN_RUNTIME_READY_GATE_V2 — write the READY barrier only AFTER
+ * complete setup. Bind it to the exact process/session and to the launch nonce.
+ * Never write READY in an exception path; setup failures produce a typed
+ * NOT_READY evidence record instead.
+ */
+function writeReady(ctx, launch, policy) {
   const out =
     process.env.OPENCODE_GOVERNANCE_HANDSHAKE_PATH ||
     (process.env.OPENCODE_GOVERNANCE_HANDSHAKE_DIR
@@ -464,40 +742,145 @@ function writeHandshake(ctx, launch) {
   const pluginPath = path.join(__dirname, "index.mjs");
   const policyPath =
     process.env.OPENCODE_GOVERNANCE_EFFECT_POLICY || path.join(__dirname, "role-effect-policy.json");
+  const launchSha = (launch && launch._launch_sha256) || process.env.OPENCODE_GOVERNANCE_LAUNCH_SHA256 || "";
+  // READY nonce MUST echo and bind the launch nonce (S-012), not a fresh random.
+  const launchNonce = (launch && launch.nonce) || "";
+  // Derive a deterministic READY secret from the launch nonce so the host
+  // acknowledgement can be verified without shared secrets beyond the launch.
+  const readySecret = launchNonce ? sha256Text("ready:" + launchNonce + ":" + String(process.pid)) : "";
   const body = {
-    schema: HANDSHAKE_SCHEMA,
+    schema: READY_SCHEMA,
+    handshake_schema: HANDSHAKE_SCHEMA,
     plugin_id: PLUGIN_ID,
     plugin_sha256: fs.existsSync(pluginPath) ? sha256File(pluginPath) : "",
     policy_sha256: fs.existsSync(policyPath) ? sha256File(policyPath) : "",
-    opencode_version: process.env.OPENCODE_VERSION || process.env.OPENCODE_GOVERNANCE_OPENCODE_VERSION || "",
+    policy_schema: (policy && policy.schema) || "",
+    opencode_version: deriveOpencodeVersion(),
+    opencode_version_source: "binary",
     plugin_api_generation: PLUGIN_API_GENERATION,
     hook_contract: HOOK_CONTRACT,
-    launch_receipt_sha256: (launch && launch._launch_sha256) || process.env.OPENCODE_GOVERNANCE_LAUNCH_SHA256 || "",
+    launch_receipt_sha256: launchSha,
+    launch_id: (launch && launch.launch_id) || "",
+    launch_nonce: launchNonce,
+    ready_nonce: readySecret,
     role: resolveRole(),
+    expected_agent: process.env.OPENCODE_GOVERNANCE_EXPECTED_AGENT || "",
     task_id: process.env.OPENCODE_GOVERNANCE_TASK_ID || "",
     phase: process.env.OPENCODE_GOVERNANCE_PHASE || "",
     candidate_identity: process.env.OPENCODE_GOVERNANCE_CANDIDATE_IDENTITY || "",
     packet_sha256: process.env.OPENCODE_GOVERNANCE_PACKET_SHA256 || "",
+    route_receipt_sha256: process.env.OPENCODE_GOVERNANCE_ROUTE_RECEIPT_SHA256 || "",
+    permission_policy_sha256: process.env.OPENCODE_GOVERNANCE_PERMISSION_POLICY_SHA256 || "",
+    tool_capability_manifest_sha256: process.env.OPENCODE_GOVERNANCE_TOOL_CAPABILITY_MANIFEST_SHA256 || "",
     process_id: process.pid,
-    session_id: (ctx && (ctx.sessionID || ctx.sessionId)) || process.env.OPENCODE_GOVERNANCE_SESSION_ID || "",
-    started_at_utc: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
-    nonce: crypto.randomBytes(16).toString("hex"),
+    parent_process_id: process.ppid,
+    session_id: sessionId(ctx),
+    working_directory: (process.cwd && process.cwd()) || "",
     hostname: os.hostname(),
+    issued_at_utc: process.env.OPENCODE_GOVERNANCE_LAUNCH_ISSUED_AT || "",
+    ready_at_utc: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
   };
   const dir = path.dirname(out);
   fs.mkdirSync(dir, { recursive: true });
   const tmp = out + ".tmp";
   fs.writeFileSync(tmp, JSON.stringify(body, null, 2) + "\n", "utf8");
   fs.renameSync(tmp, out);
+  // Cache the emitted READY so the host-ack gate can bind the acknowledgement
+  // back to THIS process's READY nonce (S-001).
+  emittedReady = body;
   return body;
 }
 
-function enforce(policy, input, output) {
+/** Typed NOT_READY evidence for setup failures (never a successful READY). */
+function writeNotReady(reason, detail) {
+  const out =
+    process.env.OPENCODE_GOVERNANCE_HANDSHAKE_PATH ||
+    (process.env.OPENCODE_GOVERNANCE_HANDSHAKE_DIR
+      ? path.join(process.env.OPENCODE_GOVERNANCE_HANDSHAKE_DIR, "effect-plugin-handshake.json")
+      : "");
+  if (!out) return;
+  try {
+    const body = {
+      schema: "EFFECT_PLUGIN_NOT_READY_V1",
+      reason: String(reason || "UNKNOWN"),
+      detail: String(detail || ""),
+      process_id: process.pid,
+      parent_process_id: process.ppid,
+      hostname: os.hostname(),
+      not_ready_at_utc: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+    };
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    const tmp = out + ".tmp";
+    fs.writeFileSync(tmp, JSON.stringify(body, null, 2) + "\n", "utf8");
+    fs.renameSync(tmp, out);
+  } catch { /* best-effort */ }
+}
+
+/** Read & validate the host acknowledgement bound to READY (S-001 gate). */
+// The emitted READY body, cached so the host-ack gate can cryptographically
+// bind the acknowledgement to THIS process's READY (S-001). Set by writeReady.
+let emittedReady = null;
+
+function readHostAck() {
+  const ackPath = process.env.OPENCODE_GOVERNANCE_HOST_ACK_PATH || "";
+  if (!ackPath) return { ok: false, reason: "HOST_ACK_PATH_UNSET" };
+  if (!fs.existsSync(ackPath)) return { ok: false, reason: "HOST_ACK_MISSING" };
+  let raw, ack;
+  try {
+    if (fs.lstatSync(ackPath).isSymbolicLink()) return { ok: false, reason: "HOST_ACK_SYMLINK" };
+    raw = fs.readFileSync(ackPath, "utf8");
+    ack = JSON.parse(raw);
+  } catch (e) {
+    return { ok: false, reason: "HOST_ACK_UNREADABLE", detail: String(e.message || e) };
+  }
+  if (ack.schema !== "GOVERNED_ROLE_HOST_ACK_V1") return { ok: false, reason: "HOST_ACK_SCHEMA_INVALID" };
+  // Bind to this process/session.
+  if (Number(ack.process_id) !== process.pid) return { ok: false, reason: "HOST_ACK_PROCESS_MISMATCH" };
+  const sid = process.env.OPENCODE_GOVERNANCE_SESSION_ID || "";
+  if (sid && ack.session_id && ack.session_id !== sid) return { ok: false, reason: "HOST_ACK_SESSION_MISMATCH" };
+  // Bind to the READY nonce we emitted.
+  const readySecret = ack.ready_nonce || "";
+  if (!readySecret) return { ok: false, reason: "HOST_ACK_MISSING_NONCE" };
+  // S-001: cryptographically verify the host saw THIS process's READY by
+  // comparing the ack's ready_nonce to the one we derived from the launch nonce.
+  if (!emittedReady) return { ok: false, reason: "HOST_ACK_READY_NOT_EMITTED" };
+  if (!verifyHostAckAgainstReady(emittedReady, ack)) {
+    return { ok: false, reason: "HOST_ACK_NONCE_MISMATCH", detail: "ack ready_nonce does not bind to emitted READY" };
+  }
+  return { ok: true, ack };
+}
+
+/**
+ * Verify the host acknowledgement matches the READY we emitted.
+ * The host writes back the ready_nonce it observed in READY; we confirm it equals
+ * the value we derived from the launch nonce. This proves the host saw OUR READY.
+ */
+function verifyHostAckAgainstReady(ready, ack) {
+  if (!ready || !ack) return false;
+  const expected = ready.ready_nonce || "";
+  if (!expected) return false;
+  return String(ack.ready_nonce || "") === expected;
+}
+
+function enforce(policy, input, output, ctx) {
   if (!isActive() && !process.env.OPENCODE_GOVERNANCE_LAUNCH_FILE) {
     return { status: "INACTIVE" };
   }
-  const launch = loadLaunchV2();
+  // Session-level claim: load once, cache in-process, never re-read consumed file.
+  if (!claimedLaunch) {
+    const launch = loadLaunchV3();
+    if (!isActive()) return { status: "INACTIVE" };
+    claimSession(launch, ctx);
+  }
   if (!isActive()) return { status: "INACTIVE" };
+
+  // PRE-SIDE-EFFECT READY GATE: no tool effect before host acknowledgement.
+  if (process.env.OPENCODE_GOVERNANCE_REQUIRE_HOST_ACK === "1") {
+    const ackResult = readHostAck();
+    if (!ackResult.ok) {
+      throw new Error(`EFFECT_PLUGIN_HOST_ACK_REQUIRED: ${ackResult.reason}${ackResult.detail ? " detail=" + ackResult.detail : ""}`);
+    }
+  }
 
   // Plugin self-hash binding when launcher declares expected plugin hash
   const expectedPlugin = String(process.env.OPENCODE_GOVERNANCE_PLUGIN_SHA256 || "").trim();
@@ -545,6 +928,11 @@ function enforce(policy, input, output) {
   if (classified.unknown || !classified.effects) {
     throw new Error(`TOOL_EFFECT_CLASSIFICATION_UNKNOWN: tool=${tool}`);
   }
+  // S-008 fail-closed: an edit-like tool with a patch payload from which no
+  // path could be extracted must not bypass path/secret/containment checks.
+  if (classified.patchOk === false) {
+    throw new Error(`EFFECT_ENFORCEMENT_PATCH_PATHS_UNEXTRACTED: tool=${tool} reason=${classified.patchReason || ""}`);
+  }
   // Enforce allowed_effects as allowlist when present
   const allowed = rolePolicy.allowed_effects || [];
   if (allowed.length) {
@@ -560,9 +948,12 @@ function enforce(policy, input, output) {
     }
   }
 
-  const filePath = classified.path;
-  if (filePath && typeof filePath === "string" && looksLikeSecret(filePath)) {
-    throw new Error(`EFFECT_ENFORCEMENT_SECRET_ACCESS: ${filePath}`);
+  // Secret access check across ALL extracted paths (apply_patch/multiedit aware).
+  const allPaths = classified.paths && classified.paths.length ? classified.paths : (classified.path ? [classified.path] : []);
+  for (const fp of allPaths) {
+    if (fp && typeof fp === "string" && looksLikeSecret(fp)) {
+      throw new Error(`EFFECT_ENFORCEMENT_SECRET_ACCESS: ${fp}`);
+    }
   }
   const roots = buildRoots();
 
@@ -575,35 +966,48 @@ function enforce(policy, input, output) {
     }
   }
 
-  if (rolePolicy.edit_mode === "deny" && ["edit", "write", "multiedit", "apply_patch"].includes(String(tool).toLowerCase())) {
+  const editLike = ["edit", "write", "multiedit", "apply_patch"].includes(String(tool).toLowerCase());
+  if (rolePolicy.edit_mode === "deny" && editLike) {
     throw new Error(`EFFECT_ENFORCEMENT_EDIT_DENIED: role=${role}`);
   }
 
-  if (rolePolicy.edit_mode === "governance_only" && filePath && classified.effects.includes("WRITE")) {
-    if (!roots.workspace && !roots.repository) {
-      throw new Error("GOVERNED_ROLE_LAUNCH_REQUIRED: workspace/repository roots missing");
-    }
-    if (!isExactGovernanceRootPath(String(filePath), roots)) {
-      throw new Error(`EFFECT_ENFORCEMENT_WRITE_OUTSIDE_GOVERNANCE: ${filePath}`);
-    }
-  }
-
-  if (rolePolicy.edit_mode === "execution_root_only" && filePath && classified.effects.some((e) => e === "WRITE" || e === "CREATE")) {
-    if (!roots.execution_root) throw new Error("EXECUTION_ROOT_REQUIRED");
-    const c = isContainedPath(roots.execution_root, String(filePath), roots.execution_root);
-    if (!c.ok) throw new Error(`EFFECT_ENFORCEMENT_WRITE_OUTSIDE_EXECUTION_ROOT: ${filePath} (${c.reason})`);
-    const n = normalizeSep(c.abs);
-    const nl = process.platform === "win32" ? n.toLowerCase() : n;
-    if (nl.includes("/.ai/") || nl.endsWith("/.ai") || nl.includes("/.git/") || nl.endsWith("/.git")) {
-      throw new Error(`EFFECT_ENFORCEMENT_FORBIDDEN_ROOT: ${filePath}`);
+  // Containment for EVERY extracted path (S-008 fix for apply_patch/multiedit).
+  const writeEffects = classified.effects.some((e) => e === "WRITE" || e === "CREATE");
+  if (editLike && writeEffects) {
+    if (rolePolicy.edit_mode === "governance_only") {
+      if (!roots.workspace && !roots.repository) {
+        throw new Error("GOVERNED_ROLE_LAUNCH_REQUIRED: workspace/repository roots missing");
+      }
+      for (const fp of allPaths) {
+        if (!isExactGovernanceRootPath(String(fp), roots)) {
+          throw new Error(`EFFECT_ENFORCEMENT_WRITE_OUTSIDE_GOVERNANCE: ${fp}`);
+        }
+      }
+    } else if (rolePolicy.edit_mode === "execution_root_only") {
+      if (!roots.execution_root) throw new Error("EXECUTION_ROOT_REQUIRED");
+      // Reject traversal targets outright; absolute paths are allowed only when
+      // they resolve inside the execution root (Executors legitimately use
+      // absolute paths inside their isolated worktree). Symlink/reparse and
+      // outside-root cases are caught by isContainedPath.
+      for (const fp of allPaths) {
+        const raw = String(fp);
+        if (raw.includes("..")) throw new Error(`EFFECT_ENFORCEMENT_WRITE_OUTSIDE_EXECUTION_ROOT: traversal:${fp}`);
+        const c = isContainedPath(roots.execution_root, raw, roots.execution_root);
+        if (!c.ok) throw new Error(`EFFECT_ENFORCEMENT_WRITE_OUTSIDE_EXECUTION_ROOT: ${fp} (${c.reason})`);
+        const n = normalizeSep(c.abs);
+        const nl = process.platform === "win32" ? n.toLowerCase() : n;
+        if (nl.includes("/.ai/") || nl.endsWith("/.ai") || nl.includes("/.git/") || nl.endsWith("/.git")) {
+          throw new Error(`EFFECT_ENFORCEMENT_FORBIDDEN_ROOT: ${fp}`);
+        }
+      }
     }
   }
 
   // Reviewer evidence isolation
   if (role === "reviewer" || role === "implementation-reviewer" || role === "reviewer-architecture" || role === "architecture-reviewer" || role === "final-reviewer") {
-    if (filePath) {
-      const base = path.basename(String(filePath));
-      const n = normalizeSep(String(filePath));
+    for (const fp of allPaths) {
+      const base = path.basename(String(fp));
+      const n = normalizeSep(String(fp));
       const r = role === "implementation-reviewer" ? "reviewer" : role === "architecture-reviewer" ? "reviewer-architecture" : role;
       if ((r === "reviewer" || role === "implementation-reviewer") && (/REVIEW_ARCHITECTURE/i.test(base) || /FINAL_ADJUDICATION/i.test(base))) {
         throw new Error("EFFECT_ENFORCEMENT_SIBLING_REPORT_ISOLATION");
@@ -618,42 +1022,125 @@ function enforce(policy, input, output) {
     }
   }
 
-  if (launch && launch.schema === LAUNCH_SCHEMA_V2) markLaunchConsumed(launch);
-  return { status: "ALLOW", role, tool, effects: classified.effects };
+  // S-003: launch single-use is session-scoped; do NOT mark per-tool consumed here.
+  // The session claim file is the single-use marker; it is written once at claim.
+  const allowResult = { status: "ALLOW", role, tool, effects: classified.effects, paths: allPaths };
+  logDecision("ALLOW", role, tool, classified.effects, allPaths, "");
+  return allowResult;
+}
+
+/**
+ * S-010: append a hook-generated decision receipt to the decision log so the
+ * self-test (and the Review Chain V4) can require positive hook evidence for
+ * BOTH allow and deny, rather than treating stdout presence/absence as proof.
+ */
+function logDecision(decision, role, tool, effects, paths, error) {
+  const logPath = process.env.OPENCODE_GOVERNANCE_DECISION_LOG || "";
+  if (!logPath) return;
+  try {
+    const entry = {
+      schema: "EFFECT_PLUGIN_DECISION_RECEIPT_V1",
+      decision,
+      role,
+      tool,
+      effects: effects || [],
+      paths: paths || [],
+      error: error || "",
+      process_id: process.pid,
+      at_utc: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+    };
+    fs.appendFileSync(logPath, JSON.stringify(entry) + "\n", "utf8");
+  } catch { /* best-effort; never block a decision on logging */ }
 }
 
 /**
  * OpenCode plugin entry — sole named export (OpenCode treats all named exports as plugins).
+ *
+ * READY ordering (S-002): validate launch -> self-hash -> policy hash/schema ->
+ * tool registry -> capability manifest -> build hook -> THEN emit READY.
  */
 export async function OpenCodeGovernanceEffectEnforcement(ctx) {
-  // Emit handshake as early as possible so launchers can detect load (R-001/R-002).
+  const wantGate = isActive() || process.env.OPENCODE_GOVERNANCE_LAUNCH_FILE || process.env.OPENCODE_GOVERNANCE_HANDSHAKE_PATH;
   let launch = null;
-  let handshake = null;
-  if (isActive() || process.env.OPENCODE_GOVERNANCE_LAUNCH_FILE || process.env.OPENCODE_GOVERNANCE_HANDSHAKE_PATH) {
+  let policy = null;
+  let ready = null;
+  if (wantGate) {
+    // 1. Load + validate launch FIRST.
     try {
       if (process.env.OPENCODE_GOVERNANCE_LAUNCH_FILE) {
-        launch = loadLaunchV2();
+        launch = loadLaunchV3();
       }
     } catch (e) {
-      // Still attempt handshake so the runner can observe a failed load path.
-      try {
-        handshake = writeHandshake(ctx || {}, null);
-      } catch { /* ignore */ }
+      // Setup failure: typed NOT_READY, never a successful READY.
+      try { writeNotReady("LAUNCH_LOAD_FAILED", String(e.message || e)); } catch { /* ignore */ }
       throw e;
     }
+    // 2. Load + validate policy.
     try {
-      handshake = writeHandshake(ctx || {}, launch);
+      policy = loadPolicy();
     } catch (e) {
+      try { writeNotReady("POLICY_LOAD_FAILED", String(e.message || e)); } catch { /* ignore */ }
+      throw new Error(`EFFECT_PLUGIN_SETUP_FAILED: ${e.message || e}`);
+    }
+    if (policy.schema !== SCHEMA && policy.schema !== "ROLE_EFFECT_ENFORCEMENT_V1_2" && policy.schema !== "ROLE_EFFECT_ENFORCEMENT_V1_1" && policy.schema !== "ROLE_EFFECT_ENFORCEMENT_V1") {
+      try { writeNotReady("POLICY_SCHEMA_INVALID", String(policy.schema)); } catch { /* ignore */ }
+      throw new Error(`EFFECT_ENFORCEMENT_POLICY_SCHEMA: ${policy.schema}`);
+    }
+    // 3. Plugin self-hash binding (if expected).
+    const expectedPlugin = String(process.env.OPENCODE_GOVERNANCE_PLUGIN_SHA256 || "").trim();
+    if (expectedPlugin) {
+      const actual = sha256File(path.join(__dirname, "index.mjs"));
+      if (actual !== expectedPlugin) {
+        try { writeNotReady("PLUGIN_HASH_MISMATCH", `expected=${expectedPlugin} actual=${actual}`); } catch { /* ignore */ }
+        throw new Error(`EFFECT_PLUGIN_HASH_MISMATCH: expected=${expectedPlugin} actual=${actual}`);
+      }
+    }
+    // 4. Capability manifest binding when declared (S-018): hash must match.
+    const expectedMan = String(process.env.OPENCODE_GOVERNANCE_TOOL_CAPABILITY_MANIFEST_SHA256 || "").trim();
+    const manPath = process.env.OPENCODE_GOVERNANCE_TOOL_CAPABILITY_MANIFEST || "";
+    if (expectedMan && manPath) {
+      try {
+        if (!fs.existsSync(manPath)) throw new Error("manifest missing");
+        if (fs.lstatSync(manPath).isSymbolicLink()) throw new Error("manifest is symlink");
+        const manActual = sha256File(manPath);
+        if (manActual !== expectedMan) throw new Error(`manifest hash mismatch expected=${expectedMan} actual=${manActual}`);
+      } catch (e) {
+        try { writeNotReady("CAPABILITY_MANIFEST_INVALID", String(e.message || e)); } catch { /* ignore */ }
+        throw new Error(`EFFECT_PLUGIN_SETUP_FAILED: capability manifest: ${e.message || e}`);
+      }
+    }
+    // 5. Tool registry + role contract must resolve (fail closed for unknown role).
+    const role = resolveRole();
+    if (role && !policy.roles[role]) {
+      try { writeNotReady("ROLE_UNKNOWN", role); } catch { /* ignore */ }
+      throw new Error(`EFFECT_ENFORCEMENT_ROLE_UNKNOWN: ${role}`);
+    }
+    // 6. Claim the session (single-use, once).
+    try {
+      claimSession(launch, ctx);
+    } catch (e) {
+      try { writeNotReady("SESSION_CLAIM_FAILED", String(e.message || e)); } catch { /* ignore */ }
+      throw e;
+    }
+    // 7. ALL setup complete -> emit READY. This is the only path that writes READY.
+    try {
+      ready = writeReady(ctx, launch, policy);
+    } catch (e) {
+      try { writeNotReady("READY_WRITE_FAILED", String(e.message || e)); } catch { /* ignore */ }
       throw new Error(`EFFECT_PLUGIN_HANDSHAKE_WRITE_FAILED: ${e.message || e}`);
     }
   }
-  const policy = loadPolicy();
-  if (policy.schema !== SCHEMA && policy.schema !== "ROLE_EFFECT_ENFORCEMENT_V1_1" && policy.schema !== "ROLE_EFFECT_ENFORCEMENT_V1") {
-    throw new Error(`EFFECT_ENFORCEMENT_POLICY_SCHEMA: ${policy.schema}`);
-  }
   return {
     [HOOK]: async (input, output) => {
-      enforce(policy, input || {}, output || {});
+      try {
+        enforce(policy || loadPolicy(), input || {}, output || {}, ctx);
+      } catch (e) {
+        // S-010: log deny decisions before propagating, so the self-test and
+        // Review Chain V4 have positive hook evidence for deny too.
+        const tool = String((input && (input.tool || input.name)) || "");
+        logDecision("DENY", resolveRole(), tool, [], [], String(e.message || e));
+        throw e;
+      }
     },
   };
 }
@@ -665,13 +1152,21 @@ OpenCodeGovernanceEffectEnforcement.PLUGIN_ID = PLUGIN_ID;
 OpenCodeGovernanceEffectEnforcement.PLUGIN_API_GENERATION = PLUGIN_API_GENERATION;
 OpenCodeGovernanceEffectEnforcement.PLUGIN_EXPORT_CONTRACT = PLUGIN_EXPORT_CONTRACT;
 OpenCodeGovernanceEffectEnforcement.HOOK_CONTRACT = HOOK_CONTRACT;
+OpenCodeGovernanceEffectEnforcement.READY_SCHEMA = READY_SCHEMA;
 OpenCodeGovernanceEffectEnforcement.HANDSHAKE_SCHEMA = HANDSHAKE_SCHEMA;
+OpenCodeGovernanceEffectEnforcement.LAUNCH_SCHEMA_V3 = LAUNCH_SCHEMA_V3;
+OpenCodeGovernanceEffectEnforcement.SESSION_CLAIM_SCHEMA = SESSION_CLAIM_SCHEMA;
 OpenCodeGovernanceEffectEnforcement._enforce = enforce;
 OpenCodeGovernanceEffectEnforcement._loadPolicy = loadPolicy;
 OpenCodeGovernanceEffectEnforcement._classifyShell = classifyShell;
 OpenCodeGovernanceEffectEnforcement._classifyTool = classifyTool;
 OpenCodeGovernanceEffectEnforcement._isContainedPath = isContainedPath;
-OpenCodeGovernanceEffectEnforcement._writeHandshake = writeHandshake;
+OpenCodeGovernanceEffectEnforcement._writeReady = writeReady;
+OpenCodeGovernanceEffectEnforcement._writeNotReady = writeNotReady;
+OpenCodeGovernanceEffectEnforcement._readHostAck = readHostAck;
+OpenCodeGovernanceEffectEnforcement._extractPatchPaths = extractPatchPaths;
+OpenCodeGovernanceEffectEnforcement._deriveOpencodeVersion = deriveOpencodeVersion;
+OpenCodeGovernanceEffectEnforcement._resetClaimedLaunch = function () { claimedLaunch = null; };
 OpenCodeGovernanceEffectEnforcement.TOOL_REGISTRY = TOOL_REGISTRY;
 
 export default OpenCodeGovernanceEffectEnforcement;

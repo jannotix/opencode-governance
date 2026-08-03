@@ -9,7 +9,7 @@ if(-not(Test-Path -LiteralPath $BaseUninstaller -PathType Leaf)){throw "Internal
 
 if(Test-Path -LiteralPath $ManifestPath -PathType Leaf){
     try{$Manifest=Get-Content -LiteralPath $ManifestPath -Raw|ConvertFrom-Json}catch{throw 'Routing manifest is invalid; refusing to remove unknown managed files.'}
-    if([string]$Manifest.governance_version-in@('3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0','4.0.1','4.0.2')){
+    if([string]$Manifest.governance_version-in@('3.6.0','3.7.0','3.7.1','3.7.2','3.7.3','3.7.4','3.7.5','3.7.6','3.7.7','3.8.0','4.0.0','4.0.1','4.0.2','4.0.3')){
         if(-not(Test-Path -LiteralPath $Capabilities -PathType Leaf)){throw "Capability uninstaller not found: $Capabilities"}
         $Process=Start-Process -FilePath 'python' -ArgumentList @($Capabilities,'uninstall','--config-dir',$ConfigDir) -NoNewWindow -Wait -PassThru
         if($Process.ExitCode-ne0){throw "Governance capability removal failed with exit code $($Process.ExitCode)."}

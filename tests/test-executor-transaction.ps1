@@ -16,6 +16,16 @@ function Get-Sha256Text([string]$Text) {
     }
 }
 
+function Get-Sha256File([string]$Path) {
+    $Algorithm = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [IO.File]::ReadAllBytes($Path)
+        return ([BitConverter]::ToString($Algorithm.ComputeHash($bytes))).Replace('-', '').ToLowerInvariant()
+    } finally {
+        $Algorithm.Dispose()
+    }
+}
+
 try {
     New-Item -ItemType Directory -Force -Path $Config, $Project | Out-Null
     @'
@@ -76,15 +86,36 @@ try {
 
     $Prepare = & $Helper -Operation prepare -ProjectDir $Project -ConfigDir $Config -TaskId TASK -AttemptId locked -FrozenTarget $Frozen -WorkClass PATCH -RouteAgent executor -PacketSha256 $Packet | ConvertFrom-Json
     $Worktree = [string]$Prepare.execution_root
+    $PreparedLaunchSha = [string]$Prepare.governed_role_launch_sha256
     'promoted' | Set-Content (Join-Path $Worktree 'app.txt')
     $Report = Join-Path $Project '.ai\tasks\TASK\evidence\executor-attempts\report.json'
+    $Receipt = Join-Path $Project '.ai\tasks\TASK\evidence\executor-attempts\role-process-receipt-executor.json'
     New-Item -ItemType Directory -Force -Path (Split-Path $Report -Parent) | Out-Null
+    # 4.0.3 S-004: finalize requires a valid GOVERNED_ROLE_PROCESS_CONTRACT_V2
+    # receipt proving the child consumed THIS prepared launch under governance.
+    [ordered]@{
+        status = 'GOVERNED_ROLE_PROCESS_COMPLETE'
+        contract = 'GOVERNED_ROLE_PROCESS_CONTRACT_V2'
+        role = 'executor'
+        agent = 'executor'
+        exit_code = 0
+        exit_zero = $true
+        launch_sha256 = $PreparedLaunchSha
+        launch_consumed_prepared = $true
+        ready_validated_pre_side_effect = $true
+        executor_cwd_is_execution_root = $true
+        role_working_directory = $Worktree
+        handshake_schema = 'EFFECT_PLUGIN_RUNTIME_READY_GATE_V2'
+    } | ConvertTo-Json -Depth 6 | Set-Content $Receipt -Encoding utf8
+    $ReceiptSha = Get-Sha256File $Receipt
     [ordered]@{
         EXECUTOR_ATTEMPT_ID = 'locked'
         PACKET_SHA256 = $Packet
         FROZEN_TARGET_SHA = $Frozen
         REPORT_COMPLETE = 'YES'
-    } | ConvertTo-Json | Set-Content $Report -Encoding utf8
+        GOVERNED_ROLE_PROCESS_RECEIPT_PATH = $Receipt
+        GOVERNED_ROLE_PROCESS_RECEIPT_SHA256 = $ReceiptSha
+    } | ConvertTo-Json -Depth 6 | Set-Content $Report -Encoding utf8
 
     & $Helper -Operation finalize -ProjectDir $Project -ConfigDir $Config -TaskId TASK -AttemptId locked -ReportPath $Report | Out-Null
     git -C $Project worktree lock $Worktree --reason transaction-test

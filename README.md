@@ -4,7 +4,7 @@ Provider- and model-agnostic product-lifecycle governance for [OpenCode](https:/
 
 > Community project. Not affiliated with the OpenCode team.
 
-Current release: **4.0.2 — End-to-end role runtime** (process-per-role + real OpenCode hook evidence).
+Current release: **4.0.3 — Pre-side-effect role transactions** (process-per-role + real OpenCode hook evidence).
 
 Installs seven specialized agents, twelve `/ai-*` commands, deterministic tooling and fail-closed contracts so planning, implementation, validation and review stay bound to approved requirements and current repository evidence.
 
@@ -174,6 +174,22 @@ git pull --ff-only
 ```
 
 Rerun the installer with the same local routing profile. Routing is preserved when the profile remains valid.
+
+### Effect plugin (standalone install / self-test)
+
+The effect-enforcement plugin is normally installed by the umbrella installer,
+but it can be managed directly. `--config-dir` is a top-level option and must
+precede the subcommand (S-019):
+
+```powershell
+python .\scripts\install-effect-plugin.py --config-dir $env:OPENCODE_CONFIG_DIR install
+python .\scripts\install-effect-plugin.py --config-dir $env:OPENCODE_CONFIG_DIR self-test --non-mutating
+```
+
+```bash
+python3 ./scripts/install-effect-plugin.py --config-dir "$OPENCODE_CONFIG_DIR" install
+python3 ./scripts/install-effect-plugin.py --config-dir "$OPENCODE_CONFIG_DIR" self-test --non-mutating
+```
 
 ## Documentation
 
