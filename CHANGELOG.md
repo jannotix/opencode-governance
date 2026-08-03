@@ -5,6 +5,77 @@ Dates use `YYYY-MM-DD`. Older micro-releases are summarized; see git history for
 ## Unreleased
 
 
+## 4.1.0 - 2026-08-03
+
+Hardened review orchestration and Executor command-broker containment over 4.0.4.
+Minor bump: the release adds behavioural security hardening and corrects two
+critical functional defects found by adversarial multi-agent review; it is not
+a pure patch.
+
+### Security hardening (Executor command broker)
+
+Adversarial audit found the Executor command broker was bypassable; all paths
+are now closed and covered by negative regression tests.
+
+- **Absolute-path bypass closed**: any command head containing a path separator
+  (`/bin/rm`, `/usr/bin/git push`) is rejected before classification. Previously
+  the broker matched bare names only, so a path-like head evaded the entire deny
+  list and git allowlist.
+- **Wrapper/escalation heads denied**: `env`, `sudo`, `xargs`, `nohup`, `time`,
+  `strace` and similar wrappers that re-execute an arbitrary child are now
+  explicitly forbidden (`EXECUTOR_WRAPPER_HEADS`).
+- **Absolute interpreter paths closed**: `/usr/bin/python`, `/bin/bash -c` and
+  other absolute interpreter invocations are caught by the same separator guard
+  before interpreter classification (previously only bare names matched).
+- **Bare `git` requires a subcommand**: a git invocation with no subcommand now
+  fails closed (`GIT_SUBCMD_REQUIRED`) instead of falling through to ALLOW.
+
+### Correctness fixes (review orchestration + ingestion)
+
+- **Reviewers harvest from stdout**: reviewers are read-only (`edit_mode: deny`,
+  all write tools denied) and cannot write report files. The orchestrator now
+  harvests each reviewer's verdict text from the role-process stdout log,
+  derives a PASS/FAIL verdict, and writes the report body through the
+  deterministic ingest channel itself. This is the only path by which a
+  read-only reviewer's findings become durable evidence.
+- **Model-family independence enforced**: a single `--model` passed to all
+  reviewers guaranteed a Review Chain V4 model-family collision (impl == arch).
+  Added `--implementation-model` / `--architecture-model` / `--final-model`
+  (with `--model` fallback) and an early
+  `REVIEW_INDEPENDENCE_MODEL_FAMILY_COLLISION` guard that fails before any
+  reviewer process starts.
+- **Executor failover agent matching fixed**: `executor-fallback-N` route agents
+  are now accepted as matching `role=executor` (previously every tool was denied
+  after failover).
+- **Idempotent re-ingest fixed**: re-ingesting the exact same report body no
+  longer fails with `ROLE_REPORT_DUPLICATE_DIVERGENT` (metadata timestamps
+  diverged); an idempotent fast-path returns the existing receipt.
+- **READY-wait detects early child exit**: if the child exits before emitting
+  READY, the launcher now fails immediately with the real exit code and stderr
+  tail instead of burning the full timeout window.
+- **No pipe deadlock**: child stdout/stderr are redirected to log files (no
+  PIPE), so verbose pre-READY output cannot fill the pipe buffer while the
+  launcher polls the handshake file.
+
+### Scope clarification
+
+"Immutable" evidence roots are **logical** immutability (path containment, hash
+indexing, effect-policy enforcement), not an OS-level sandbox or external
+attestation. The README and module docstrings now state this explicitly. The
+`LOCAL_INTEGRITY` / `SEMANTIC_STATE_MACHINE_ENFORCED` / `EFFECT_POLICY_EXPERIMENTAL`
+assurance declarations remain the authoritative scope statement.
+
+### Tests
+
++11 regression tests across the broker-bypass, agent-failover, idempotent
+re-ingest, orchestrator-routing and stdout-harvest paths.
+
+### Provenance
+
+4.0.3 and 4.0.4 history is preserved unchanged. 4.1.0 supersedes both with the
+security and correctness fixes above. Historical tags 4.0.0–4.0.4 remain intact.
+
+
 ## 4.0.4 - 2026-08-03
 
 Clean successor to 4.0.3. Identical security content to 4.0.3 (all S-001…S-019

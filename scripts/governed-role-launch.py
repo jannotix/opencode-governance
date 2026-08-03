@@ -21,7 +21,7 @@ from typing import Any
 
 CONTRACT = "GOVERNED_ROLE_LAUNCH_CONTRACT_V3"
 CONTRACT_V2 = "GOVERNED_ROLE_LAUNCH_CONTRACT_V2"
-VERSION = "4.0.4"
+VERSION = "4.1.0"
 PLUGIN_ID = "opencode-governance-effect-enforcement"
 OWNED = ".opencode-governance-ownership.json"
 PLUGIN_DIR = "opencode-governance-effect-enforcement"
