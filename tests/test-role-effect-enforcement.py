@@ -68,7 +68,7 @@ try {{
     def test_policy_schema_v1_1(self) -> None:
         body = json.loads(POLICY.read_text(encoding="utf-8"))
         self.assertEqual(body["schema"], "ROLE_EFFECT_ENFORCEMENT_V1_2")
-        self.assertEqual(body["governance_version"], "4.0.3")
+        self.assertEqual(body["governance_version"], "4.0.4")
 
     def test_export_contract(self) -> None:
         r = subprocess.run(
