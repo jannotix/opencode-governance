@@ -400,7 +400,7 @@ class LaunchV3Tests(unittest.TestCase):
             payload = json.loads(r.stdout.strip().splitlines()[-1])
             body = payload["launch"]
             self.assertEqual(body["schema"], "GOVERNED_ROLE_LAUNCH_CONTRACT_V3")
-            self.assertEqual(body["version"], "4.0.3")
+            self.assertEqual(body["version"], "4.0.4")
             self.assertTrue(body["nonce"])
             self.assertIn("tool_capability_manifest_sha256", body)
             self.assertIn("route", body)

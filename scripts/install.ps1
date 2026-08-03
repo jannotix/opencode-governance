@@ -62,7 +62,7 @@ try{
     if($RoutingConfigPath){
         Invoke-GovernancePython @($Capabilities,'install','--source-dir',$PSScriptRoot,'--config-dir',$ConfigDir)
         & (Join-Path $PSScriptRoot 'verify-routing.ps1') -ConfigDir $ConfigDir
-        Write-Host 'Installed OpenCode Governance 4.0.3 with end-to-end role runtime, recovery and semantic governance core.'
+        Write-Host 'Installed OpenCode Governance 4.0.4 with end-to-end role runtime, recovery and semantic governance core.'
     }else{
         Write-Host 'Installed OpenCode Governance base in single-model mode (no routing profile).'
         Write-Host 'Authority, memory, evidence, simulation and pre-commit tools require -RoutingConfigPath.'

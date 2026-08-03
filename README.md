@@ -4,7 +4,7 @@ Provider- and model-agnostic product-lifecycle governance for [OpenCode](https:/
 
 > Community project. Not affiliated with the OpenCode team.
 
-Current release: **4.0.3 — Pre-side-effect role transactions** (process-per-role + real OpenCode hook evidence).
+Current release: **4.0.4 — Clean successor to 4.0.3 (pre-side-effect role transactions)** (process-per-role + real OpenCode hook evidence).
 
 Installs seven specialized agents, twelve `/ai-*` commands, deterministic tooling and fail-closed contracts so planning, implementation, validation and review stay bound to approved requirements and current repository evidence.
 

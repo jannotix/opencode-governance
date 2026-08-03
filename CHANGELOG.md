@@ -5,6 +5,28 @@ Dates use `YYYY-MM-DD`. Older micro-releases are summarized; see git history for
 ## Unreleased
 
 
+## 4.0.4 - 2026-08-03
+
+Clean successor to 4.0.3. Identical security content to 4.0.3 (all S-001…S-019
+fixes); released as a clean-provenance successor.
+
+### Provenance note (4.0.3 release commits)
+
+The 4.0.3 release on `main` (merge commit `247ee8c`, tag `4.0.3`) contains three
+commits (`2142bf5`, `d8edbad`, `9b543d5`) that were auto-created by a global
+pre-push git hook belonging to separate, unrelated `.codex` tooling on the
+release machine, not by the release author. Their author identity is
+`Test <test@example.invalid>`. Their diffs are verified-correct and benign —
+they are the same CI-consistency fixes (verify-routing version gates, managed-tool
+count 24→27, prompt-transport version assertions) that this 4.0.4 release applies
+under the correct author identity. No code or security difference exists between
+4.0.3 and 4.0.4; consumers may run either. 4.0.4 is provided for installations
+that require a clean commit-provenance release history.
+
+4.0.3 is **not** rewritten and its tag is **not** moved (per the no-force-push /
+no-tag-rewrite rules). Historical tags 4.0.0/4.0.1/4.0.2/4.0.3 remain intact.
+
+
 ## 4.0.3 - 2026-08-02
 
 Security patch: pre-side-effect role transactions, Executor containment, and

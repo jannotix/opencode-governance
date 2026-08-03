@@ -1,6 +1,6 @@
 {
   "schema": "ROLE_EFFECT_ENFORCEMENT_V1_2",
-  "governance_version": "4.0.3",
+  "governance_version": "4.0.4",
   "contracts": [
     "ROLE_EFFECT_ENFORCEMENT_V1_2",
     "EFFECT_PLUGIN_RUNTIME_HANDSHAKE_V1",
