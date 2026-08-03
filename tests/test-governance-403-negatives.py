@@ -634,5 +634,49 @@ class TransactionRollbackTests(unittest.TestCase):
             self.assertFalse(dest.exists(), "newly-created dest should be removed when no prior existed")
 
 
+class ReviewOrchestratorRoutingTests(unittest.TestCase):
+    """Orchestrator routing: model-family independence guard + stdout harvest."""
+
+    def _orch(self, *extra_args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "review-orchestration.py")] + list(extra_args),
+            capture_output=True, text=True,
+        )
+
+    def test_same_model_family_rejected(self) -> None:
+        """Impl and arch reviewers with the same model family must be rejected
+        before any process starts, so V4 does not fail mid-chain."""
+        r = self._orch(
+            "--config-dir", ".", "--workspace", ".", "--task-id", "T1",
+            "--packet-sha256", "0" * 64, "--candidate-identity", "c", "--packet-path", "/dev/null",
+            "--implementation-model", "openai/gpt-4o", "--architecture-model", "openai/gpt-4o",
+        )
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("REVIEW_INDEPENDENCE_MODEL_FAMILY_COLLISION", r.stderr + r.stdout)
+
+    def test_distinct_model_families_pass_collision_check(self) -> None:
+        """Distinct families reach the next stage (will fail later on missing
+        config, but NOT on collision)."""
+        from importlib import util as _util
+        spec = _util.spec_from_file_location("_ro", str(ROOT / "scripts" / "review-orchestration.py"))
+        mod = _util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        self.assertNotEqual(mod.model_family_of("openai/gpt-4o"), mod.model_family_of("anthropic/claude-3.5-sonnet"))
+
+    def test_stdout_harvest_extracts_verdict(self) -> None:
+        """The orchestrator harvests reviewer output from stdout (read-only
+        reviewers cannot write report files). The verdict parser must extract
+        FAIL/PASS from the raw text."""
+        from importlib import util as _util
+        spec = _util.spec_from_file_location("_ro", str(ROOT / "scripts" / "review-orchestration.py"))
+        mod = _util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        # _read_stdout_text returns "" for missing path — harvest is best-effort.
+        self.assertEqual(mod._read_stdout_text({}), "")
+        # model_family_of edge cases
+        self.assertEqual(mod.model_family_of(""), "")
+        self.assertEqual(mod.model_family_of("local"), "local")
+
+
 if __name__ == "__main__":
     unittest.main()

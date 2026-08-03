@@ -8,6 +8,8 @@ Current release: **4.0.4 — Clean successor to 4.0.3 (pre-side-effect role tran
 
 Installs seven specialized agents, twelve `/ai-*` commands, deterministic tooling and fail-closed contracts so planning, implementation, validation and review stay bound to approved requirements and current repository evidence.
 
+> **Scope of guarantees.** Enforcement is **logical**, not an OS-level sandbox: it relies on path containment, hash binding, effect-policy allow/deny lists and semantic state-machine contracts enforced inside the OpenCode plugin and Python tooling. It is not an external attestation, a process sandbox, or a capability-bound kernel boundary. Treat the `LOCAL_INTEGRITY` / `SEMANTIC_STATE_MACHINE_ENFORCED` / `EFFECT_POLICY_EXPERIMENTAL` assurance declarations in `role-effect-policy.json` as the authoritative statement of what is and is not guaranteed.
+
 ## Requirements
 
 - OpenCode
