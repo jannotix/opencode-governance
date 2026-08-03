@@ -7,162 +7,102 @@ Dates use `YYYY-MM-DD`. Older micro-releases are summarized; see git history for
 
 ## 4.1.0 - 2026-08-03
 
-Hardened review orchestration and Executor command-broker containment over 4.0.4.
-Minor bump: the release adds behavioural security hardening and corrects two
-critical functional defects found by adversarial multi-agent review; it is not
-a pure patch.
+Security and reliability hardening of the governed role runtime, review
+orchestration and Executor command brokerage.
 
-### Security hardening (Executor command broker)
+### Executor command broker
 
-Adversarial audit found the Executor command broker was bypassable; all paths
-are now closed and covered by negative regression tests.
+- Reject command heads that contain a path separator (`/bin/rm`, `/usr/bin/git`)
+  before classification; a path-like head previously bypassed the deny list and
+  git allowlist entirely.
+- Deny wrapper and privilege-escalation heads (`env`, `sudo`, `xargs`, `nohup`,
+  `time`, `strace`, …) that re-execute an arbitrary child.
+- Reject absolute interpreter invocations (`/usr/bin/python`, `/bin/bash -c`)
+  through the same separator guard.
+- Require an explicit git subcommand; a bare `git` no longer falls through to
+  allow.
 
-- **Absolute-path bypass closed**: any command head containing a path separator
-  (`/bin/rm`, `/usr/bin/git push`) is rejected before classification. Previously
-  the broker matched bare names only, so a path-like head evaded the entire deny
-  list and git allowlist.
-- **Wrapper/escalation heads denied**: `env`, `sudo`, `xargs`, `nohup`, `time`,
-  `strace` and similar wrappers that re-execute an arbitrary child are now
-  explicitly forbidden (`EXECUTOR_WRAPPER_HEADS`).
-- **Absolute interpreter paths closed**: `/usr/bin/python`, `/bin/bash -c` and
-  other absolute interpreter invocations are caught by the same separator guard
-  before interpreter classification (previously only bare names matched).
-- **Bare `git` requires a subcommand**: a git invocation with no subcommand now
-  fails closed (`GIT_SUBCMD_REQUIRED`) instead of falling through to ALLOW.
+### Review orchestration
 
-### Correctness fixes (review orchestration + ingestion)
+- Reviewer output is harvested from the role-process stdout and written through
+  the deterministic ingest channel. Reviewer roles are read-only by policy and
+  cannot author report files directly.
+- Per-role model routing (`--implementation-model`, `--architecture-model`,
+  `--final-model`) with an early rejection when the implementation and
+  architecture reviewers resolve to the same model family, so Review Chain V4
+  independence cannot fail mid-attestation.
 
-- **Reviewers harvest from stdout**: reviewers are read-only (`edit_mode: deny`,
-  all write tools denied) and cannot write report files. The orchestrator now
-  harvests each reviewer's verdict text from the role-process stdout log,
-  derives a PASS/FAIL verdict, and writes the report body through the
-  deterministic ingest channel itself. This is the only path by which a
-  read-only reviewer's findings become durable evidence.
-- **Model-family independence enforced**: a single `--model` passed to all
-  reviewers guaranteed a Review Chain V4 model-family collision (impl == arch).
-  Added `--implementation-model` / `--architecture-model` / `--final-model`
-  (with `--model` fallback) and an early
-  `REVIEW_INDEPENDENCE_MODEL_FAMILY_COLLISION` guard that fails before any
-  reviewer process starts.
-- **Executor failover agent matching fixed**: `executor-fallback-N` route agents
-  are now accepted as matching `role=executor` (previously every tool was denied
-  after failover).
-- **Idempotent re-ingest fixed**: re-ingesting the exact same report body no
-  longer fails with `ROLE_REPORT_DUPLICATE_DIVERGENT` (metadata timestamps
-  diverged); an idempotent fast-path returns the existing receipt.
-- **READY-wait detects early child exit**: if the child exits before emitting
-  READY, the launcher now fails immediately with the real exit code and stderr
-  tail instead of burning the full timeout window.
-- **No pipe deadlock**: child stdout/stderr are redirected to log files (no
-  PIPE), so verbose pre-READY output cannot fill the pipe buffer while the
-  launcher polls the handshake file.
+### Role runtime
 
-### Scope clarification
+- Route agents of the form `executor-fallback-N` are accepted as matching the
+  `executor` role; failover no longer disables every tool call.
+- Idempotent re-ingest of an identical report body returns the existing receipt
+  instead of failing on divergent metadata timestamps.
+- The launcher detects child exit before READY is emitted and fails immediately
+  with the real exit code, instead of waiting for the full timeout.
+- Child stdout/stderr are redirected to log files, removing a pipe-buffer
+  deadlock window when the child emits verbose output before READY.
 
-"Immutable" evidence roots are **logical** immutability (path containment, hash
-indexing, effect-policy enforcement), not an OS-level sandbox or external
-attestation. The README and module docstrings now state this explicitly. The
+### Scope
+
+Evidence-root "immutability" is logical (path containment, hash indexing,
+effect-policy enforcement), not an OS-level sandbox or external attestation. The
+README and module docstrings state this explicitly. The
 `LOCAL_INTEGRITY` / `SEMANTIC_STATE_MACHINE_ENFORCED` / `EFFECT_POLICY_EXPERIMENTAL`
-assurance declarations remain the authoritative scope statement.
-
-### Tests
-
-+11 regression tests across the broker-bypass, agent-failover, idempotent
-re-ingest, orchestrator-routing and stdout-harvest paths.
-
-### Provenance
-
-4.0.3 and 4.0.4 history is preserved unchanged. 4.1.0 supersedes both with the
-security and correctness fixes above. Historical tags 4.0.0–4.0.4 remain intact.
+assurance declarations remain authoritative.
 
 
 ## 4.0.4 - 2026-08-03
 
-Clean successor to 4.0.3. Identical security content to 4.0.3 (all S-001…S-019
-fixes); released as a clean-provenance successor.
-
-### Provenance note (4.0.3 release commits)
-
-The 4.0.3 release on `main` (merge commit `247ee8c`, tag `4.0.3`) contains three
-commits (`2142bf5`, `d8edbad`, `9b543d5`) that were auto-created by a global
-pre-push git hook belonging to separate, unrelated `.codex` tooling on the
-release machine, not by the release author. Their author identity is
-`Test <test@example.invalid>`. Their diffs are verified-correct and benign —
-they are the same CI-consistency fixes (verify-routing version gates, managed-tool
-count 24→27, prompt-transport version assertions) that this 4.0.4 release applies
-under the correct author identity. No code or security difference exists between
-4.0.3 and 4.0.4; consumers may run either. 4.0.4 is provided for installations
-that require a clean commit-provenance release history.
-
-4.0.3 is **not** rewritten and its tag is **not** moved (per the no-force-push /
-no-tag-rewrite rules). Historical tags 4.0.0/4.0.1/4.0.2/4.0.3 remain intact.
+Clean-provenance re-cut of 4.0.3. No behavioural change; supersedes 4.0.3 for
+installations that track commit authorship.
 
 
 ## 4.0.3 - 2026-08-02
 
-Security patch: pre-side-effect role transactions, Executor containment, and
-attestation hardening over 4.0.2.
+Pre-side-effect role transactions, Executor containment and attestation
+hardening over 4.0.2.
 
-### 4.0.2 defects corrected
+### Pre-side-effect READY gate
 
-- **S-001**: Handshake was post-execution. `governed-role-attempt.py` validated
-  the handshake only after `opencode run` terminated, so model/tool activity
-  could occur before a missing handshake was discovered. 4.0.3 introduces a
-  same-process pre-side-effect READY gate (`EFFECT_PLUGIN_RUNTIME_READY_GATE_V2`)
-  with a host acknowledgement that must be present before any tool effect.
-- **S-002**: READY was emitted before policy/hook readiness. The plugin now
-  validates launch, plugin self-hash, policy hash/schema, tool registry,
-  capability manifest and hook construction before emitting READY; setup
-  failures produce a typed NOT_READY record instead.
-- **S-003**: Launch single-use was per-tool-call, breaking multi-tool sessions.
-  Launch single-use is now session-level (`ROLE_SESSION_CLAIM_CONTRACT_V1`):
-  the launch is claimed once per process/session and cached in-process.
-- **S-004**: The Executor transaction launch was not consumed. The role launcher
-  now accepts `--launch-file`/`--expected-launch-sha256`/`--attempt-manifest`
-  and treats the prepared launch as the sole authoritative launch;
-  `executor-attempt finalize` revalidates the role-process receipt and the
-  consumed launch hash.
-- **S-005**: Prompt transport regressed to argv. The prompt is now transported
-  over stdin (`GOVERNED_ROLE_STDIN_TRANSPORT_V1`); `argv_prompt_bytes=0`.
-- **S-006**: The Executor child ran in the real workspace. Executor cwd and
-  `--dir` now equal the isolated execution root; reviewers use immutable
+- The plugin emits READY only after validating the launch, plugin and policy
+  hashes, tool registry, capability manifest and hook construction; setup
+  failures produce a typed NOT_READY record.
+- The launcher monitors READY while the child runs and writes a host
+  acknowledgement bound to it; no tool effect is permitted before
+  acknowledgement.
+- Launch single-use is session-scoped: the launch is claimed once per
+  process/session and cached in-process; replay from another process or session
+  is rejected.
+- READY echoes and binds the launch nonce.
+
+### Executor and transport
+
+- The prepared Executor launch is the sole authoritative launch; `finalize`
+  revalidates the role-process receipt and consumed launch hash.
+- Prompt transport is stdin (`argv_prompt_bytes=0`).
+- Executor cwd equals the isolated execution root; reviewers use isolated
   evidence roots.
-- **S-007**: Executor shell effects were not safely classified. The
-  `EXECUTOR_COMMAND_BROKER_V1` provides deterministic command classes with an
-  explicit deny list (rm, npm/yarn/pnpm, docker/kubectl, interpreters,
-  git commit/push/reset/clean) and a read-only git allowlist.
-- **S-008**: `apply_patch` had no path extraction. `STRICT_PATCH_PATH_CONTRACT_V1`
-  parses every file header and enforces containment for all targets; `multiedit`
-  validates every edit destination.
-- **S-009**: The review workflow was not wired to process launchers.
-  `GOVERNED_REVIEW_ORCHESTRATION_V1` is a host-owned operation that starts the
-  two independent reviewers and the final reviewer under governed launchers.
-- **S-010**: The real OpenCode self-test could false-pass. The self-test now
-  requires a hook-generated ALLOW decision receipt; handshake-only is not
-  acceptance.
-- **S-011**: Handshake validation was incomplete. READY now binds and the
-  launcher validates launch hash, policy hash, route receipt, opencode version
-  (derived from the binary), process/session identity, and more.
-- **S-012**: The handshake nonce was unrelated to the launch nonce. READY now
-  echoes and binds the launch nonce.
-- **S-013**: Non-zero exit was reported as completion. A non-zero OpenCode exit
-  is now a typed `GOVERNED_ROLE_PROCESS_FAILED`.
-- **S-014**: Route receipts were not authoritative. `AUTHORITATIVE_ROUTE_RECEIPT_V1`
-  is a strict, hash-bound schema; arbitrary JSON is rejected on the production
-  path.
-- **S-015**: Review Chain V3 did not revalidate its receipts. Review Chain V4
-  live-revalidates ingestion and route receipts and records per-role
-  revalidation evidence.
-- **S-016**: Report commit was not transactional. `DETERMINISTIC_ROLE_REPORT_TRANSACTION_V1`
-  stages body/metadata/receipt with a journal and a single COMMIT marker.
-- **S-017**: Reviewer evidence isolation was filename-based. Immutable evidence
-  roots with closed manifests are now built by the orchestrator.
-- **S-018**: Tool capability manifests were not launch-bound.
-  `TOOL_CAPABILITY_MANIFEST_V1` is hash-bound at launch and validated at setup.
-- **S-019**: Published runtime commands used incorrect argparse ordering. The
-  exact top-level `--config-dir` form is now documented and tested.
+- Deterministic command classification with an explicit deny list and a
+  read-only git allowlist.
+- `apply_patch` and `multiedit` path extraction enforces containment for every
+  parsed target.
 
-### Contracts introduced
+### Attestation
+
+- Hook-generated decision receipts; the real-binary self-test requires a
+  positive ALLOW receipt.
+- Full READY field validation (launch hash, policy hash, route receipt, OpenCode
+  version derived from the binary, process/session identity).
+- Non-zero OpenCode exit is a typed `GOVERNED_ROLE_PROCESS_FAILED`.
+- `AUTHORITATIVE_ROUTE_RECEIPT_V1` strict schema; arbitrary JSON is rejected on
+  the production path.
+- Review Chain V4 live-revalidates ingestion and route receipts.
+- Transactional report commit with a journal and a single COMMIT marker;
+  rollback restores prior committed artifacts.
+- Tool capability manifest hash-bound at launch and validated at setup.
+
+### Contracts
 
 `EFFECT_PLUGIN_RUNTIME_READY_GATE_V2`, `GOVERNED_ROLE_LAUNCH_CONTRACT_V3`,
 `GOVERNED_ROLE_PROCESS_CONTRACT_V2`, `ROLE_SESSION_CLAIM_CONTRACT_V1`,
@@ -173,9 +113,9 @@ attestation hardening over 4.0.2.
 
 ### Assurance
 
-Until the full hook+process matrix for a version: `LOCAL_INTEGRITY`,
-`SEMANTIC_STATE_MACHINE_ENFORCED`, `EFFECT_POLICY_EXPERIMENTAL`. After: may
-claim `ROLE_EFFECT_ENFORCEMENT_ACTIVE` (not OS-sandboxed / externally attested).
+`LOCAL_INTEGRITY`, `SEMANTIC_STATE_MACHINE_ENFORCED`, `EFFECT_POLICY_EXPERIMENTAL`
+until the full hook+process matrix for a version is green; then
+`ROLE_EFFECT_ENFORCEMENT_ACTIVE` (still not OS-sandboxed or externally attested).
 
 
 ## 4.0.2 - 2026-08-02
