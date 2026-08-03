@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""GOVERNED_ROLE_LAUNCH_CONTRACT_V3 + plugin preflight (non-mutating).
+"""GOVERNED_ROLE_LAUNCH_CONTRACT_V3 — launch receipt writer + plugin preflight.
 
-4.0.3: launch receipts are V3 (session-single-use, capability-manifest- and
-route-receipt-bound). V2 receipts remain accepted on read for an in-flight
-upgrade window; new launches are V3."""
+Writes content-bound, expiring, session-single-use launch receipts (capability-
+manifest- and route-receipt-bound). V2 receipts are accepted on read for an
+in-flight upgrade window; new launches are V3. Preflight is non-mutating.
+"""
 from __future__ import annotations
 
 import argparse
@@ -140,7 +141,7 @@ def write_launch_v2(
         "expected_opencode_version": expected_opencode_version,
         "parent_pid": int(parent_pid if parent_pid is not None else os.getpid()),
         "expected_child_identity": "",
-        # S-018: tool capability manifest binding (hash-bound at launch).
+        # tool capability manifest binding (hash-bound at launch).
         "tool_capability_manifest": tool_capability_manifest,
         "tool_capability_manifest_sha256": tool_capability_manifest_sha256,
         # Executor attempt binding (frozen target / route / model).
@@ -207,8 +208,8 @@ def main() -> int:
     w.add_argument("--no-single-use", action="store_true")
     w.add_argument("--config-dir", default="")
     w.add_argument("--require-plugin", action="store_true")
-    # S-018 / S-014 binding fields (forwarded into the V3 launch body so the
-    # plugin can hash-bind the capability manifest and the chain can revalidate).
+    # Binding fields forwarded into the V3 launch body so the plugin can
+    # hash-bind the capability manifest and the chain can revalidate.
     w.add_argument("--tool-capability-manifest", default="")
     w.add_argument("--tool-capability-manifest-sha256", default="")
     w.add_argument("--work-class", default="")

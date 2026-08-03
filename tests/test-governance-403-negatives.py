@@ -44,7 +44,7 @@ def node_available() -> str | None:
 
 @unittest.skipUnless(node_available(), "node not available")
 class PatchPathTests(unittest.TestCase):
-    """S-008: apply_patch / multiedit path parsing — STRICT_PATCH_PATH_CONTRACT_V1."""
+    """apply_patch / multiedit path parsing — STRICT_PATCH_PATH_CONTRACT_V1."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -118,7 +118,7 @@ class PatchPathTests(unittest.TestCase):
 
     def test_unextracted_patch_payload_fails_closed(self) -> None:
         """An edit tool carrying a patch-like payload from which NO path can be
-        extracted must fail closed (S-008), not silently skip path checks."""
+        extracted must fail closed, not silently skip path checks."""
         out = self._extract({"patch": "this is a patch but has no recognizable headers"}, )
         # without tool context extractPatchPaths returns ok=True; the fail-closed
         # flag is set only when tool is provided. Verify the tool-aware path:
@@ -135,7 +135,7 @@ class PatchPathTests(unittest.TestCase):
 
 @unittest.skipUnless(node_available(), "node not available")
 class ExecutorBrokerTests(unittest.TestCase):
-    """S-007: EXECUTOR_COMMAND_BROKER_V1 — deterministic command classification."""
+    """EXECUTOR_COMMAND_BROKER_V1 — deterministic command classification."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -188,9 +188,61 @@ class ExecutorBrokerTests(unittest.TestCase):
     def test_test_command_allowed(self) -> None:
         self.assertTrue(self._classify("pytest tests/")["allow"])
 
+    # Adversarial regression: command broker must not be bypassable by absolute
+    # paths, wrappers, or absolute interpreter paths (SEC-001/002/003/004).
+    def test_absolute_path_command_denied(self) -> None:
+        for cmd in ["/bin/rm -rf foo", "/usr/bin/git push", "/bin/chmod 777 x", "/usr/bin/curl http://x"]:
+            self.assertFalse(self._classify(cmd)["allow"], f"should deny: {cmd}")
+
+    def test_wrapper_command_denied(self) -> None:
+        for cmd in ["env rm -rf foo", "sudo rm foo", "xargs rm", "nohup evil &"]:
+            self.assertFalse(self._classify(cmd)["allow"], f"should deny: {cmd}")
+
+    def test_absolute_interpreter_denied(self) -> None:
+        for cmd in ["/usr/bin/python script.py", "/bin/bash -c whoami", "/usr/bin/node -e x"]:
+            self.assertFalse(self._classify(cmd)["allow"], f"should deny: {cmd}")
+
+    def test_bare_git_denied(self) -> None:
+        r = self._classify("git")
+        self.assertFalse(r["allow"])
+        self.assertIn("GIT_SUBCMD_REQUIRED", r["reason"])
+
+
+@unittest.skipUnless(node_available(), "node not available")
+class AgentFailoverMatchingTests(unittest.TestCase):
+    """Executor failover: the plugin must accept route agents like
+    executor-fallback-N as matching role=executor."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.node = node_available()
+        cls.plugin_url = PLUGIN_MJS.resolve().as_uri()
+
+    def _enforce_with_agent(self, role: str, agent: str) -> str:
+        script = (
+            f"import P from {json.dumps(self.plugin_url)}; "
+            "process.env.OPENCODE_GOVERNANCE_EFFECT_ENFORCEMENT_ACTIVE='1'; "
+            f"process.env.OPENCODE_GOVERNANCE_ROLE={json.dumps(role)}; "
+            f"process.env.OPENCODE_GOVERNANCE_EXPECTED_AGENT={json.dumps(agent)}; "
+            f"process.env.OPENCODE_GOVERNANCE_EFFECT_POLICY={json.dumps(str(POLICY))}; "
+            "process.env.OPENCODE_GOVERNANCE_EXECUTION_ROOT='/tmp/exec'; "
+            "try { P._enforce(P._loadPolicy(), {tool:'read',args:{path:'x'}},{args:{path:'x'}},{}); console.log('ALLOW'); } "
+            "catch(e){ console.log('DENY:'+String(e.message||e).split(':')[0]); }"
+        )
+        r = subprocess.run([self.node, "--input-type=module", "-e", script],
+                           capture_output=True, text=True, check=True)
+        return r.stdout.strip()
+
+    def test_executor_fallback_agents_allowed(self) -> None:
+        for agent in ("executor", "executor-fallback-1", "executor-fallback-2"):
+            self.assertEqual(self._enforce_with_agent("executor", agent), "ALLOW", f"agent={agent}")
+
+    def test_wrong_role_agent_denied(self) -> None:
+        self.assertIn("DENY", self._enforce_with_agent("executor", "architect"))
+
 
 class RouteReceiptTests(unittest.TestCase):
-    """S-014: AUTHORITATIVE_ROUTE_RECEIPT_V1 strict schema."""
+    """AUTHORITATIVE_ROUTE_RECEIPT_V1 strict schema."""
 
     def _emit(self, td: pathlib.Path, **overrides) -> dict:
         out = td / "receipt.json"
@@ -248,7 +300,7 @@ class RouteReceiptTests(unittest.TestCase):
 
 
 class ToolManifestTests(unittest.TestCase):
-    """S-018: TOOL_CAPABILITY_MANIFEST_V1."""
+    """TOOL_CAPABILITY_MANIFEST_V1."""
 
     def test_valid_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -292,7 +344,7 @@ class ToolManifestTests(unittest.TestCase):
 
 
 class ReportTransactionTests(unittest.TestCase):
-    """S-016: DETERMINISTIC_ROLE_REPORT_TRANSACTION_V1 — commit marker + rollback."""
+    """DETERMINISTIC_ROLE_REPORT_TRANSACTION_V1 — commit marker + rollback."""
 
     def _setup_project(self, td: pathlib.Path) -> pathlib.Path:
         project = td / "proj"
@@ -344,6 +396,19 @@ class ReportTransactionTests(unittest.TestCase):
             journal = (tx_dirs[0] / "journal.json").read_text(encoding="utf-8")
             for state in ("PREPARED", "VALIDATED", "COMMITTING", "COMMITTED"):
                 self.assertIn(state, journal)
+
+    def test_idempotent_reingest_succeeds(self) -> None:
+        """Re-ingesting the exact same body must be a no-op, not a
+        ROLE_REPORT_DUPLICATE_DIVERGENT failure (timestamps would diverge)."""
+        with tempfile.TemporaryDirectory() as td:
+            td = pathlib.Path(td)
+            project = self._setup_project(td)
+            body = "# impl\nVERDICT: PASS\n"
+            r1 = self._ingest(project, "implementation-reviewer", body, td, "family-a")
+            self.assertEqual(r1["status"], "ROLE_REPORT_INGESTED")
+            # Second ingest with identical body must succeed (idempotent).
+            r2 = self._ingest(project, "implementation-reviewer", body, td, "family-a")
+            self.assertEqual(r2["status"], "ROLE_REPORT_INGESTED")
 
     def test_chain_v4_revalidates_and_includes_revalidation(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -435,7 +500,7 @@ class LaunchV3Tests(unittest.TestCase):
 
 @unittest.skipUnless(node_available(), "node not available")
 class HostAckBindingTests(unittest.TestCase):
-    """S-001 blocker fix: the host-ack nonce must be cryptographically bound to
+    """the host-ack nonce must be cryptographically bound to
     the emitted READY. A forged ack with a wrong nonce must be rejected."""
 
     @classmethod
@@ -472,14 +537,14 @@ class HostAckBindingTests(unittest.TestCase):
         return r.stdout.strip()
 
     def test_forged_ack_nonce_rejected(self) -> None:
-        """A wrong-nonce ack must NOT open the gate (S-001 binding)."""
+        """A wrong-nonce ack must NOT open the gate."""
         out = self._run_enforce_with_ack("forged-wrong-nonce")
         self.assertIn("DENIED", out, out)
         self.assertIn("NONCE_MISMATCH", out)
 
 
 class EnvelopeDowngradeTests(unittest.TestCase):
-    """S-014 blocker fix: caller-supplied envelope flags must NOT downgrade the
+    """caller-supplied envelope flags must NOT downgrade the
     production route-receipt / schema requirements."""
 
     def _route_receipt(self, td: pathlib.Path, role: str) -> pathlib.Path:
@@ -523,7 +588,7 @@ class EnvelopeDowngradeTests(unittest.TestCase):
 
 
 class TransactionRollbackTests(unittest.TestCase):
-    """S-016 blocker fix: rollback must restore prior committed artifacts."""
+    """rollback must restore prior committed artifacts."""
 
     def test_rollback_restores_prior_body(self) -> None:
         with tempfile.TemporaryDirectory() as td:
