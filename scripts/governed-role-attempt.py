@@ -183,11 +183,23 @@ def write_host_ack(ack_path: pathlib.Path, ready: dict[str, Any], session_id: st
     return ack
 
 
-def wait_for_ready(hs_path: pathlib.Path, deadline: float, expected_launch_sha: str) -> dict[str, Any]:
+def wait_for_ready(hs_path: pathlib.Path, deadline: float, expected_launch_sha: str,
+                   proc: subprocess.Popen | None = None) -> dict[str, Any]:
     """Poll for the plugin READY barrier while the child runs. Returns the
-    validated READY body or raises after timeout."""
+    validated READY body or raises after timeout. Detects early child exit so a
+    fast-failing process does not burn the full timeout window."""
     last_err = ""
     while time.time() < deadline:
+        # Detect early child exit: if the process is already dead and no READY
+        # arrived, fail immediately with the real exit code rather than waiting.
+        if proc is not None and proc.poll() is not None:
+            stderr_tail = ""
+            try:
+                stderr_tail = stderr_path.read_bytes()[-1500:].decode("utf-8", errors="replace") if stderr_path.exists() else ""
+            except Exception:
+                pass
+            fail_typed("EFFECT_PLUGIN_CHILD_EXITED_BEFORE_READY",
+                       exit_code=proc.returncode, stderr_tail=stderr_tail[-500:])
         if hs_path.is_file() and not hs_path.is_symlink():
             try:
                 body = json.loads(hs_path.read_text(encoding="utf-8"))
@@ -405,11 +417,16 @@ def launch_role(args: argparse.Namespace) -> dict[str, Any]:
     hs_path = pathlib.Path(env["OPENCODE_GOVERNANCE_HANDSHAKE_PATH"])
 
     try:
+        # Redirect stdout/stderr to log files directly so the OS buffers on disk
+        # and the launcher cannot deadlock when the child emits verbose output
+        # before READY fills the pipe buffer. stdin stays a pipe for prompt feed.
+        stdout_fh = open(stdout_path, "wb")
+        stderr_fh = open(stderr_path, "wb")
         proc = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=stdout_fh,
+            stderr=stderr_fh,
             text=False,
             env=env,
             cwd=str(role_dir),
@@ -440,27 +457,33 @@ def launch_role(args: argparse.Namespace) -> dict[str, Any]:
         "route_receipt_required": bool(args.route_receipt_sha256 or launch_body.get("route_receipt_sha256")),
     }
     try:
-        ready_body = wait_for_ready(hs_path, ready_deadline, launch_sha)
+        ready_body = wait_for_ready(hs_path, ready_deadline, launch_sha, proc=proc)
         validate_ready(ready_body, expected_ready)
         session_id = str(ready_body.get("session_id") or args.session_id or "")
         ack_body = write_host_ack(ack_path, ready_body, session_id)
     except SystemExit:
-        # READY failed/timeout — terminate the child and propagate the typed failure.
+        # READY failed/timeout/child-exit — terminate the child and propagate.
         try:
             proc.terminate()
         except Exception:
             pass
         raise
 
+    # stdout/stderr are redirected to log files; wait for exit (stdin was closed
+    # by the feeder thread). No pipe to drain — no deadlock window.
     try:
-        stdout_b, stderr_b = proc.communicate(timeout=max(30, int(args.timeout_seconds)))
+        proc.wait(timeout=max(30, int(args.timeout_seconds)))
     except subprocess.TimeoutExpired as exc:
         proc.kill()
-        proc.communicate()
+        proc.wait()
         fail("ROLE_PROCESS_TIMEOUT", str(exc))
     feeder.join(timeout=5)
-    stdout_path.write_bytes(stdout_b or b"")
-    stderr_path.write_bytes(stderr_b or b"")
+    # Close the file handles opened for stdout/stderr redirection.
+    for fh in (stdout_fh, stderr_fh):
+        try:
+            fh.close()
+        except Exception:
+            pass
 
     # Record stdin transport evidence.
     stdin_meta = {
