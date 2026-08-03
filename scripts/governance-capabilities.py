@@ -38,6 +38,7 @@ BASE_TOOL_NAMES = (
 # Product 3.7.7+ managed recovery helper (inserted after headless contract in expected_tools).
 RECOVERY_TOOL_NAME = "legacy-architect-orphan-recovery.py"
 # Product 4.0.0+ semantic governance core tools; 4.0.1 adds effect plugin installer.
+# 4.0.3 adds route-receipt / review-orchestration / tool-capability-manifest.
 SEMANTIC_TOOL_NAMES = (
     "governance-semantic.py",
     "opencode-compatibility.py",
@@ -47,6 +48,9 @@ SEMANTIC_TOOL_NAMES = (
     "governed-role-launch.py",
     "governed-role-attempt.py",
     "governance-read-git.py",
+    "route-receipt.py",
+    "review-orchestration.py",
+    "tool-capability-manifest.py",
 )
 EFFECT_PLUGIN_DIR_NAME = "opencode-governance-effect-enforcement"
 AGENT_NAMES = (

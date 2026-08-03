@@ -46,10 +46,17 @@ if($Version-in$ContextVersions){
                 (Join-Path $ToolsDir 'install-effect-plugin.py'),
                 (Join-Path $ToolsDir 'governed-role-launch.py')
             )
-            if($Version-eq'4.0.2','4.0.3'){
+            if($Version-in@('4.0.2','4.0.3')){
                 $ExpectedTools+=@(
                     (Join-Path $ToolsDir 'governed-role-attempt.py'),
                     (Join-Path $ToolsDir 'governance-read-git.py')
+                )
+            }
+            if($Version-eq'4.0.3'){
+                $ExpectedTools+=@(
+                    (Join-Path $ToolsDir 'route-receipt.py'),
+                    (Join-Path $ToolsDir 'review-orchestration.py'),
+                    (Join-Path $ToolsDir 'tool-capability-manifest.py')
                 )
             }
         }
@@ -157,14 +164,22 @@ if($Version-in$FingerprintVersions){
         if($UnixRunner-match 'install[^\n]*--skip-self-test'){throw 'Unix Architect runner must not invoke install --skip-self-test'}
         $Ingest=Join-Path $ToolsDir 'role-report-ingest.py'
         $IngestRaw=Get-Content -LiteralPath $Ingest -Raw
-        if($Version-eq'4.0.2','4.0.3'){
-            foreach($Value in @('DETERMINISTIC_ROLE_REPORT_INGESTION_V3','REVIEW_CHAIN_ATTESTATION_V3')){
-                if($IngestRaw-notlike"*$Value*"){throw "role-report-ingest missing 4.0.2 marker: $Value"}
-            }
-            foreach($Name in @('governed-role-attempt.py','governance-read-git.py')){
-                if(-not(Test-Path -LiteralPath (Join-Path $ToolsDir $Name) -PathType Leaf)){throw "Managed 4.0.2 tool missing: $Name"}
-            }
+        if($Version-eq'4.0.3'){
+            $ExpectedMarkers=@('DETERMINISTIC_ROLE_REPORT_INGESTION_V3','REVIEW_CHAIN_ATTESTATION_V4','AUTHORITATIVE_ROUTE_RECEIPT_V1','DETERMINISTIC_ROLE_REPORT_TRANSACTION_V1')
+        }elseif($Version-eq'4.0.2'){
+            $ExpectedMarkers=@('DETERMINISTIC_ROLE_REPORT_INGESTION_V3','REVIEW_CHAIN_ATTESTATION_V3')
         }else{
+            $ExpectedMarkers=@()
+        }
+        if($ExpectedMarkers.Count-gt 0){
+            foreach($Value in $ExpectedMarkers){
+                if($IngestRaw-notlike"*$Value*"){throw "role-report-ingest missing $Version marker: $Value"}
+            }
+            $ExpectedToolNames=if($Version-eq'4.0.3'){@('governed-role-attempt.py','governance-read-git.py','route-receipt.py','review-orchestration.py','tool-capability-manifest.py')}else{@('governed-role-attempt.py','governance-read-git.py')}
+            foreach($Name in $ExpectedToolNames){
+                if(-not(Test-Path -LiteralPath (Join-Path $ToolsDir $Name) -PathType Leaf)){throw "Managed $Version tool missing: $Name"}
+            }
+        }elseif($Version-eq'4.0.1'){
             foreach($Value in @('DETERMINISTIC_ROLE_REPORT_INGESTION_V2','REVIEW_CHAIN_ATTESTATION_V2')){
                 if($IngestRaw-notlike"*$Value*"){throw "role-report-ingest missing 4.0.1 marker: $Value"}
             }
