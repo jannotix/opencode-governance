@@ -102,7 +102,8 @@ class GovernanceCapabilitiesTests(unittest.TestCase):
         self.assertEqual("1.0", manifest["pre_commit_receipt_gate_version"])
         self.assertEqual(self.routing["settings"], manifest["settings"])
         self.assertEqual(self.routing["roles"], manifest["roles"])
-        self.assertEqual(24, len(manifest["managed_tools"]))
+        # 4.0.3 adds route-receipt.py, review-orchestration.py, tool-capability-manifest.py (24 -> 27).
+        self.assertEqual(27, len(manifest["managed_tools"]))
         self.assertTrue(manifest.get("effect_plugin_sha256"))
         self.assertTrue(manifest.get("effect_policy_sha256"))
         self.assertEqual(set(CAPABILITY_TOOLS), set(manifest["capability_tool_hashes"]))
