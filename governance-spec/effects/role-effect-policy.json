@@ -1,6 +1,6 @@
 {
   "schema": "ROLE_EFFECT_ENFORCEMENT_V1_2",
-  "governance_version": "4.0.4",
+  "governance_version": "4.1.0",
   "contracts": [
     "ROLE_EFFECT_ENFORCEMENT_V1_3",
     "EFFECT_PLUGIN_RUNTIME_READY_GATE_V2",

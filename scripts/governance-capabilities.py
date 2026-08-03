@@ -14,7 +14,7 @@ import stat
 import sys
 from typing import Any
 
-VERSION = "4.0.4"
+VERSION = "4.1.0"
 BASE_VERSION = "3.4.4"
 CAPABILITY_TOOL_NAMES = (
     "governance-authority.py",

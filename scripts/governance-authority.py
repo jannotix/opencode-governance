@@ -413,7 +413,7 @@ def issue_receipt(
         raise ContractError("TASK_ID_REQUIRED")
     receipt = {
         "schema": RECEIPT_SCHEMA,
-        "governance_version": "4.0.4",
+        "governance_version": "4.1.0",
         "task_id": task_id.strip(),
         "candidate": candidate,
         "bindings": hash_bindings,
@@ -438,7 +438,7 @@ def validate_receipt(
         raise ContractError("INVALID_GATE", gate)
     if receipt.get("schema") not in RECEIPT_SCHEMA_ALIASES:
         raise ContractError("INVALID_RECEIPT_SCHEMA")
-    if receipt.get("governance_version") not in {"4.0.2", "4.0.3", "4.0.4"}:
+    if receipt.get("governance_version") not in {"4.0.2", "4.0.3", "4.0.4", "4.1.0"}:
         raise ContractError("INVALID_RECEIPT_VERSION", str(receipt.get("governance_version")))
     receipt_hash = receipt.get("receipt_hash")
     if not valid_hash(receipt_hash):
