@@ -677,7 +677,7 @@ def real_opencode_hook_self_test(config_dir: pathlib.Path, policy_path: pathlib.
         # Avoid launch-file path for self-test load probe (ACTIVE alone is enough for handshake).
         env.pop("OPENCODE_GOVERNANCE_LAUNCH_FILE", None)
         env.pop("OPENCODE_GOVERNANCE_LAUNCH_SHA256", None)
-        # S-010: capture hook-generated decision receipts for both allow and deny.
+        # capture hook-generated decision receipts for both allow and deny.
         decision_log = td_path / "decision-log.jsonl"
         env["OPENCODE_GOVERNANCE_DECISION_LOG"] = str(decision_log)
 
@@ -763,7 +763,7 @@ def real_opencode_hook_self_test(config_dir: pathlib.Path, policy_path: pathlib.
             evidence["reason"] = "no read tool_use observed and model appears available"
             evidence["stdout_tail"] = (proc.stdout or "")[-1500:]
             return evidence
-        # S-010: require hook-generated decision receipts when a decision log was
+        # require hook-generated decision receipts when a decision log was
         # captured. A handshake-only run is not acceptance; both ALLOW and DENY
         # decisions must appear as positive hook evidence.
         decisions = {"ALLOW": 0, "DENY": 0}
@@ -778,7 +778,7 @@ def real_opencode_hook_self_test(config_dir: pathlib.Path, policy_path: pathlib.
         evidence["decision_receipts"] = decisions
         if decisions["ALLOW"] == 0:
             evidence["status"] = "OPENCODE_HOOK_SELF_TEST_FAIL"
-            evidence["reason"] = "no ALLOW decision receipt — hook did not positively admit a tool (S-010)"
+            evidence["reason"] = "no ALLOW decision receipt — hook did not positively admit a tool"
             return evidence
         evidence["status"] = "OPENCODE_HOOK_SELF_TEST_PASS"
         evidence["opencode_version"] = (

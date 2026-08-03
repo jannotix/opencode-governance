@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-"""TOOL_CAPABILITY_MANIFEST_V1 — hash-bound custom/MCP tool manifest (S-018).
+"""TOOL_CAPABILITY_MANIFEST_V1 — hash-bound custom/MCP tool manifest.
 
-4.0.2 loaded custom/MCP tool effects from a path in an environment variable
-without binding the manifest hash, provider, version or exact tool inventory to
-the launch. 4.0.3 requires a hash-bound manifest included in Launch V3 and
-validated by the plugin at setup. Unknown/missing/hash-mismatched manifests fail
-closed.
+Included in Launch V3 and validated by the plugin at setup. Unknown, missing or
+hash-mismatched manifests fail closed.
 """
 from __future__ import annotations
 

@@ -210,7 +210,7 @@ def ingest(
 
     envelope = json.loads(envelope_path.read_text(encoding="utf-8-sig"))
     schema = envelope.get("schema")
-    # S-014: legacy-schema acceptance is gated SOLELY on a trusted operator env
+    # legacy-schema acceptance is gated SOLELY on a trusted operator env
     # var, never on caller-supplied envelope input. A caller must not be able to
     # downgrade the production schema by setting a flag inside the ingest payload.
     allow_legacy = os.environ.get("OPENCODE_GOVERNANCE_ALLOW_LEGACY_REPORT_SCHEMA") == "1"
@@ -257,7 +257,7 @@ def ingest(
         effect_sha = validate_sha256(effect_sha, "effect_policy_sha256")
 
     # Route receipt is mandatory for V3 production path (R-009).
-    # S-014: receipt must be AUTHORITATIVE_ROUTE_RECEIPT_V1 (strict schema),
+    # receipt must be AUTHORITATIVE_ROUTE_RECEIPT_V1 (strict schema),
     # not arbitrary JSON containing only route_id/model_family. The strict
     # schema is required unless legacy-envelope mode explicitly opts in.
     route_id = str(envelope.get("route_id") or "")
@@ -282,7 +282,7 @@ def ingest(
             route_id = str(receipt.get("route_id"))
             model_family = str(receipt.get("model_family"))
         elif schema == SCHEMA and os.environ.get("OPENCODE_GOVERNANCE_ALLOW_LEGACY_ROUTE_RECEIPT") != "1":
-            # S-014: legacy loose receipts are gated SOLELY on a trusted operator
+            # legacy loose receipts are gated SOLELY on a trusted operator
             # env var, never on caller-supplied envelope input.
             emit_error("ROLE_REPORT_ROUTE_RECEIPT_INVALID", "production requires AUTHORITATIVE_ROUTE_RECEIPT_V1")
         else:
@@ -292,9 +292,9 @@ def ingest(
             if not route_id or not model_family:
                 emit_error("ROLE_REPORT_ROUTE_RECEIPT_INVALID", "route_id/model_family")
         route_receipt_sha = sha256_file(route_receipt_path)
-        # S-015 follow-up: co-locate the validated route receipt so Review Chain
-        # V4 can live-revalidate (re-hash + re-check schema/packet) rather than
-        # skip with "not_colocated". Copy atomically into the task route-receipts dir.
+        # Co-locate the validated route receipt so Review Chain V4 can
+        # live-revalidate (re-hash + re-check schema/packet) rather than skip
+        # with "not_colocated". Copy atomically into the task route-receipts dir.
         if role and schema == SCHEMA:
             colocated_dir = project / ".ai" / "tasks" / task_id / "route-receipts"
             colocated_dir.mkdir(parents=True, exist_ok=True)
@@ -335,7 +335,7 @@ def ingest(
         body_bytes = body_bytes.replace(b"\r\n", b"\n")
         body_hash = hashlib.sha256(body_bytes).hexdigest()
 
-    # S-016: transactional report commit (DETERMINISTIC_ROLE_REPORT_TRANSACTION_V1).
+    # transactional report commit (DETERMINISTIC_ROLE_REPORT_TRANSACTION_V1).
     # Stage body/metadata/receipt under a transaction directory with a journal and
     # a single COMMIT marker published only after every destination is persisted
     # and re-hashed. A crash leaves at most a partial transaction directory; the
@@ -356,7 +356,21 @@ def ingest(
             handle.write(json.dumps(entry, sort_keys=True) + "\n")
 
     _journal("PREPARED")
-    # S-016: snapshot prior committed artifacts so a mid-transaction crash can
+    # Idempotent fast-path: if the exact body is already committed, return the
+    # existing receipt without rebuilding metadata (whose timestamps would
+    # otherwise diverge and trip ROLE_REPORT_DUPLICATE_DIVERGENT).
+    if allow_identical_idempotent and dest.exists() and not is_symlink_or_reparse(dest):
+        try:
+            if hashlib.sha256(dest.read_bytes()).hexdigest() == hashlib.sha256(body_bytes).hexdigest():
+                receipt_path = dest.with_suffix(dest.suffix + ".receipt.json")
+                if receipt_path.is_file() and not is_symlink_or_reparse(receipt_path):
+                    try:
+                        return json.loads(receipt_path.read_text(encoding="utf-8-sig"))
+                    except Exception:
+                        pass  # fall through to full ingest if receipt unreadable
+        except Exception:
+            pass  # fall through to full ingest on any IO error
+    # snapshot prior committed artifacts so a mid-transaction crash can
     # restore them. Without this, overwriting `dest` before meta/commit are
     # written would leave an uncommitted body and lose the prior committed state.
     prior_dest_bytes = dest.read_bytes() if dest.exists() and not is_symlink_or_reparse(dest) else None
@@ -427,7 +441,7 @@ def ingest(
     if sha256_file(receipt_path) != hashlib.sha256(receipt_bytes).hexdigest():
         _rollback_transaction(tx_dir, dest, meta_path, prior_dest_bytes, prior_meta_bytes)
         emit_error("ROLE_REPORT_TX_RECEIPT_PERSIST_MISMATCH")
-    # S-016: publish a single COMMIT marker only after every destination is
+    # publish a single COMMIT marker only after every destination is
     # persisted and re-hashed.
     commit_body = {
         "schema": "DETERMINISTIC_ROLE_REPORT_TRANSACTION_V1",
@@ -446,7 +460,7 @@ def ingest(
 
 def _rollback_transaction(tx_dir: pathlib.Path, dest: pathlib.Path, meta_path: pathlib.Path,
                           prior_dest: bytes | None = None, prior_meta: bytes | None = None) -> None:
-    """S-016 recovery: remove partial new artifacts and RESTORE the prior
+    """Transaction recovery: remove partial new artifacts and restore the prior
     committed body/metadata so a mid-transaction crash does not leave an
     uncommitted body without metadata, or lose the previous committed state."""
     try:
@@ -533,8 +547,8 @@ def attest_chain(
         ts = meta.get("completed_at_utc") or meta.get("ingested_at_utc") or ""
         timestamps.append((role, ts))
 
-        # S-015 (Review Chain V4): live-revalidate the ingestion receipt, the
-        # route receipt (when an authoritative one is referenced), and any
+        # Review Chain V4: live-revalidate the ingestion receipt, the route
+        # receipt (when an authoritative one is referenced), and any
         # transaction commit marker. No caller-provided string substitutes for
         # a runner receipt; a hash mismatch is a chain break.
         rv = {"role": role, "report_body_sha256_ok": True, "metadata_sha256_ok": True}

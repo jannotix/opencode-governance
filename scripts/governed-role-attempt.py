@@ -1,21 +1,11 @@
 #!/usr/bin/env python3
 """GOVERNED_ROLE_PROCESS_CONTRACT_V2 — dedicated OpenCode child per security role.
 
-4.0.3 corrections vs 4.0.2 (GOVERNED_ROLE_PROCESS_CONTRACT_V1):
-
-  * S-001: pre-side-effect READY gate. The launcher monitors the plugin READY
-    barrier while the child is running, validates it immediately, and writes a
-    host acknowledgement bound to READY before any tool can be permitted. A
-    post-process handshake check alone is no longer the gate.
-  * S-004: the prepared Executor launch receipt is the SOLE authoritative
-    launch; --launch-file/--expected-launch-sha256 bind the child to the exact
-    prepared attempt. The launcher never creates a replacement launch.
-  * S-005: prompt transport is stdin (GOVERNED_ROLE_STDIN_TRANSPORT_V1). The
-    packet/role prompt is never placed on argv or in the environment.
-  * S-006: role-specific working directories. Executor cwd == execution root;
-    the real workspace is read-only authority and never the child cwd.
-  * S-013: a non-zero OpenCode exit code is a typed failure, never
-    GOVERNED_ROLE_PROCESS_COMPLETE.
+Launches one OpenCode process per governed role under a validated launch receipt,
+feeds the prompt over stdin, monitors the plugin's pre-side-effect READY barrier
+while the child runs, writes a host acknowledgement bound to READY, and enforces
+role-specific working directories (Executor cwd is the isolated execution root).
+A non-zero OpenCode exit code is reported as a typed failure, never as completion.
 """
 from __future__ import annotations
 
@@ -105,7 +95,7 @@ def tools_dir(config: pathlib.Path) -> pathlib.Path:
 
 
 def resolve_role_dir(args: argparse.Namespace, workspace: pathlib.Path, execution_root: pathlib.Path) -> pathlib.Path:
-    """S-006: role-specific working directory. Executor/reviewers use the
+    """role-specific working directory. Executor/reviewers use the
     isolated root; Architect uses the exact workspace root."""
     role = args.role
     if role in ISOLATED_CWD_ROLES:
@@ -121,7 +111,7 @@ def resolve_role_dir(args: argparse.Namespace, workspace: pathlib.Path, executio
 
 
 def load_prepared_launch(args: argparse.Namespace) -> dict[str, Any] | None:
-    """S-004: when --launch-file is given, the prepared Executor launch is the
+    """when --launch-file is given, the prepared Executor launch is the
     SOLE authoritative launch. Validate its hash and bind attempt manifest."""
     if not args.launch_file:
         return None
@@ -169,7 +159,7 @@ def load_prepared_launch(args: argparse.Namespace) -> dict[str, Any] | None:
 
 
 def write_host_ack(ack_path: pathlib.Path, ready: dict[str, Any], session_id: str) -> dict[str, Any]:
-    """S-001: host acknowledgement bound to the plugin READY. The plugin's
+    """host acknowledgement bound to the plugin READY. The plugin's
     tool.execute.before hook requires this ack before permitting any effect."""
     ack = {
         "schema": HOST_ACK_SCHEMA,
@@ -193,11 +183,23 @@ def write_host_ack(ack_path: pathlib.Path, ready: dict[str, Any], session_id: st
     return ack
 
 
-def wait_for_ready(hs_path: pathlib.Path, deadline: float, expected_launch_sha: str) -> dict[str, Any]:
+def wait_for_ready(hs_path: pathlib.Path, deadline: float, expected_launch_sha: str,
+                   proc: subprocess.Popen | None = None) -> dict[str, Any]:
     """Poll for the plugin READY barrier while the child runs. Returns the
-    validated READY body or raises after timeout."""
+    validated READY body or raises after timeout. Detects early child exit so a
+    fast-failing process does not burn the full timeout window."""
     last_err = ""
     while time.time() < deadline:
+        # Detect early child exit: if the process is already dead and no READY
+        # arrived, fail immediately with the real exit code rather than waiting.
+        if proc is not None and proc.poll() is not None:
+            stderr_tail = ""
+            try:
+                stderr_tail = stderr_path.read_bytes()[-1500:].decode("utf-8", errors="replace") if stderr_path.exists() else ""
+            except Exception:
+                pass
+            fail_typed("EFFECT_PLUGIN_CHILD_EXITED_BEFORE_READY",
+                       exit_code=proc.returncode, stderr_tail=stderr_tail[-500:])
         if hs_path.is_file() and not hs_path.is_symlink():
             try:
                 body = json.loads(hs_path.read_text(encoding="utf-8"))
@@ -225,7 +227,7 @@ def wait_for_ready(hs_path: pathlib.Path, deadline: float, expected_launch_sha: 
 
 
 def validate_ready(ready: dict[str, Any], expected: dict[str, Any]) -> None:
-    """S-011: full handshake/READY validation. Every required field must be
+    """full handshake/READY validation. Every required field must be
     present and match; an empty value is not valid evidence. Route receipt is
     required only when the launch binds one (so a bare discovery session is not
     blocked, but a routed Executor/review session is bound)."""
@@ -294,7 +296,7 @@ def launch_role(args: argparse.Namespace) -> dict[str, Any]:
     logs = pathlib.Path(args.logs_dir or (workspace / ".ai" / "tasks" / (args.task_id or "_ungoverned") / "logs" / "role-processes"))
     logs.mkdir(parents=True, exist_ok=True)
 
-    # S-004: consume the prepared Executor launch when provided; otherwise write one.
+    # consume the prepared Executor launch when provided; otherwise write one.
     prepared = load_prepared_launch(args)
     ack_path = logs / f"host-ack-{role}-{int(time.time())}.json"
     if prepared:
@@ -360,7 +362,7 @@ def launch_role(args: argparse.Namespace) -> dict[str, Any]:
         launch_body = launch_j["launch"]
         launch_env = launch_j.get("env") or {}
 
-    # S-006: role-specific working directory.
+    # role-specific working directory.
     role_dir = resolve_role_dir(args, workspace, execution_root)
     role_dir.mkdir(parents=True, exist_ok=True)
 
@@ -380,7 +382,7 @@ def launch_role(args: argparse.Namespace) -> dict[str, Any]:
     env["OPENCODE_GOVERNANCE_WORKSPACE"] = str(workspace)
     env["OPENCODE_GOVERNANCE_REPOSITORY"] = str(repository)
     env["OPENCODE_GOVERNANCE_HANDSHAKE_PATH"] = str(logs / f"handshake-{role}-{int(time.time())}.json")
-    # S-001: require host acknowledgement before any tool effect.
+    # require host acknowledgement before any tool effect.
     env["OPENCODE_GOVERNANCE_REQUIRE_HOST_ACK"] = "1"
     env["OPENCODE_GOVERNANCE_HOST_ACK_PATH"] = str(ack_path)
     env["OPENCODE_GOVERNANCE_OPENCODE_BINARY"] = opencode
@@ -392,7 +394,7 @@ def launch_role(args: argparse.Namespace) -> dict[str, Any]:
         env["OPENCODE_GOVERNANCE_SESSION_ID"] = f"gov-{launch_body.get('launch_id', '')[:16]}-{os.getpid()}"
 
     agent = ROLES[role]["agent"]
-    # S-005: prompt transport = stdin. NO positional message on argv.
+    # prompt transport = stdin. NO positional message on argv.
     cmd = [
         opencode,
         "run",
@@ -415,11 +417,16 @@ def launch_role(args: argparse.Namespace) -> dict[str, Any]:
     hs_path = pathlib.Path(env["OPENCODE_GOVERNANCE_HANDSHAKE_PATH"])
 
     try:
+        # Redirect stdout/stderr to log files directly so the OS buffers on disk
+        # and the launcher cannot deadlock when the child emits verbose output
+        # before READY fills the pipe buffer. stdin stays a pipe for prompt feed.
+        stdout_fh = open(stdout_path, "wb")
+        stderr_fh = open(stderr_path, "wb")
         proc = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=stdout_fh,
+            stderr=stderr_fh,
             text=False,
             env=env,
             cwd=str(role_dir),
@@ -427,7 +434,7 @@ def launch_role(args: argparse.Namespace) -> dict[str, Any]:
     except Exception as exc:
         fail("ROLE_PROCESS_SPAWN_FAILED", str(exc))
 
-    # S-001: feed the prompt via stdin (S-005) and concurrently monitor READY.
+    # feed the prompt via stdin and concurrently monitor READY.
     ready_deadline = started + max(30, int(args.timeout_seconds))
 
     def feed_stdin() -> None:
@@ -450,27 +457,33 @@ def launch_role(args: argparse.Namespace) -> dict[str, Any]:
         "route_receipt_required": bool(args.route_receipt_sha256 or launch_body.get("route_receipt_sha256")),
     }
     try:
-        ready_body = wait_for_ready(hs_path, ready_deadline, launch_sha)
+        ready_body = wait_for_ready(hs_path, ready_deadline, launch_sha, proc=proc)
         validate_ready(ready_body, expected_ready)
         session_id = str(ready_body.get("session_id") or args.session_id or "")
         ack_body = write_host_ack(ack_path, ready_body, session_id)
     except SystemExit:
-        # READY failed/timeout — terminate the child and propagate the typed failure.
+        # READY failed/timeout/child-exit — terminate the child and propagate.
         try:
             proc.terminate()
         except Exception:
             pass
         raise
 
+    # stdout/stderr are redirected to log files; wait for exit (stdin was closed
+    # by the feeder thread). No pipe to drain — no deadlock window.
     try:
-        stdout_b, stderr_b = proc.communicate(timeout=max(30, int(args.timeout_seconds)))
+        proc.wait(timeout=max(30, int(args.timeout_seconds)))
     except subprocess.TimeoutExpired as exc:
         proc.kill()
-        proc.communicate()
+        proc.wait()
         fail("ROLE_PROCESS_TIMEOUT", str(exc))
     feeder.join(timeout=5)
-    stdout_path.write_bytes(stdout_b or b"")
-    stderr_path.write_bytes(stderr_b or b"")
+    # Close the file handles opened for stdout/stderr redirection.
+    for fh in (stdout_fh, stderr_fh):
+        try:
+            fh.close()
+        except Exception:
+            pass
 
     # Record stdin transport evidence.
     stdin_meta = {
@@ -487,7 +500,7 @@ def launch_role(args: argparse.Namespace) -> dict[str, Any]:
 
     exit_code = proc.returncode
 
-    # S-013: non-zero exit is a typed failure, never PROCESS_COMPLETE.
+    # non-zero exit is a typed failure, never PROCESS_COMPLETE.
     if not hs_path.is_file():
         fail_typed("EFFECT_PLUGIN_HANDSHAKE_MISSING", role=role, logs=str(logs), exit_code=exit_code)
     handshake = json.loads(hs_path.read_text(encoding="utf-8"))
@@ -563,7 +576,7 @@ def main() -> int:
     p.add_argument("--opencode-command", default="")
     p.add_argument("--timeout-seconds", type=int, default=600)
     p.add_argument("--logs-dir", default="")
-    # S-004: consume the prepared Executor launch.
+    # consume the prepared Executor launch.
     p.add_argument("--launch-file", default="", help="authoritative prepared launch receipt (Executor)")
     p.add_argument("--expected-launch-sha256", default="", help="required sha256 of --launch-file")
     p.add_argument("--attempt-manifest", default="", help="executor attempt manifest binding launch to attempt")

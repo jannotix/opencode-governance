@@ -363,7 +363,7 @@ class ReportIngestV2Tests(unittest.TestCase):
         return env
 
     def _write_route_receipt(self, root: pathlib.Path, role: str, family: str) -> pathlib.Path:
-        # 4.0.3: ingestion requires AUTHORITATIVE_ROUTE_RECEIPT_V1 (S-014).
+        # Ingestion requires AUTHORITATIVE_ROUTE_RECEIPT_V1 on the production path.
         path = root / f"route-{role}.json"
         route_receipt = ROOT / "scripts" / "route-receipt.py"
         r = subprocess.run(

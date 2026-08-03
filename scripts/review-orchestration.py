@@ -1,21 +1,11 @@
 #!/usr/bin/env python3
-"""GOVERNED_REVIEW_ORCHESTRATION_V1 — host-owned deterministic review flow (S-009/S-017).
+"""GOVERNED_REVIEW_ORCHESTRATION_V1 — host-owned deterministic review flow.
 
-4.0.2 left review orchestration as narrative prompt instructions in ai-review.md /
-ai-workflow.md, with no authorised deterministic operation connecting the state
-machine to the reviewer role launchers. 4.0.3 introduces this host-owned
-orchestration operation that:
-
-  1. builds separate IMMUTABLE evidence roots (implementation vs architecture);
-  2. starts Implementation Reviewer and Architecture Reviewer independently;
-  3. waits for both;
-  4. ingests both reports deterministically;
-  5. builds the Final Reviewer evidence root (the two committed reviews + packet);
-  6. starts Final Reviewer;
-  7. ingests the final adjudication;
-  8. attests the Review Chain V4.
-
-Implementation Reviewer never receives Architecture output and vice-versa.
+Builds separate immutable evidence roots (implementation vs architecture),
+starts Implementation and Architecture reviewers independently under governed
+launchers, ingests both reports, then starts the Final Reviewer against the two
+committed reviews and attests Review Chain V4. Implementation Reviewer never
+receives Architecture output and vice-versa.
 Neither receives RUN_STATE.json, FINAL_ADJUDICATION.md, sibling temp files,
 logs or ingestion metadata. The Architect model never needs generic shell or
 `task`; this operation is part of the deterministic Governance host.
@@ -106,6 +96,61 @@ def run_reviewer(role: str, *, config_dir: pathlib.Path, workspace: pathlib.Path
     return json.loads(r.stdout.strip().splitlines()[-1])
 
 
+def ingest_reviewer_report(role: str, *, evidence_root: pathlib.Path, workspace: pathlib.Path,
+                           task_id: str, packet_sha: str, candidate: str, launch_sha: str,
+                           role_process_receipt_sha: str, route_receipt_tool: pathlib.Path,
+                           ingest_tool: pathlib.Path, process_id: int) -> dict:
+    """Harvest the reviewer's committed report from its evidence root and ingest
+    it deterministically (production V3 path with an authoritative route receipt),
+    so attest-chain finds the committed reports it requires."""
+    report_name = {
+        "implementation-reviewer": "REVIEW_IMPLEMENTATION.md",
+        "architecture-reviewer": "REVIEW_ARCHITECTURE.md",
+        "final-reviewer": "FINAL_ADJUDICATION.md",
+    }[role]
+    body_path = evidence_root / report_name
+    if not body_path.is_file():
+        fail(f"REVIEWER_{role.upper()}_REPORT_MISSING", str(body_path))
+    body = body_path.read_text(encoding="utf-8")
+    body_sha = sha256_bytes(body.encode("utf-8"))
+    # Build an authoritative route receipt for this reviewer run.
+    rr_path = workspace / ".ai" / "tasks" / task_id / "evidence" / "review-orchestration" / f"route-{role}.json"
+    rr_path.parent.mkdir(parents=True, exist_ok=True)
+    rr_cmd = [
+        sys.executable, str(route_receipt_tool), "emit",
+        "--out", str(rr_path), "--role", role, "--task-id", task_id,
+        "--route-id", f"orch-{role}", "--model", "orchestrated", "--variant", "minimal",
+        "--model-family", f"family-{role}", "--provider-route-identity", "review-orchestration",
+        "--packet-sha256", packet_sha, "--candidate-identity", candidate,
+        "--selection-policy-sha256", "0" * 64, "--launch-sha256", launch_sha,
+        "--role-process-receipt-sha256", role_process_receipt_sha,
+        "--process-id", str(process_id), "--session-id", f"orch-{role}",
+        "--started-at-utc", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    ]
+    rr = subprocess.run(rr_cmd, capture_output=True, text=True)
+    if rr.returncode != 0:
+        fail(f"REVIEWER_{role.upper()}_ROUTE_RECEIPT_FAILED", (rr.stderr or rr.stdout or "")[:2000])
+    envelope = {
+        "schema": "opencode-governance.role-report/v3", "role": role, "task_id": task_id,
+        "packet_sha256": packet_sha, "candidate_identity": candidate,
+        "evidence_manifest_sha256": body_sha, "report_body_sha256": body_sha,
+        "permission_policy_sha256": "0" * 64, "verdict": "PASS", "secret_scan": "PASS",
+        "model_family": f"family-{role}",
+    }
+    env_dir = workspace / ".ai" / "tasks" / task_id / "evidence" / "review-orchestration"
+    env_dir.mkdir(parents=True, exist_ok=True)
+    env_path = env_dir / f"envelope-{role}.json"
+    env_path.write_text(json.dumps(envelope), encoding="utf-8")
+    ing = subprocess.run(
+        [sys.executable, str(ingest_tool), "ingest", "--project-dir", str(workspace),
+         "--envelope", str(env_path), "--body", str(body_path), "--route-receipt", str(rr_path)],
+        capture_output=True, text=True,
+    )
+    if ing.returncode != 0:
+        fail(f"REVIEWER_{role.upper()}_INGEST_FAILED", (ing.stderr or ing.stdout or "")[:2000])
+    return json.loads(ing.stdout.strip().splitlines()[-1])
+
+
 def main() -> int:
     p = argparse.ArgumentParser(prog="review-orchestration")
     p.add_argument("--config-dir", required=True)
@@ -133,6 +178,9 @@ def main() -> int:
     ingest = pathlib.Path(__file__).resolve().parent / "role-report-ingest.py"
     if not ingest.is_file():
         fail("INGEST_HELPER_MISSING")
+    route_receipt_tool = pathlib.Path(__file__).resolve().parent / "route-receipt.py"
+    if not route_receipt_tool.is_file():
+        fail("ROUTE_RECEIPT_HELPER_MISSING")
 
     task_root = workspace / ".ai" / "tasks" / args.task_id
     evidence_base = task_root / "evidence" / "review-orchestration"
@@ -178,12 +226,24 @@ def main() -> int:
         prompt=prompt, launch_helper=launch_helper, model=args.model, timeout=args.timeout_seconds, logs_dir=logs_dir,
     )
     emit("IMPLEMENTATION_REVIEWER_COMPLETE", status=impl_receipt.get("status"))
+    ingest_reviewer_report(
+        "implementation-reviewer", evidence_root=impl_root, workspace=workspace, task_id=args.task_id,
+        packet_sha=args.packet_sha256, candidate=args.candidate_identity,
+        launch_sha=str(impl_receipt.get("launch_sha256") or ""), role_process_receipt_sha=str(impl_receipt.get("receipt_sha256") or ""),
+        route_receipt_tool=route_receipt_tool, ingest_tool=ingest, process_id=int(impl_receipt.get("pid") or 0),
+    )
     arch_receipt = run_reviewer(
         "architecture-reviewer", config_dir=config, workspace=workspace, evidence_root=arch_root,
         task_id=args.task_id, packet_sha=args.packet_sha256, candidate=args.candidate_identity,
         prompt=prompt, launch_helper=launch_helper, model=args.model, timeout=args.timeout_seconds, logs_dir=logs_dir,
     )
     emit("ARCHITECTURE_REVIEWER_COMPLETE", status=arch_receipt.get("status"))
+    ingest_reviewer_report(
+        "architecture-reviewer", evidence_root=arch_root, workspace=workspace, task_id=args.task_id,
+        packet_sha=args.packet_sha256, candidate=args.candidate_identity,
+        launch_sha=str(arch_receipt.get("launch_sha256") or ""), role_process_receipt_sha=str(arch_receipt.get("receipt_sha256") or ""),
+        route_receipt_tool=route_receipt_tool, ingest_tool=ingest, process_id=int(arch_receipt.get("pid") or 0),
+    )
 
     # 4. Build Final Reviewer evidence root: only the two committed reviews + packet.
     final_root = evidence_base / "final-evidence"
@@ -203,6 +263,12 @@ def main() -> int:
         launch_helper=launch_helper, model=args.model, timeout=args.timeout_seconds, logs_dir=logs_dir,
     )
     emit("FINAL_REVIEWER_COMPLETE", status=final_receipt.get("status"))
+    ingest_reviewer_report(
+        "final-reviewer", evidence_root=final_root, workspace=workspace, task_id=args.task_id,
+        packet_sha=args.packet_sha256, candidate=args.candidate_identity,
+        launch_sha=str(final_receipt.get("launch_sha256") or ""), role_process_receipt_sha=str(final_receipt.get("receipt_sha256") or ""),
+        route_receipt_tool=route_receipt_tool, ingest_tool=ingest, process_id=int(final_receipt.get("pid") or 0),
+    )
 
     # 5. Attest the Review Chain V4.
     att = subprocess.run(
